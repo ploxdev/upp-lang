@@ -1,0 +1,8 @@
+// Negatif: noktalı virgül eksik.
+// @icerir: [u++ HATA]
+// @icerir: ';'
+
+fonk ana() -> sayi {
+    sayi x = 1
+    don 0;
+}

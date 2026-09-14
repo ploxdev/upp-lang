@@ -1,0 +1,217 @@
+// hesap_makinesi.upp — u++ ile menü tabanlı, çok özellikli hesap makinesi
+// Özellikler: temel işlemler, bilimsel fonksiyonlar, bellek (M+/M-/MR/MC), işlem geçmişi
+
+liste[metin] gecmis;
+ondalik bellek = 0.0;
+
+fonk baslik_yaz() -> bos {
+    upp.satir_yaz("");
+    upp.satir_yaz("======================================");
+    upp.satir_yaz("        u++ HESAP MAKİNESİ");
+    upp.satir_yaz("======================================");
+    upp.satir_yaz("1) Temel işlem  (+ - * /)");
+    upp.satir_yaz("2) Tam sayı mod (%)");
+    upp.satir_yaz("3) Bilimsel     (karekök, üs, sin, cos, tan, pi)");
+    upp.satir_yaz("4) Bellek işlemleri (M+/M-/MR/MC)");
+    upp.satir_yaz("5) İşlem geçmişini göster");
+    upp.satir_yaz("0) Çıkış");
+    upp.yaz("Seçim: ");
+}
+
+fonk ondalik_oku(metin etiket) -> ondalik {
+    upp.yaz(etiket);
+    oto satir = upp.giris();
+    oto v = upp.metinden_ondalik(satir);
+    upp.metin_bosalt(satir);
+    don v;
+}
+
+fonk sayi_oku(metin etiket) -> sayi {
+    upp.yaz(etiket);
+    oto satir = upp.giris();
+    oto v = upp.metinden_sayiya(satir);
+    upp.metin_bosalt(satir);
+    don v;
+}
+
+fonk gecmise_ekle(metin kayit) -> bos {
+    gecmis.ekle(kayit);
+    eger (upp.uzunluk(gecmis) > 20) {
+        // geçmiş çok büyümesin — en eskiyi at
+        liste[metin] yeni;
+        sayi i = 1;
+        iken (i < upp.uzunluk(gecmis)) {
+            yeni.ekle(gecmis.al(i));
+            i += 1;
+        }
+        gecmis.bosalt();
+        gecmis = yeni;
+    }
+}
+
+fonk temel_islem() -> bos {
+    oto a = ondalik_oku("İlk sayı: ");
+    upp.yaz("İşlem (+, -, *, /): ");
+    oto op_ham = upp.giris();
+    oto op = upp.metin.kirp(op_ham);
+    upp.metin_bosalt(op_ham);
+    oto b = ondalik_oku("İkinci sayı: ");
+
+    ondalik sonuc = 0.0;
+    mantik gecerli = dogru;
+
+    eger (op == "+") {
+        sonuc = a + b;
+    } yoksa eger (op == "-") {
+        sonuc = a - b;
+    } yoksa eger (op == "*") {
+        sonuc = a * b;
+    } yoksa eger (op == "/") {
+        eger (b == 0.0) {
+            upp.hata_satir_yaz("HATA: Sıfıra bölme yapılamaz.");
+            gecerli = yanlis;
+        } yoksa {
+            sonuc = a / b;
+        }
+    } yoksa {
+        upp.hata_satir_yaz("HATA: Geçersiz işlem, '+ - * /' kullanın.");
+        gecerli = yanlis;
+    }
+
+    eger (gecerli) {
+        oto sonuc_metin = upp.ondalikdan_metin(sonuc);
+        upp.satir_yaz("Sonuç: {sonuc_metin}");
+        metin kayit = upp.ondalikdan_metin(a) + " " + op + " " + upp.ondalikdan_metin(b) + " = " + sonuc_metin;
+        gecmise_ekle(kayit);
+        upp.metin_bosalt(sonuc_metin);
+    }
+    upp.metin_bosalt(op);
+}
+
+fonk mod_islem() -> bos {
+    oto a = sayi_oku("İlk tam sayı: ");
+    oto b = sayi_oku("İkinci tam sayı: ");
+    eger (b == 0) {
+        upp.hata_satir_yaz("HATA: Sıfıra göre mod alınamaz.");
+        don;
+    }
+    sayi sonuc = a % b;
+    upp.satir_yaz("Sonuç: {a} % {b} = {sonuc}");
+    metin kayit = upp.sayidan_metin(a) + " % " + upp.sayidan_metin(b) + " = " + upp.sayidan_metin(sonuc);
+    gecmise_ekle(kayit);
+}
+
+fonk bilimsel_menu() -> bos {
+    upp.satir_yaz("-- Bilimsel --");
+    upp.satir_yaz("1) karekök(x)   2) x üzeri y   3) sin(derece)");
+    upp.satir_yaz("4) cos(derece)  5) tan(derece) 6) pi değeri");
+    oto sec = sayi_oku("Seçim: ");
+
+    eger (sec == 1) {
+        oto x = ondalik_oku("x: ");
+        eger (x < 0.0) {
+            upp.hata_satir_yaz("HATA: Negatif sayının karekökü alınamaz.");
+            don;
+        }
+        oto r = upp.matematik.karekok(x);
+        oto rm = upp.ondalikdan_metin(r);
+        upp.satir_yaz("karekök({x}) = {rm}");
+        gecmise_ekle("karekok(" + upp.ondalikdan_metin(x) + ") = " + rm);
+        upp.metin_bosalt(rm);
+    } yoksa eger (sec == 2) {
+        oto x = ondalik_oku("Taban: ");
+        oto y = ondalik_oku("Üs: ");
+        oto r = upp.matematik.us(x, y);
+        oto rm = upp.ondalikdan_metin(r);
+        upp.satir_yaz("{x} üzeri {y} = {rm}");
+        gecmise_ekle(upp.ondalikdan_metin(x) + "^" + upp.ondalikdan_metin(y) + " = " + rm);
+        upp.metin_bosalt(rm);
+    } yoksa eger (sec == 3 || sec == 4 || sec == 5) {
+        oto derece = ondalik_oku("Derece: ");
+        oto radyan = derece * upp.matematik.pi() / 180.0;
+        ondalik r = 0.0;
+        metin ad = "";
+        eger (sec == 3) { r = upp.matematik.sin(radyan); ad = "sin"; }
+        yoksa eger (sec == 4) { r = upp.matematik.cos(radyan); ad = "cos"; }
+        yoksa { r = upp.matematik.tan(radyan); ad = "tan"; }
+        oto rm = upp.ondalikdan_metin(r);
+        upp.satir_yaz("{ad}({derece} derece) = {rm}");
+        gecmise_ekle(ad + "(" + upp.ondalikdan_metin(derece) + " derece) = " + rm);
+        upp.metin_bosalt(rm);
+    } yoksa eger (sec == 6) {
+        oto pi_m = upp.ondalikdan_metin(upp.matematik.pi());
+        upp.satir_yaz("pi = {pi_m}");
+        upp.metin_bosalt(pi_m);
+    } yoksa {
+        upp.hata_satir_yaz("HATA: Geçersiz bilimsel işlem seçimi.");
+    }
+}
+
+fonk bellek_menu() -> bos {
+    upp.satir_yaz("-- Bellek --");
+    upp.satir_yaz("1) M+  (belleğe ekle)   2) M- (bellekten çıkar)");
+    upp.satir_yaz("3) MR  (belleği göster) 4) MC (belleği temizle)");
+    oto sec = sayi_oku("Seçim: ");
+
+    eger (sec == 1) {
+        oto x = ondalik_oku("Eklenecek değer: ");
+        bellek += x;
+        oto bm = upp.ondalikdan_metin(bellek);
+        upp.satir_yaz("Bellek = {bm}");
+        upp.metin_bosalt(bm);
+    } yoksa eger (sec == 2) {
+        oto x = ondalik_oku("Çıkarılacak değer: ");
+        bellek -= x;
+        oto bm = upp.ondalikdan_metin(bellek);
+        upp.satir_yaz("Bellek = {bm}");
+        upp.metin_bosalt(bm);
+    } yoksa eger (sec == 3) {
+        oto bm = upp.ondalikdan_metin(bellek);
+        upp.satir_yaz("Bellek = {bm}");
+        upp.metin_bosalt(bm);
+    } yoksa eger (sec == 4) {
+        bellek = 0.0;
+        upp.satir_yaz("Bellek temizlendi.");
+    } yoksa {
+        upp.hata_satir_yaz("HATA: Geçersiz bellek işlemi.");
+    }
+}
+
+fonk gecmisi_goster() -> bos {
+    upp.satir_yaz("-- İşlem Geçmişi --");
+    eger (upp.uzunluk(gecmis) == 0) {
+        upp.satir_yaz("(henüz işlem yok)");
+        don;
+    }
+    sayi i = 0;
+    her (oto kayit in gecmis) {
+        i += 1;
+        upp.satir_yaz("{i}. {kayit}");
+    }
+}
+
+fonk ana() -> sayi {
+    mantik calisiyor = dogru;
+    iken (calisiyor) {
+        baslik_yaz();
+        oto sec = sayi_oku("");
+        eger (sec == 1) {
+            temel_islem();
+        } yoksa eger (sec == 2) {
+            mod_islem();
+        } yoksa eger (sec == 3) {
+            bilimsel_menu();
+        } yoksa eger (sec == 4) {
+            bellek_menu();
+        } yoksa eger (sec == 5) {
+            gecmisi_goster();
+        } yoksa eger (sec == 0) {
+            upp.satir_yaz("Görüşürüz!");
+            calisiyor = yanlis;
+        } yoksa {
+            upp.hata_satir_yaz("HATA: Geçersiz menü seçimi, 0-5 arası bir sayı girin.");
+        }
+    }
+    gecmis.bosalt();
+    don 0;
+}

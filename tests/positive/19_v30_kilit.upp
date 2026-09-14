@@ -1,0 +1,11 @@
+// Pozitif: Kilit
+// @stdout
+// 1
+
+fonk ana() -> sayi {
+    Kilit k;
+    k.kilitle();
+    k.birak();
+    upp.satir_yaz("1");
+    don 0;
+}

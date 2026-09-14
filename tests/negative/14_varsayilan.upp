@@ -1,0 +1,11 @@
+// Negatif: varsayılan parametre parametreye bakamaz
+// @icerir: [u++ HATA]
+// @icerir: Varsayılan
+
+fonk f(sayi a, sayi b = a * 2) -> sayi {
+    don b;
+}
+
+fonk ana() -> sayi {
+    don f(1);
+}

@@ -1,0 +1,8 @@
+// Negatif: harita anahtarı ondalik olamaz
+// @icerir: [u++ HATA]
+// @icerir: harita
+
+fonk ana() -> sayi {
+    harita[ondalik,sayi] h;
+    don 0;
+}

@@ -1,0 +1,129 @@
+fonk guven_yuru(sayi node, mantik unsafe) -> bos {
+    eger (node == 0) { don; }
+    eger (hata_var() && !hata_analiz_mi()) { don; }
+    sayi t = dugum_tur(node);
+    eger (t == DugumTur.D_GUVENSIZ) {
+        guven_yuru(dugum_a(node), dogru);
+        don;
+    }
+    eger (t == DugumTur.D_GUVENLI) {
+        guven_yuru(dugum_a(node), yanlis);
+        don;
+    }
+    eger (t == DugumTur.D_ARKAPLAN || t == DugumTur.D_ARKAPLAN_IFADE) {
+        guven_yuru(dugum_a(node), unsafe);
+        don;
+    }
+    eger (t == DugumTur.D_C_GOMMU) {
+        eger (!unsafe) {
+            hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Ham C gömme ('c_kod') yalnızca 'guvensiz' blokta kullanılabilir.");
+            don;
+        }
+        eger (c_on_islemci(dugum_ad(node))) {
+            hata_ver(dugum_satir(node), dugum_sutun(node), "c_kod içinde '#include' / '#define' kullanılamaz. Başlık eklemek için dosya başında c_ekle yazın.");
+        }
+        don;
+    }
+    eger (t == DugumTur.D_ASM_GOMMU) {
+        eger (!unsafe) {
+            hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Ham asm gömme ('asm_kod') yalnızca 'guvensiz' blokta kullanılabilir.");
+        }
+        don;
+    }
+    eger (t == DugumTur.D_TEKIL) {
+        oto op = dugum_ad(node);
+        eger ((metin_esit(op, "*") || metin_esit(op, "&")) && !unsafe) {
+            hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Doğrudan işaretçi işlemi 'guvenli' alanda yasaktır.");
+        }
+    }
+    eger (t == DugumTur.D_CAGRI) {
+        sayi cal = dugum_a(node);
+        eger (dugum_tur(cal) == DugumTur.D_KIMLIK) {
+            oto nm = dugum_ad(cal);
+            eger ((metin_esit(nm, "bellek_ayir") || metin_esit(nm, "bellek_bosalt")) && !unsafe) {
+                hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Doğrudan bellek manipülasyonu yalnızca 'guvensiz' blokta çağrılabilir.");
+            }
+        }
+        eger (dugum_tur(cal) == DugumTur.D_UYE) {
+            sayi yol = upp_yol(cal);
+            eger (yol != 0 && liste_uzunluk(yol) >= 2) {
+                sayi ikinci = liste_al(yol, 1);
+                eger (dugum_tur(ikinci) == DugumTur.D_UYE && metin_esit(dugum_ad(ikinci), "bellek") && !unsafe) {
+                    hata_guvenlik(dugum_satir(node), dugum_sutun(node), "'upp.bellek' süreç belleğine erişir ve yalnızca 'guvensiz' blokta çağrılabilir.");
+                }
+            }
+        }
+    }
+    eger (t == DugumTur.D_DEGISKEN) {
+        sayi ty = dugum_a(node);
+        sayi init = dugum_c(node);
+        mantik init_ptr = yanlis;
+        eger (init != 0 && dugum_tur(init) == DugumTur.D_TEKIL) {
+            oto iop = dugum_ad(init);
+            eger (metin_esit(iop, "*") || metin_esit(iop, "&")) { init_ptr = dogru; }
+        }
+        eger (ty != 0 && dugum_ptrd(ty) > 0 && !unsafe && !init_ptr) {
+            hata_guvenlik(dugum_satir(node), dugum_sutun(node), "İşaretçi türü yalnızca 'guvensiz' blokta bildirilebilir.");
+        }
+    }
+    eger (t == DugumTur.D_SINIF) {
+        sayi F = dugum_liste(node);
+        sayi i = 0;
+        iken (i < liste_uzunluk(F)) {
+            sayi f = liste_al(F, i);
+            sayi ty = dugum_a(f);
+            eger (ty != 0 && dugum_ptrd(ty) > 0) {
+                hata_guvenlik(dugum_satir(f), dugum_sutun(f), "Ham işaretçi alanı sınıf içinde kullanılamaz.");
+            }
+            i = i + 1;
+        }
+        sayi M = dugum_liste2(node);
+        i = 0;
+        iken (i < liste_uzunluk(M)) {
+            guven_yuru(dugum_b(liste_al(M, i)), yanlis);
+            i = i + 1;
+        }
+        don;
+    }
+    eger (t == DugumTur.D_FONK) {
+        guven_yuru(dugum_b(node), yanlis);
+        don;
+    }
+    eger (t == DugumTur.D_PROGRAM) {
+        sayi L = dugum_liste(node);
+        sayi i = 0;
+        iken (i < liste_uzunluk(L)) {
+            guven_yuru(liste_al(L, i), yanlis);
+            i = i + 1;
+        }
+        don;
+    }
+    guven_yuru(dugum_a(node), unsafe);
+    eger (t != DugumTur.D_UYE) {
+        guven_yuru(dugum_b(node), unsafe);
+        guven_yuru(dugum_c(node), unsafe);
+        eger (t == DugumTur.D_DONGU) {
+            guven_yuru(dugum_d(node), unsafe);
+        }
+    }
+    sayi L = dugum_liste(node);
+    eger (L != 0) {
+        sayi i = 0;
+        iken (i < liste_uzunluk(L)) {
+            guven_yuru(liste_al(L, i), unsafe);
+            i = i + 1;
+        }
+    }
+    sayi L2 = dugum_liste2(node);
+    eger (L2 != 0) {
+        sayi i = 0;
+        iken (i < liste_uzunluk(L2)) {
+            guven_yuru(liste_al(L2, i), unsafe);
+            i = i + 1;
+        }
+    }
+}
+
+fonk guven_kontrol(sayi program) -> bos {
+    guven_yuru(program, yanlis);
+}

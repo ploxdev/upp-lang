@@ -1,0 +1,16 @@
+// Pozitif: üst düzey değişken, heap metin
+// @stdout
+// 1
+// merhaba!
+
+sayi N = 0;
+metin SELAM = "merhaba";
+
+fonk ana() -> sayi {
+    N += 1;
+    SELAM += "!";
+    upp.satir_yaz("{N}");
+    upp.satir_yaz(SELAM);
+    upp.metin_bosalt(SELAM);
+    don 0;
+}

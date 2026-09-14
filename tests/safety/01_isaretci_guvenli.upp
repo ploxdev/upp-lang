@@ -1,0 +1,9 @@
+// Güvenlik: guvensiz dışında & / işaretçi.
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    sayi x = 10;
+    oto p = &x;
+    sayi y = *p;
+    don y;
+}

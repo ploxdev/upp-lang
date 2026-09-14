@@ -1,0 +1,12 @@
+// Pozitif: dongu.
+// @stdout
+// 0
+// 1
+// 2
+
+fonk ana() -> sayi {
+    dongu (oto i = 0; i < 3; i = i + 1) {
+        upp.satir_yaz("{i}");
+    }
+    don 0;
+}

@@ -1,0 +1,201 @@
+{
+  "name": "u-plus-plus",
+  "displayName": "u++",
+  "description": "u++ v3.0: sözdizimi, dosya ikonu, LSP tanılama / tamamlama / hover.",
+  "version": "3.0.0",
+  "publisher": "u-plus-plus",
+  "icon": "icons/upp-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:upp"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "upp",
+        "aliases": [
+          "u++",
+          "upp"
+        ],
+        "extensions": [
+          ".upp",
+          ".uph"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/upp-light.svg",
+          "dark": "./icons/upp-dark.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "upp",
+        "scopeName": "source.upp",
+        "path": "./syntaxes/upp.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "upp",
+        "path": "./snippets/upp.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "upp.derle",
+        "title": "u++: Derle",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "upp.calistir",
+        "title": "u++: Çalıştır"
+      },
+      {
+        "command": "upp.sadeceC",
+        "title": "u++: Yalnızca C üret"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "upp.calistir",
+        "key": "f5",
+        "when": "editorTextFocus && editorLangId == upp && resourceScheme == file && !inDebugMode"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "upp.derle",
+          "when": "resourceLangId == upp",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "upp.derle",
+          "when": "resourceLangId == upp",
+          "group": "u++@1"
+        },
+        {
+          "command": "upp.calistir",
+          "when": "resourceLangId == upp",
+          "group": "u++@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "u++",
+      "properties": {
+        "upp.pythonYolu": {
+          "type": "string",
+          "default": "python",
+          "description": "Python yürütücüsü. Boş veya 'python' ise gerçek kurulum aranır (Windows Store kısayolu atlanır). Örnek: C:\\\\Python314\\\\python.exe"
+        },
+        "upp.derleyici": {
+          "type": "string",
+          "enum": [
+            "python",
+            "native"
+          ],
+          "default": "python",
+          "description": "Canlı tanı ve Derle/Çalıştır komutları: python (uppc.py) veya native (uppc --analiz / derle)."
+        },
+        "upp.uppcYolu": {
+          "type": "string",
+          "default": "",
+          "description": "Native uppc yolu. Boşsa Windows'ta <repo>/derleme/uppc.exe, diğer sistemlerde derleme/uppc veya derleme/uppc.out denenir."
+        },
+        "upp.ciktiKoku": {
+          "type": "string",
+          "default": "derleme",
+          "description": "Derleme çıktı klasörü (repo köküne göre)."
+        },
+        "upp.gccTanilari": {
+          "type": "boolean",
+          "default": false,
+          "description": "Kayıtta --json-hata ile GCC tanısı (yavaş; canlı tanı --analiz kullanır)."
+        },
+        "upp.iz.sunucu": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "LSP istemci izleme düzeyi."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "upp",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "derle | calistir | sadece-c"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "upp-hata",
+        "owner": "upp",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^\\[u\\+\\+ HATA\\] Satır (\\d+)(?::(\\d+))?(?:\\s*\\(([^)]*)\\))?: (.*)$",
+          "line": 1,
+          "column": 2,
+          "file": 3,
+          "message": 4
+        }
+      },
+      {
+        "name": "upp-guvenlik",
+        "owner": "upp",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^\\[u\\+\\+ BELLEK GÜVENLİĞİ İHLALİ\\] Satır (\\d+)(?::(\\d+))?(?:\\s*\\(([^)]*)\\))?: (.*)$",
+          "line": 1,
+          "column": 2,
+          "file": 3,
+          "message": 4
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "npm run compile && vsce package --allow-missing-repository --skip-license"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.4.5"
+  }
+}

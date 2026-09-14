@@ -1,0 +1,9 @@
+// Negatif: kütüphanede fonk ana
+// @icerir: [u++ HATA]
+// @icerir: Kütüphane
+
+kullan "_lib_ana.upp";
+
+fonk ana() -> sayi {
+    don 0;
+}

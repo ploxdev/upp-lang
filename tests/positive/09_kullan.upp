@@ -1,0 +1,11 @@
+// Pozitif: kullan göreli yol
+// @stdout
+// 42
+
+kullan "_lib_v26.upp";
+
+fonk ana() -> sayi {
+    oto k = iki_kat(CEVAP);
+    upp.satir_yaz("{k}");
+    don 0;
+}

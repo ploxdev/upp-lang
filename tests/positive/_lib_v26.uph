@@ -1,0 +1,7 @@
+// 10_kullan_uph.upp başlığı
+
+sabit sayi CEVAP = 21;
+
+fonk iki_kat(sayi x) -> sayi {
+    don x * 2;
+}

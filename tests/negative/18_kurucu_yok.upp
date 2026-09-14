@@ -1,0 +1,12 @@
+// Negatif: olustur yokken kurucu
+// @icerir: [u++ HATA]
+// @icerir: olustur
+
+sinif A {
+    sayi x;
+}
+
+fonk ana() -> sayi {
+    A a = A(1);
+    don a.x;
+}

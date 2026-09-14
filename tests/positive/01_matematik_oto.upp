@@ -1,0 +1,21 @@
+// Pozitif: temel matematik, değişkenler, oto.
+// @stdout
+// 42
+// 15
+// 3
+
+fonk carp(sayi a, sayi b) -> sayi {
+    don a * b;
+}
+
+fonk ana() -> sayi {
+    oto x = 40;
+    oto y = 2;
+    oto toplam = x + y;
+    sayi hex = 0x03;
+    oto urun = carp(3, 5);
+    upp.satir_yaz("{toplam}");
+    upp.satir_yaz("{urun}");
+    upp.satir_yaz("{hex}");
+    don 0;
+}

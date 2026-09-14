@@ -1,0 +1,8 @@
+// Güvenlik: guvensiz dışında c_kod.
+// @icerir: BELLEK GÜVENLİĞİ
+// @icerir: c_kod
+
+fonk ana() -> sayi {
+    c_kod { int x = 0; }
+    don 0;
+}

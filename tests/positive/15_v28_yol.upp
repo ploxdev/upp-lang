@@ -1,0 +1,21 @@
+// Pozitif: yol + SurecCikti.kod
+// @stdout
+// 1
+// 0
+
+fonk ana() -> sayi {
+    oto cwd = upp.yol.calisma();
+    eger (cwd != yok && upp.uzunluk(cwd) > 0) {
+        upp.satir_yaz("1");
+    } yoksa {
+        upp.satir_yaz("0");
+    }
+    upp.metin_bosalt(cwd);
+
+    SurecCikti r = upp.sistem.calistir("echo ok");
+    upp.satir_yaz("{r.kod}");
+    eger (r.cikti != yok) {
+        upp.metin_bosalt(r.cikti);
+    }
+    don 0;
+}

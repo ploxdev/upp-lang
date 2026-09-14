@@ -1,0 +1,61 @@
+// Pozitif: interpol ifade, üç tırnak, liste/harita
+// @stdout
+// merhaba Arda
+// satir1
+// satir2 Arda
+// 11
+// 21
+// 11
+// 21
+// 2
+// 100
+// 1
+// 3
+
+sinif Kutu {
+    liste[sayi] xs;
+}
+
+fonk ana() -> sayi {
+    metin ad = "Arda";
+    metin s = "merhaba {ad}";
+    upp.satir_yaz(s);
+    upp.metin_bosalt(s);
+
+    metin m = """satir1
+satir2 {ad}""";
+    upp.satir_yaz(m);
+    upp.metin_bosalt(m);
+
+    liste[sayi] xs;
+    xs.ekle(10);
+    xs.ekle(20);
+    xs[0] = 11;
+    xs[1] = 21;
+    oto a = xs.al(0);
+    oto b = xs[1];
+    upp.satir_yaz("{a}");
+    upp.satir_yaz("{b}");
+    her (oto v in xs) {
+        upp.satir_yaz("{v}");
+    }
+    oto n = xs.uzunluk();
+    upp.satir_yaz("{n}");
+    xs.bosalt();
+
+    harita[metin,sayi] h;
+    h.koy("skor", 100);
+    oto sk = h.al("skor");
+    upp.satir_yaz("{sk}");
+    eger (h.var_mi("skor")) {
+        upp.satir_yaz("1");
+    }
+    h.bosalt();
+
+    Kutu k;
+    k.xs.ekle(3);
+    oto t = k.xs.al(0);
+    upp.satir_yaz("{t}");
+    k.xs.bosalt();
+    don 0;
+}

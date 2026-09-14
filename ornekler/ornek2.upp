@@ -1,0 +1,63 @@
+// ornek2 — sinif, secenek, Vektor3, arkaplan.bekle, matematik
+
+secenek Renk {
+    Kirmizi,
+    Yesil = 2,
+    Mavi
+}
+
+sinif Araba {
+    metin model;
+    sayi hiz;
+
+    fonk olustur(metin m) {
+        kendi.model = m;
+        kendi.hiz = 0;
+    }
+
+    fonk hizlan(sayi artis) {
+        kendi.hiz = kendi.hiz + artis;
+        upp.satir_yaz("{kendi.model} su an {kendi.hiz} km/s");
+    }
+}
+
+fonk ana() -> sayi {
+    Araba a;
+    a.olustur("Toros");
+    a.hizlan(40);
+
+    Araba b = Araba("Kartal");
+    b.hizlan(10);
+
+    Renk r = Renk.Yesil;
+    secim (r) {
+        durum Renk.Kirmizi:
+            upp.satir_yaz("kirmizi");
+            dur;
+        durum Renk.Yesil:
+            upp.satir_yaz("yesil");
+            dur;
+        varsayilan:
+            upp.satir_yaz("diger renk");
+    }
+
+    Vektor3 p;
+    Vektor3 q;
+    p.x = 0.0;
+    p.y = 0.0;
+    p.z = 0.0;
+    q.x = 3.0;
+    q.y = 4.0;
+    q.z = 0.0;
+    oto d = upp.matematik.mesafe(p, q);
+    oto eski = upp.matematik.mesafe_3d(0.0, 0.0, 0.0, 3.0, 4.0, 0.0);
+    Yonelme y = upp.matematik.aci_hesapla(0.0, 0.0, 0.0, 1.0, 0.0, 1.0);
+    upp.satir_yaz("mesafe={d} eski={eski} pitch={y.pitch}");
+
+    oto is = arkaplan {
+        upp.satir_yaz("arkaplan: merhaba");
+    };
+    is.bekle();
+
+    don 0;
+}

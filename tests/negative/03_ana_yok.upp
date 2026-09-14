@@ -1,0 +1,7 @@
+// Negatif: fonk ana yok.
+// @icerir: [u++ HATA]
+// @icerir: ana
+
+fonk yardimci() -> sayi {
+    don 1;
+}

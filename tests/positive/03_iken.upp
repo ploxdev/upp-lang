@@ -1,0 +1,15 @@
+// Pozitif: iken döngüsü.
+// @stdout
+// 0
+// 1
+// 2
+// 3
+
+fonk ana() -> sayi {
+    oto i = 0;
+    iken (i < 4) {
+        upp.satir_yaz("{i}");
+        i = i + 1;
+    }
+    don 0;
+}

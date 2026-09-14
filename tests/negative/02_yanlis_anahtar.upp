@@ -1,0 +1,9 @@
+// Negatif: yanlış anahtar sözcük (if yerine eger).
+// @icerir: [u++ HATA]
+
+fonk ana() -> sayi {
+    if (dogru) {
+        don 0;
+    }
+    don 1;
+}

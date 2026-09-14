@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+cikti.c
+program.exe
+*.exe
+selam.txt
+ornek1.c
+ornek2.c
+derleme/
+tests/_cikti/
+eklenti/node_modules/
+eklenti/out/

@@ -1,0 +1,14 @@
+// Pozitif: kullan … olarak (birinci derece)
+// @stdout
+// 7
+// 4
+
+kullan "_lib_alias.upp" olarak k;
+
+fonk ana() -> sayi {
+    oto n = k.ping();
+    upp.satir_yaz("{n}");
+    k.Kutu t = k.Kutu(4);
+    upp.satir_yaz("{t.n}");
+    don 0;
+}

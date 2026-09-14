@@ -1,0 +1,523 @@
+fonk arg_esit(metin a, metin b) -> mantik {
+    don metin_esit(a, b);
+}
+
+fonk harf_kucuk(sayi c) -> sayi {
+    eger (c >= 65 && c <= 90) { don c + 32; }
+    don c;
+}
+
+fonk kutup_uzanti_mi(metin s) -> mantik {
+    sayi n = metin_uzun(s);
+    eger (n < 4) { don yanlis; }
+    eger (metin_cp(s, n - 4) != 46) { don yanlis; }
+    eger (harf_kucuk(metin_cp(s, n - 3)) != 117) { don yanlis; }
+    eger (harf_kucuk(metin_cp(s, n - 2)) != 112) { don yanlis; }
+    sayi son = harf_kucuk(metin_cp(s, n - 1));
+    don son == 112 || son == 104;
+}
+
+fonk baslik_mi(metin s) -> mantik {
+    sayi n = metin_uzun(s);
+    eger (n < 4) { don yanlis; }
+    eger (metin_cp(s, n - 4) != 46) { don yanlis; }
+    eger (harf_kucuk(metin_cp(s, n - 3)) != 117) { don yanlis; }
+    eger (harf_kucuk(metin_cp(s, n - 2)) != 112) { don yanlis; }
+    don harf_kucuk(metin_cp(s, n - 1)) == 104;
+}
+
+fonk liste_ad_var(sayi L, metin s) -> mantik {
+    sayi i = 0;
+    iken (i < liste_uzunluk(L)) {
+        eger (metin_esit(dugum_ad(liste_al(L, i)), s)) { don dogru; }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+fonk liste_ad_ekle(sayi L, metin s) -> bos {
+    liste_ekle(L, kimlik_dugum(0, 1, s));
+}
+
+fonk kullan_coz(metin spec, metin dahil_yol, sayi satir, sayi sutun) -> metin {
+    eger (!kutup_uzanti_mi(spec)) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'kullan' yolu '.upp' veya '.uph' ile bitmeli, '");
+        hata_fmt_yaz(spec);
+        hata_fmt_yaz("' bulundu.");
+        hata_fmt_ver(satir, sutun);
+        don "";
+    }
+    eger (os_yol_mutlak_mi(spec)) {
+        eger (os_dosya_var(spec)) { don os_yol_gercek(spec); }
+        hata_fmt_basla();
+        hata_fmt_yaz("'kullan' dosyası bulunamadı: ");
+        hata_fmt_yaz(spec);
+        hata_fmt_ver(satir, sutun);
+        don "";
+    }
+    eger (os_dosya_var(dahil_yol)) {
+        oto p = os_yol_birlestir(os_yol_dizin(dahil_yol), spec);
+        eger (os_dosya_var(p)) { don os_yol_gercek(p); }
+    }
+    oto p2 = os_yol_birlestir(os_cwd(), spec);
+    eger (os_dosya_var(p2)) { don os_yol_gercek(p2); }
+    hata_fmt_basla();
+    hata_fmt_yaz("'kullan' dosyası bulunamadı: ");
+    hata_fmt_yaz(spec);
+    hata_fmt_ver(satir, sutun);
+    don "";
+}
+
+fonk yukle_birim(metin kaynak, metin yol, sayi kutuphane, sayi seen, sayi stack, sayi merged, metin alias) -> bos {
+    oto gercek = intern(yol);
+    eger (os_dosya_var(yol)) {
+        gercek = os_yol_gercek(yol);
+    }
+    eger (liste_ad_var(stack, gercek)) {
+        hata_fmt_basla();
+        hata_fmt_yaz("kullan döngüsü: ");
+        sayi i = 0;
+        iken (i < liste_uzunluk(stack)) {
+            eger (i > 0) { hata_fmt_yaz(" -> "); }
+            hata_fmt_yaz(dugum_ad(liste_al(stack, i)));
+            i = i + 1;
+        }
+        hata_fmt_yaz(" -> ");
+        hata_fmt_yaz(gercek);
+        hata_fmt_ver(1, 1);
+        don;
+    }
+    eger (liste_ad_var(seen, gercek)) { don; }
+    liste_ad_ekle(seen, gercek);
+    liste_ad_ekle(stack, gercek);
+    sayi kutup = kutuphane;
+    eger (baslik_mi(yol)) { kutup = 1; }
+    jeton_sifirla();
+    eger (kaynak == yok) {
+        kaynak = intern("");
+    } yoksa {
+        kaynak = intern(kaynak);
+    }
+    kaynak_ayarla(kaynak, intern(yol));
+    ayristir_i_yaz(1);
+    loop_yaz(0);
+    switch_yaz(0);
+    lex_tara();
+    eger (hata_var()) { don; }
+    ayristir_i_yaz(1);
+    sayi birim = ayristir_birim();
+    eger (hata_var() || birim == 0) { don; }
+    sayi decls = dugum_liste(birim);
+    sayi i = 0;
+    iken (i < liste_uzunluk(decls) && !hata_var()) {
+        sayi d = liste_al(decls, i);
+        eger (dugum_tur(d) == DugumTur.D_KULLAN) {
+            oto spec = dugum_ad(d);
+            oto hedef = kullan_coz(spec, yol, dugum_satir(d), dugum_sutun(d));
+            eger (hata_var() || metin_esit(hedef, "")) { don; }
+            oto alt = upp.dosya_oku(hedef);
+            eger (alt == yok) {
+                hata_fmt_basla();
+                hata_fmt_yaz("'kullan' dosyası okunamadı: ");
+                hata_fmt_yaz(hedef);
+                hata_fmt_ver(dugum_satir(d), dugum_sutun(d));
+                don;
+            }
+            oto alt_alias = "";
+            eger (dugum_b(d) != 0) {
+                alt_alias = dugum_ad(dugum_b(d));
+            }
+            yukle_birim(kaynak_lf(alt), hedef, 1, seen, stack, merged, alt_alias);
+        } yoksa {
+            eger (kutup != 0 && dugum_tur(d) == DugumTur.D_FONK && metin_esit(dugum_ad(d), "ana")) {
+                hata_ver(dugum_satir(d), dugum_sutun(d), "Kütüphane dosyasında 'fonk ana' yasaktır; giriş noktası yalnızca kök dosyada olur.");
+            } yoksa {
+                eger (!metin_esit(alias, "")) {
+                    sayi al = kimlik_dugum(dugum_satir(d), dugum_sutun(d), alias);
+                    dugum_yaz_d(d, al);
+                    eger (dugum_tur(d) == DugumTur.D_SINIF) {
+                        sayi M = dugum_liste2(d);
+                        sayi j = 0;
+                        iken (j < liste_uzunluk(M)) {
+                            dugum_yaz_d(liste_al(M, j), al);
+                            j = j + 1;
+                        }
+                    }
+                }
+                liste_ekle(merged, d);
+            }
+        }
+        i = i + 1;
+    }
+    liste_kisalt(stack);
+}
+
+fonk yukle_birlesik(metin kaynak, metin ad, sayi ana_zorunlu) -> sayi {
+    kaynak_ayarla(kaynak, intern(ad));
+    eger (ana_zorunlu != 0 && baslik_mi(ad)) {
+        hata_ver(1, 1, "Başlık dosyası (.uph) derleme girişi olamaz; bir .upp programından 'kullan' ile katın.");
+        don 0;
+    }
+    sayi seen = liste_yeni();
+    sayi stack = liste_yeni();
+    sayi merged = liste_yeni();
+    sayi kok_kutup = 0;
+    eger (baslik_mi(ad)) { kok_kutup = 1; }
+    yukle_birim(kaynak, ad, kok_kutup, seen, stack, merged, "");
+    eger (hata_var()) { don 0; }
+    sayi ana_say = 0;
+    sayi ana_ikinci = 0;
+    sayi i = 0;
+    iken (i < liste_uzunluk(merged)) {
+        sayi d = liste_al(merged, i);
+        eger (dugum_tur(d) == DugumTur.D_FONK && metin_esit(dugum_ad(d), "ana")) {
+            ana_say = ana_say + 1;
+            eger (ana_say > 1) { ana_ikinci = d; }
+        }
+        i = i + 1;
+    }
+    eger (ana_say > 1) {
+        hata_ver(dugum_satir(ana_ikinci), dugum_sutun(ana_ikinci), "Birden fazla 'fonk ana()' tanımlanamaz; giriş noktası tek olmalıdır.");
+        don 0;
+    }
+    eger (ana_zorunlu != 0 && ana_say == 0) {
+        hata_ver(1, 1, "Giriş noktası bulunamadı. Bir 'fonk ana()' tanımlayın.");
+        don 0;
+    }
+    sayi n = dugum_yeni(DugumTur.D_PROGRAM, 1, 1);
+    dugum_yaz_liste(n, merged);
+    don n;
+}
+
+fonk analiz_program(metin kaynak, metin ad, sayi cok_hata) -> sayi {
+    havuz_sifirla();
+    sayi ana_zorunlu = 1;
+    eger (baslik_mi(ad)) { ana_zorunlu = 0; }
+    sayi program = yukle_birlesik(kaynak, ad, ana_zorunlu);
+    eger (hata_var() || program == 0) { don 0; }
+    eger (cok_hata != 0) {
+        hata_analiz_topla_ayarla(1);
+    }
+    tip_calistir(program);
+    eger (hata_var()) { don 0; }
+    guven_kontrol(program);
+    eger (hata_var() || hata_analiz_say() > 0) { don 0; }
+    don program;
+}
+
+fonk derle_kaynak(metin kaynak, metin ad) -> mantik {
+    kaynak_ayarla(kaynak, intern(ad));
+    eger (baslik_mi(ad)) {
+        hata_ver(1, 1, "Başlık dosyası (.uph) derleme girişi olamaz; bir .upp programından 'kullan' ile katın.");
+        don yanlis;
+    }
+    sayi program = analiz_program(kaynak, ad, 0);
+    eger (program == 0) { don yanlis; }
+    uret_program(program);
+    eger (hata_var()) { don yanlis; }
+    don dogru;
+}
+
+fonk ast_yaz(sayi node, sayi derinlik) -> bos {
+    eger (node == 0) {
+        don;
+    }
+    hata_fmt_basla();
+    sayi i = 0;
+    iken (i < derinlik) {
+        hata_fmt_yaz("  ");
+        i = i + 1;
+    }
+    hata_fmt_yaz("Dugum tur=");
+    hata_fmt_sayi(dugum_tur(node));
+    hata_fmt_yaz(" ad=");
+    hata_fmt_yaz(dugum_ad(node));
+    oto satir = intern(hata_fmt_al());
+    upp.satir_yaz(satir);
+    ast_yaz(dugum_a(node), derinlik + 1);
+    ast_yaz(dugum_b(node), derinlik + 1);
+    ast_yaz(dugum_c(node), derinlik + 1);
+    ast_yaz(dugum_d(node), derinlik + 1);
+    sayi L = dugum_liste(node);
+    eger (L != 0) {
+        i = 0;
+        iken (i < liste_uzunluk(L)) {
+            ast_yaz(liste_al(L, i), derinlik + 1);
+            i = i + 1;
+        }
+    }
+}
+
+fonk havuz_sinir_test() -> sayi {
+    havuz_sifirla();
+    sayi t = dugum_tur(-1);
+    eger (!hata_var()) {
+        upp.satir_yaz("havuz test: negatif id sessiz geçti");
+        don 1;
+    }
+    hata_sifirla();
+    t = dugum_tur(999999);
+    eger (!hata_var()) {
+        upp.satir_yaz("havuz test: büyük id sessiz geçti");
+        don 1;
+    }
+    hata_sifirla();
+    sayi L = liste_yeni();
+    liste_al(L, 0);
+    eger (!hata_var()) {
+        upp.satir_yaz("havuz test: boş liste indeksi sessiz geçti");
+        don 1;
+    }
+    hata_sifirla();
+    upp.satir_yaz("havuz sınır testleri: tamam");
+    don 0;
+}
+
+fonk harf_kucuk_ascii(sayi c) -> sayi {
+    eger (c >= 65 && c <= 90) { don c + 32; }
+    don c;
+}
+
+fonk yol_son_esit(metin s, metin uz) -> mantik {
+    sayi n = metin_uzun(s);
+    sayi m = metin_uzun(uz);
+    eger (m <= 0 || n < m) { don yanlis; }
+    sayi i = 0;
+    iken (i < m) {
+        eger (harf_kucuk_ascii(metin_cp(s, n - m + i)) != harf_kucuk_ascii(metin_cp(uz, i))) {
+            don yanlis;
+        }
+        i = i + 1;
+    }
+    don dogru;
+}
+
+fonk yol_uzanti_kes(metin s) -> metin {
+    sayi n = metin_uzun(s);
+    eger (n >= 4 && (yol_son_esit(s, ".exe") || yol_son_esit(s, ".upp") || yol_son_esit(s, ".uph") || yol_son_esit(s, ".out"))) {
+        don intern_dilim(s, 0, n - 4);
+    }
+    eger (n >= 2 && yol_son_esit(s, ".c")) {
+        don intern_dilim(s, 0, n - 2);
+    }
+    don s;
+}
+
+fonk ana() -> sayi {
+    sayi argn = upp.arguman_sayisi();
+    eger (argn >= 2 && metin_esit(upp.arguman(1), "--havuz-test")) {
+        don havuz_sinir_test();
+    }
+    metin kaynak_yol = "ornekler/ornek1.upp";
+    metin cikti = "";
+    mantik sadece_c = yanlis;
+    mantik sadece_derle = yanlis;
+    mantik dump_ast = yanlis;
+    mantik json_hata = yanlis;
+    mantik analiz = yanlis;
+    mantik bicim = yanlis;
+    mantik bicim_kontrol = yanlis;
+    mantik hedef_linux = yanlis;
+    mantik hedef_windows = yanlis;
+    sayi i = 1;
+    iken (i < argn) {
+        oto a = upp.arguman(i);
+        eger (metin_esit(a, "--sadece-c")) { sadece_c = dogru; }
+        yoksa eger (metin_esit(a, "--sadece-derle")) { sadece_derle = dogru; }
+        yoksa eger (metin_esit(a, "--ast")) { dump_ast = dogru; }
+        yoksa eger (metin_esit(a, "--json-hata")) { json_hata = dogru; }
+        yoksa eger (metin_esit(a, "--analiz")) { analiz = dogru; }
+        yoksa eger (metin_esit(a, "--bicim")) { bicim = dogru; }
+        yoksa eger (metin_esit(a, "--bicim-kontrol")) { bicim_kontrol = dogru; }
+        yoksa eger (metin_esit(a, "--linux")) { hedef_linux = dogru; }
+        yoksa eger (metin_esit(a, "--windows")) { hedef_windows = dogru; }
+        yoksa eger (metin_esit(a, "--cikti")) {
+            i = i + 1;
+            eger (i < argn) { cikti = upp.arguman(i); }
+        } yoksa eger (metin_cp(a, 0) != 45) {
+            kaynak_yol = a;
+        }
+        i = i + 1;
+    }
+    eger (bicim && bicim_kontrol) {
+        upp.satir_yaz("[u++ HATA] --bicim ve --bicim-kontrol birlikte kullanılamaz.");
+        don 1;
+    }
+    eger (hedef_linux && hedef_windows) {
+        upp.satir_yaz("[u++ HATA] --linux ve --windows birlikte kullanılamaz.");
+        don 1;
+    }
+    eger (hedef_linux) {
+        os_hedef_yaz(1);
+    } yoksa eger (hedef_windows) {
+        os_hedef_yaz(0);
+    }
+    eger (analiz) {
+        json_hata = dogru;
+    }
+    eger (json_hata) {
+        hata_json_mod_ayarla(1);
+        dump_ast = yanlis;
+    }
+    eger (!os_dosya_var(kaynak_yol)) {
+        hata_fmt_basla();
+        hata_fmt_yaz("Dosya bulunamadı: ");
+        hata_fmt_yaz(kaynak_yol);
+        eger (json_hata) {
+            hata_json_yaz(1, 1, "hata", intern(hata_fmt_al()));
+        } yoksa {
+            hata_fmt_basla();
+            hata_fmt_yaz("[u++ HATA] Dosya bulunamadı: ");
+            hata_fmt_yaz(kaynak_yol);
+            upp.satir_yaz(hata_fmt_al());
+        }
+        don 1;
+    }
+    eger (bicim || bicim_kontrol) {
+        sayi kod = os_bicim_dosya(kaynak_yol, bicim_kontrol ? 1 : 0);
+        eger (bicim_kontrol && kod != 0) {
+            upp.yaz("[u++ HATA] --bicim-kontrol: '");
+            upp.yaz(kaynak_yol);
+            upp.satir_yaz("' biçimsiz.");
+            don 1;
+        }
+        eger (!bicim_kontrol && kod != 0) {
+            upp.satir_yaz("[u++ HATA] biçim yazılamadı.");
+            don 1;
+        }
+        don 0;
+    }
+    eger (!json_hata) {
+        upp.yaz("[u++] '");
+        upp.yaz(kaynak_yol);
+        upp.satir_yaz("' ayrıştırılıyor...");
+    }
+    oto kaynak = kaynak_lf(upp.dosya_oku(kaynak_yol));
+    eger (analiz) {
+        sayi program = analiz_program(kaynak, kaynak_yol, 1);
+        eger (program == 0) {
+            hata_json_bas();
+            don 1;
+        }
+        hata_json_ok();
+        don 0;
+    }
+    eger (dump_ast) {
+        sayi program = analiz_program(kaynak, kaynak_yol, 0);
+        eger (program == 0) {
+            hata_bas();
+            don 1;
+        }
+        ast_yaz(program, 0);
+        don 0;
+    }
+    eger (!derle_kaynak(kaynak, kaynak_yol)) {
+        eger (json_hata) {
+            hata_json_bas();
+        } yoksa {
+            hata_bas();
+        }
+        don 1;
+    }
+    metin c_yol = "cikti.c";
+    metin exe_yol = "program.exe";
+    metin exe_uz = ".exe";
+    eger (os_hedef_al() != 0) {
+        exe_yol = "program.out";
+        exe_uz = ".out";
+    }
+    eger (!metin_esit(cikti, "")) {
+        oto kok = yol_uzanti_kes(cikti);
+        hata_fmt_basla();
+        hata_fmt_yaz(kok);
+        hata_fmt_yaz(".c");
+        c_yol = intern(hata_fmt_al());
+        hata_fmt_basla();
+        hata_fmt_yaz(kok);
+        hata_fmt_yaz(exe_uz);
+        exe_yol = intern(hata_fmt_al());
+    }
+    eger (!os_dosya_yaz(c_yol, tampon_al())) {
+        hata_fmt_basla();
+        hata_fmt_yaz("Çıktı yazılamadı (");
+        hata_fmt_yaz(c_yol);
+        hata_fmt_yaz(")");
+        eger (json_hata) {
+            hata_json_yaz(1, 1, "hata", intern(hata_fmt_al()));
+        } yoksa {
+            hata_fmt_basla();
+            hata_fmt_yaz("[u++ HATA] Çıktı yazılamadı (");
+            hata_fmt_yaz(c_yol);
+            hata_fmt_yaz(")");
+            upp.satir_yaz(hata_fmt_al());
+        }
+        don 1;
+    }
+    eger (!json_hata) {
+        upp.yaz("[u++] Ara C kodu üretildi: ");
+        upp.satir_yaz(c_yol);
+    }
+    eger (sadece_c) {
+        eger (json_hata) { hata_json_ok(); }
+        don 0;
+    }
+    oto gcc = os_gcc_bul();
+    eger (metin_esit(gcc, "")) {
+        eger (json_hata) {
+            eger (os_hedef_al() != 0) {
+                hata_json_yaz(1, 1, "hata", "GCC bulunamadı. 'gcc' paketini kurun.");
+            } yoksa {
+                hata_json_yaz(1, 1, "hata", "GCC bulunamadı. MinGW-w64 kurun.");
+            }
+        } yoksa {
+            eger (os_hedef_al() != 0) {
+                upp.satir_yaz("[u++ HATA] GCC bulunamadı. 'gcc' paketini kurun.");
+            } yoksa {
+                upp.satir_yaz("[u++ HATA] GCC bulunamadı. MinGW-w64 kurun.");
+            }
+        }
+        don 1;
+    }
+    eger (!json_hata) {
+        eger (os_hedef_al() != 0) {
+            upp.satir_yaz("[u++] GCC ile native ikili derleniyor (gcc -std=gnu11 -pthread -lm)...");
+        } yoksa {
+            upp.satir_yaz("[u++] GCC ile native ikili derleniyor (gcc -std=gnu11 -luser32 -lwinmm -lgdi32)...");
+        }
+    }
+    sayi rc = os_gcc_cagir(gcc, c_yol, exe_yol);
+    eger (rc != 0) {
+        eger (json_hata) {
+            oto gcc_mesaj = os_gcc_cikti();
+            eger (metin_esit(gcc_mesaj, "")) {
+                hata_json_yaz(1, 1, "gcc", "GCC derleme başarısız");
+            } yoksa {
+                hata_json_yaz(1, 1, "gcc", gcc_mesaj);
+            }
+        } yoksa {
+            upp.satir_yaz("[GCC DERLEME HATASI]");
+        }
+        don 1;
+    }
+    eger (json_hata) {
+        hata_json_ok();
+        don 0;
+    }
+    upp.yaz("[u++] DERLEME BAŞARILI: ");
+    upp.satir_yaz(exe_yol);
+    eger (sadece_derle) {
+        don 0;
+    }
+    eger (os_hedef_al() != os_host_linux()) {
+        eger (os_hedef_al() != 0) {
+            upp.yaz("[u++] Hedef 'linux' bu makinede çalıştırılmıyor; ikili: ");
+        } yoksa {
+            upp.yaz("[u++] Hedef 'windows' bu makinede çalıştırılmıyor; ikili: ");
+        }
+        upp.satir_yaz(exe_yol);
+        don 0;
+    }
+    upp.satir_yaz("==================================================");
+    don os_program_calistir(exe_yol);
+}

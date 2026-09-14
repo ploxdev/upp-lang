@@ -1,0 +1,64 @@
+// ornek1 — dilin temeli: turler, kontrol, dosya, argv, zaman
+
+fonk topla(sayi a, sayi b) -> sayi {
+    don a + b;
+}
+
+fonk ana() -> sayi {
+    oto isim = "Arda";
+    oto x = 40;
+    oto y = 2;
+    oto toplam = topla(x, y);
+    sayi xs[] = [10, 20, 30];
+    oto hex = 0x90;
+
+    upp.satir_yaz("u++ ornek1 — merhaba {isim}");
+    upp.satir_yaz("toplam={toplam} hex={hex}");
+
+    eger (toplam == 42) {
+        upp.satir_yaz("cevap 42");
+    } yoksa {
+        upp.satir_yaz("beklenmeyen toplam");
+    }
+
+    oto n = 0;
+    her (oto v in xs) {
+        n = n + v;
+    }
+    upp.satir_yaz("dizi toplami={n}");
+
+    secim (x) {
+        durum 40:
+            upp.satir_yaz("x kirk");
+            dur;
+        varsayilan:
+            upp.satir_yaz("x baska");
+    }
+
+    oto t0 = upp.zaman();
+    upp.dosya_yaz("selam.txt", "Merhaba u++\n");
+    eger (upp.dosya_var_mi("selam.txt")) {
+        oto icerik = upp.dosya_oku("selam.txt");
+        eger (icerik != yok) {
+            upp.yaz("dosya: {icerik}");
+            upp.metin_bosalt(icerik);
+        }
+    }
+    oto sayi_metin = upp.metinden_sayiya("123");
+    upp.satir_yaz("metinden_sayiya= {sayi_metin}");
+    oto ms = upp.zaman() - t0;
+    upp.satir_yaz("sure {ms} ms");
+
+    oto narg = upp.arguman_sayisi();
+    upp.satir_yaz("arguman sayisi={narg}");
+    oto a0 = upp.arguman(0);
+    eger (a0 != yok) {
+        upp.satir_yaz("arguman(0)={a0}");
+    }
+    eger (upp.arguman_sayisi() > 1) {
+        oto a1 = upp.arguman(1);
+        upp.satir_yaz("arguman(1)={a1}");
+    }
+
+    don 0;
+}

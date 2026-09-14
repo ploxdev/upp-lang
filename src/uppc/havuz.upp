@@ -1,0 +1,1388 @@
+/* Native derleyici havuzu — saf u++ SoA (liste/harita).
+ * İşaretçi yok. Id 0 = yok; gerçek kayıtlar 1….
+ * guvensiz içinde liste/düğüm deposuna işaretçi alıp sonra ekle/dugum_yeni
+ * deyip aynı işaretçiyi kullanmak tanımsızdır; bu API yalnızca sayi id döner. */
+
+sayi g_os_hedef = -1;
+metin g_gcc_log = "";
+
+harita[metin,sayi] intern_map;
+liste[metin] intern_metin;
+sayi intern_n = 0;
+
+liste[sayi] d_tur;
+liste[sayi] d_satir;
+liste[sayi] d_sutun;
+liste[metin] d_ad;
+liste[metin] d_kaynak;
+liste[sayi] d_sayi;
+liste[sayi] d_a;
+liste[sayi] d_b;
+liste[sayi] d_c;
+liste[sayi] d_d;
+liste[sayi] d_liste;
+liste[sayi] d_liste2;
+liste[sayi] d_ptrd;
+liste[sayi] d_dims;
+liste[sayi] d_bayrak;
+sayi d_n = 0;
+
+liste[sayi] l_ofset;
+liste[sayi] l_uzunluk;
+liste[sayi] l_kap;
+liste[sayi] l_veri;
+sayi l_n = 0;
+
+liste[sayi] j_tur;
+liste[metin] j_deger;
+liste[sayi] j_satir;
+liste[sayi] j_sutun;
+sayi j_n = 0;
+
+metin g_kaynak = "";
+metin g_kaynak_ad = "<girdi>";
+sayi g_cp_i = 0;
+sayi g_lex_satir = 1;
+sayi g_lex_sutun = 1;
+
+metin g_tampon = "";
+metin g_bg = "";
+sayi g_indent = 0;
+sayi g_emit_hedef = 0;
+
+sayi g_ayristir_i = 0;
+sayi g_loop = 0;
+sayi g_switch = 0;
+sayi g_bg_mod = 0;
+sayi g_tmp = 0;
+sayi g_bg_id = 0;
+sayi g_cur_fn = 0;
+metin g_cur_class = "";
+
+liste[metin] k_ad;
+liste[sayi] k_tip;
+liste[sayi] k_seviye;
+sayi k_n = 0;
+sayi k_seviye_cur = 0;
+
+harita[metin,sayi] t_sinif;
+harita[metin,sayi] t_fn;
+harita[metin,sayi] t_enum;
+harita[metin,sayi] t_global;
+liste[metin] t_sinif_adler;
+
+fonk intern_hazir() -> bos {
+    eger (intern_n > 0) { don; }
+    intern_metin.ekle("");
+    intern_map.koy("", 0);
+    intern_n = 1;
+}
+
+fonk metin_kopya_yeni(metin s) -> metin {
+    metin o = "";
+    eger (s == yok) { don o; }
+    o += s;
+    don o;
+}
+
+fonk intern(metin s) -> metin {
+    intern_hazir();
+    eger (s == yok) { s = ""; }
+    eger (intern_map.var_mi(s)) {
+        don intern_metin.al(intern_map.al(s));
+    }
+    metin kopya = metin_kopya_yeni(s);
+    intern_map.koy(kopya, intern_n);
+    intern_metin.ekle(kopya);
+    intern_n = intern_n + 1;
+    don kopya;
+}
+
+fonk derleme_kaynak_ad() -> metin {
+    don g_kaynak_ad;
+}
+
+fonk metin_esit(metin a, metin b) -> mantik {
+    eger (a == yok) { a = ""; }
+    eger (b == yok) { b = ""; }
+    don a == b;
+}
+
+fonk metin_uzun(metin s) -> sayi {
+    eger (hata_var()) { don 0; }
+    eger (s == yok) { don 0; }
+    don upp.uzunluk(s);
+}
+
+fonk metin_cp(metin s, sayi i) -> sayi {
+    eger (s == yok) { don -1; }
+    eger (i < 0 || i >= upp.uzunluk(s)) { don -1; }
+    don s[i];
+}
+
+fonk metin_adv(metin s, sayi i) -> sayi {
+    /* Kod noktası adımı. parser/codegen i += adv ile yürür; bayt değil. */
+    eger (s == yok) { don 1; }
+    eger (i < 0 || i >= upp.uzunluk(s)) { don 1; }
+    don 1;
+}
+
+fonk intern_dilim(metin s, sayi bas, sayi son) -> metin {
+    eger (s == yok) { s = ""; }
+    sayi n = upp.uzunluk(s);
+    eger (bas < 0) { bas = 0; }
+    eger (son > n) { son = n; }
+    eger (son < bas) { son = bas; }
+    don intern(upp.metin.kes(s, bas, son - bas));
+}
+
+fonk kaynak_lf(metin s) -> metin {
+    eger (s == yok) { don yok; }
+    sayi n = upp.uzunluk(s);
+    sayi i = 0;
+    iken (i < n) {
+        eger (s[i] == 13) { dur; }
+        i = i + 1;
+    }
+    eger (i >= n) { don intern(s); }
+    metin o = "";
+    sayi parca = 0;
+    i = 0;
+    iken (i < n) {
+        eger (s[i] == 13) {
+            eger (i > parca) { o += upp.metin.kes(s, parca, i - parca); }
+            parca = i + 1;
+        }
+        i = i + 1;
+    }
+    eger (parca < n) { o += upp.metin.kes(s, parca, n - parca); }
+    don intern(o);
+}
+
+fonk sayi_metin(sayi n) -> metin {
+    eger (n == 0) { don intern("0"); }
+    metin o = "";
+    eger (n < 0) {
+        o += "-";
+        n = 0 - n;
+    }
+    metin haneler = "0123456789";
+    metin ters = "";
+    iken (n > 0) {
+        sayi h = n - (n / 10) * 10;
+        ters += upp.metin.kes(haneler, h, 1);
+        n = n / 10;
+    }
+    sayi i = upp.uzunluk(ters) - 1;
+    iken (i >= 0) {
+        o += upp.metin.kes(ters, i, 1);
+        i = i - 1;
+    }
+    don intern(o);
+}
+
+fonk kat(metin a, metin b) -> metin {
+    eger (a == yok) { a = ""; }
+    eger (b == yok) { b = ""; }
+    metin s = "";
+    s += a;
+    s += b;
+    don intern(s);
+}
+
+fonk kat3(metin a, metin b, metin c) -> metin {
+    don kat(kat(a, b), c);
+}
+
+fonk kat4(metin a, metin b, metin c, metin d) -> metin {
+    don kat(kat(a, b), kat(c, d));
+}
+
+fonk kat5(metin a, metin b, metin c, metin d, metin e) -> metin {
+    don kat(kat4(a, b, c, d), e);
+}
+
+fonk c_escape(metin s) -> metin {
+    eger (s == yok) { s = ""; }
+    metin o = "\"";
+    sayi i = 0;
+    sayi n = upp.uzunluk(s);
+    iken (i < n) {
+        sayi c = s[i];
+        eger (c == 92) { o += "\\\\"; }
+        yoksa eger (c == 34) { o += "\\\""; }
+        yoksa eger (c == 10) { o += "\\n"; }
+        yoksa eger (c == 13) { o += "\\r"; }
+        yoksa eger (c == 9) { o += "\\t"; }
+        yoksa { o += upp.metin.kes(s, i, 1); }
+        i = i + 1;
+    }
+    o += "\"";
+    don intern(o);
+}
+
+fonk hex_hane_deger(sayi c) -> sayi {
+    eger (c >= 48 && c <= 57) { don c - 48; }
+    eger (c >= 97 && c <= 102) { don c - 87; }
+    eger (c >= 65 && c <= 70) { don c - 55; }
+    don -1;
+}
+
+fonk hex_deger(metin lex) -> sayi {
+    eger (lex == yok) { don 0; }
+    sayi i = 0;
+    sayi n = upp.uzunluk(lex);
+    sayi isaret = 1;
+    eger (i < n && lex[i] == 45) { isaret = 0 - 1; i = i + 1; }
+    eger (i + 1 < n && lex[i] == 48 && (lex[i + 1] == 120 || lex[i + 1] == 88)) {
+        i = i + 2;
+    }
+    sayi v = 0;
+    iken (i < n) {
+        sayi h = hex_hane_deger(lex[i]);
+        eger (h < 0) { dur; }
+        v = v * 16 + h;
+        i = i + 1;
+    }
+    don v * isaret;
+}
+
+fonk sayi_oku(metin lex) -> sayi {
+    eger (lex == yok) { don 0; }
+    sayi i = 0;
+    sayi n = upp.uzunluk(lex);
+    sayi isaret = 1;
+    eger (i < n && lex[i] == 45) { isaret = 0 - 1; i = i + 1; }
+    sayi v = 0;
+    iken (i < n) {
+        sayi c = lex[i];
+        eger (c < 48 || c > 57) { dur; }
+        v = v * 10 + (c - 48);
+        i = i + 1;
+    }
+    don v * isaret;
+}
+
+fonk satir_kirp_sol(metin s) -> metin {
+    eger (s == yok) { don ""; }
+    sayi i = 0;
+    sayi n = upp.uzunluk(s);
+    iken (i < n && (s[i] == 32 || s[i] == 9 || s[i] == 13)) { i = i + 1; }
+    don intern(upp.metin.kes(s, i, n - i));
+}
+
+fonk c_on_islemci(metin kod) -> mantik {
+    eger (kod == yok) { don yanlis; }
+    sayi i = 0;
+    sayi n = upp.uzunluk(kod);
+    iken (i < n) {
+        sayi bas = i;
+        iken (i < n && kod[i] != 10) { i = i + 1; }
+        metin satir = satir_kirp_sol(upp.metin.kes(kod, bas, i - bas));
+        eger (upp.metin.baslar(satir, "#include") || upp.metin.baslar(satir, "#define") || upp.metin.baslar(satir, "#pragma") || upp.metin.baslar(satir, "#if")) {
+            don dogru;
+        }
+        eger (i < n && kod[i] == 10) { i = i + 1; }
+    }
+    don yanlis;
+}
+
+fonk ident_bas(sayi cp) -> mantik {
+    eger (cp >= 65 && cp <= 90) { don dogru; }
+    eger (cp >= 97 && cp <= 122) { don dogru; }
+    eger (cp == 95) { don dogru; }
+    eger (cp == 231 || cp == 287 || cp == 305 || cp == 246 || cp == 351 || cp == 252) { don dogru; }
+    eger (cp == 199 || cp == 286 || cp == 304 || cp == 214 || cp == 350 || cp == 220) { don dogru; }
+    don yanlis;
+}
+
+fonk ident_devam(sayi cp) -> mantik {
+    eger (cp >= 48 && cp <= 57) { don dogru; }
+    don ident_bas(cp);
+}
+
+fonk dugum_hazir() -> bos {
+    eger (d_n > 0) { don; }
+    d_tur.ekle(0);
+    d_satir.ekle(0);
+    d_sutun.ekle(1);
+    d_ad.ekle("");
+    d_kaynak.ekle("");
+    d_sayi.ekle(0);
+    d_a.ekle(0);
+    d_b.ekle(0);
+    d_c.ekle(0);
+    d_d.ekle(0);
+    d_liste.ekle(0);
+    d_liste2.ekle(0);
+    d_ptrd.ekle(0);
+    d_dims.ekle(0);
+    d_bayrak.ekle(0);
+    d_n = 1;
+}
+
+fonk dugum_ok(sayi id) -> mantik {
+    eger (id <= 0 || id >= d_n) {
+        hata_ver(1, 1, "geçersiz düğüm id");
+        don yanlis;
+    }
+    don dogru;
+}
+
+fonk dugum_yeni(sayi tur, sayi satir, sayi sutun) -> sayi {
+    eger (hata_var()) { don 0; }
+    dugum_hazir();
+    d_tur.ekle(tur);
+    d_satir.ekle(satir);
+    d_sutun.ekle(sutun);
+    d_ad.ekle("");
+    d_kaynak.ekle(g_kaynak_ad);
+    d_sayi.ekle(0);
+    d_a.ekle(0);
+    d_b.ekle(0);
+    d_c.ekle(0);
+    d_d.ekle(0);
+    d_liste.ekle(0);
+    d_liste2.ekle(0);
+    d_ptrd.ekle(0);
+    d_dims.ekle(0);
+    d_bayrak.ekle(0);
+    sayi id = d_n;
+    d_n = d_n + 1;
+    don id;
+}
+
+fonk dugum_tur(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_tur.al(id);
+}
+
+fonk dugum_satir(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_satir.al(id);
+}
+
+fonk dugum_sutun(sayi id) -> sayi {
+    eger (id == 0) { don 1; }
+    eger (!dugum_ok(id)) { don 1; }
+    don d_sutun.al(id);
+}
+
+fonk dugum_ad(sayi id) -> metin {
+    eger (id == 0) { don ""; }
+    eger (!dugum_ok(id)) { don ""; }
+    don d_ad.al(id);
+}
+
+fonk dugum_kaynak(sayi id) -> metin {
+    eger (id == 0) { don ""; }
+    eger (!dugum_ok(id)) { don ""; }
+    don d_kaynak.al(id);
+}
+
+fonk dugum_sayi(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_sayi.al(id);
+}
+
+fonk dugum_a(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_a.al(id);
+}
+
+fonk dugum_b(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_b.al(id);
+}
+
+fonk dugum_c(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_c.al(id);
+}
+
+fonk dugum_d(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_d.al(id);
+}
+
+fonk dugum_liste(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_liste.al(id);
+}
+
+fonk dugum_liste2(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_liste2.al(id);
+}
+
+fonk dugum_ptrd(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_ptrd.al(id);
+}
+
+fonk dugum_dims(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_dims.al(id);
+}
+
+fonk dugum_bayrak(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!dugum_ok(id)) { don 0; }
+    don d_bayrak.al(id);
+}
+
+fonk dugum_yaz_ad(sayi id, metin ad) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_ad.yaz(id, intern(ad));
+}
+
+fonk dugum_yaz_sayi(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_sayi.yaz(id, v);
+}
+
+fonk dugum_yaz_a(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_a.yaz(id, v);
+}
+
+fonk dugum_yaz_b(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_b.yaz(id, v);
+}
+
+fonk dugum_yaz_c(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_c.yaz(id, v);
+}
+
+fonk dugum_yaz_d(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_d.yaz(id, v);
+}
+
+fonk dugum_yaz_liste(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_liste.yaz(id, v);
+}
+
+fonk dugum_yaz_liste2(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_liste2.yaz(id, v);
+}
+
+fonk dugum_yaz_ptrd(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_ptrd.yaz(id, v);
+}
+
+fonk dugum_yaz_dims(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_dims.yaz(id, v);
+}
+
+fonk dugum_yaz_bayrak(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_bayrak.yaz(id, v);
+}
+
+fonk dugum_yaz_tur(sayi id, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!dugum_ok(id)) { don; }
+    d_tur.yaz(id, v);
+}
+
+fonk liste_hazir() -> bos {
+    eger (l_n > 0) { don; }
+    l_ofset.ekle(0);
+    l_uzunluk.ekle(0);
+    l_kap.ekle(0);
+    l_n = 1;
+}
+
+fonk liste_ok(sayi id) -> mantik {
+    eger (id <= 0 || id >= l_n) {
+        hata_ver(1, 1, "geçersiz liste id");
+        don yanlis;
+    }
+    don dogru;
+}
+
+fonk liste_buyut(sayi id) -> bos {
+    sayi eski_of = l_ofset.al(id);
+    sayi eski_n = l_uzunluk.al(id);
+    sayi yeni_kap = l_kap.al(id);
+    eger (yeni_kap <= 0) { yeni_kap = 4; }
+    yoksa { yeni_kap = yeni_kap * 2; }
+    sayi yeni_of = l_veri.uzunluk();
+    sayi i = 0;
+    iken (i < eski_n) {
+        l_veri.ekle(l_veri.al(eski_of + i));
+        i = i + 1;
+    }
+    iken (i < yeni_kap) {
+        l_veri.ekle(0);
+        i = i + 1;
+    }
+    l_ofset.yaz(id, yeni_of);
+    l_kap.yaz(id, yeni_kap);
+}
+
+fonk liste_yeni() -> sayi {
+    eger (hata_var()) { don 0; }
+    liste_hazir();
+    l_ofset.ekle(0);
+    l_uzunluk.ekle(0);
+    l_kap.ekle(0);
+    sayi id = l_n;
+    l_n = l_n + 1;
+    don id;
+}
+
+fonk liste_ekle(sayi id, sayi oge) -> bos {
+    eger (id == 0) { don; }
+    eger (!liste_ok(id)) { don; }
+    eger (l_uzunluk.al(id) >= l_kap.al(id)) {
+        liste_buyut(id);
+    }
+    l_veri.yaz(l_ofset.al(id) + l_uzunluk.al(id), oge);
+    l_uzunluk.yaz(id, l_uzunluk.al(id) + 1);
+}
+
+fonk liste_uzunluk(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!liste_ok(id)) { don 0; }
+    don l_uzunluk.al(id);
+}
+
+fonk liste_al(sayi id, sayi i) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!liste_ok(id)) { don 0; }
+    eger (i < 0 || i >= l_uzunluk.al(id)) {
+        hata_ver(1, 1, "liste indeksi sınır dışında");
+        don 0;
+    }
+    don l_veri.al(l_ofset.al(id) + i);
+}
+
+fonk liste_yaz(sayi id, sayi i, sayi v) -> bos {
+    eger (id == 0) { don; }
+    eger (!liste_ok(id)) { don; }
+    eger (i < 0 || i >= l_uzunluk.al(id)) {
+        hata_ver(1, 1, "liste indeksi sınır dışında");
+        don;
+    }
+    l_veri.yaz(l_ofset.al(id) + i, v);
+}
+
+fonk liste_kisalt(sayi id) -> bos {
+    eger (id == 0) { don; }
+    eger (!liste_ok(id)) { don; }
+    eger (l_uzunluk.al(id) > 0) {
+        l_uzunluk.yaz(id, l_uzunluk.al(id) - 1);
+    }
+}
+
+fonk jeton_hazir() -> bos {
+    eger (j_n > 0) { don; }
+    j_tur.ekle(0);
+    j_deger.ekle("");
+    j_satir.ekle(0);
+    j_sutun.ekle(1);
+    j_n = 1;
+}
+
+fonk jeton_ok(sayi id) -> mantik {
+    eger (id <= 0 || id >= j_n) {
+        hata_ver(1, 1, "geçersiz jeton id");
+        don yanlis;
+    }
+    don dogru;
+}
+
+fonk jeton_yeni(sayi tur, metin deger, sayi satir, sayi sutun) -> sayi {
+    eger (hata_var()) { don 0; }
+    jeton_hazir();
+    eger (j_n == j_tur.uzunluk()) {
+        j_tur.ekle(tur);
+        j_deger.ekle(intern(deger));
+        j_satir.ekle(satir);
+        j_sutun.ekle(sutun);
+    } yoksa {
+        j_tur.yaz(j_n, tur);
+        j_deger.yaz(j_n, intern(deger));
+        j_satir.yaz(j_n, satir);
+        j_sutun.yaz(j_n, sutun);
+    }
+    sayi id = j_n;
+    j_n = j_n + 1;
+    don id;
+}
+
+fonk jeton_tur(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!jeton_ok(id)) { don 0; }
+    don j_tur.al(id);
+}
+
+fonk jeton_deger(sayi id) -> metin {
+    eger (id == 0) { don ""; }
+    eger (!jeton_ok(id)) { don ""; }
+    don j_deger.al(id);
+}
+
+fonk jeton_satir(sayi id) -> sayi {
+    eger (id == 0) { don 0; }
+    eger (!jeton_ok(id)) { don 0; }
+    don j_satir.al(id);
+}
+
+fonk jeton_sutun(sayi id) -> sayi {
+    eger (id == 0) { don 1; }
+    eger (!jeton_ok(id)) { don 1; }
+    don j_sutun.al(id);
+}
+
+fonk jeton_sayisi() -> sayi {
+    don j_n;
+}
+
+fonk jeton_sifirla() -> bos {
+    eger (j_tur.uzunluk() == 0) {
+        j_n = 0;
+        don;
+    }
+    j_n = 1;
+}
+
+fonk kaynak_ayarla(metin s, metin ad) -> bos {
+    eger (s == yok) { s = ""; }
+    eger (upp.uzunluk(s) > 0 && s[0] == 65279) {
+        s = intern(upp.metin.kes(s, 1, upp.uzunluk(s) - 1));
+    }
+    g_kaynak = s;
+    g_cp_i = 0;
+    g_lex_satir = 1;
+    g_lex_sutun = 1;
+    eger (ad == yok || metin_esit(ad, "")) {
+        g_kaynak_ad = intern("<girdi>");
+    } yoksa {
+        g_kaynak_ad = intern(ad);
+    }
+}
+
+fonk lex_kaynak_ad_guncelle(metin ad) -> bos {
+    eger (ad == yok || metin_esit(ad, "")) { don; }
+    g_kaynak_ad = intern(ad);
+    g_lex_satir = 0;
+    g_lex_sutun = 1;
+}
+
+fonk lex_yorum_govde(metin govde) -> bos {
+    eger (govde == yok) { don; }
+    sayi i = 0;
+    sayi n = upp.uzunluk(govde);
+    iken (i < n && (govde[i] == 32 || govde[i] == 9)) { i = i + 1; }
+    metin isaret = "@upp-kaynak";
+    sayi m = upp.uzunluk(isaret);
+    eger (i + m > n) { don; }
+    sayi j = 0;
+    iken (j < m) {
+        eger (govde[i + j] != isaret[j]) { don; }
+        j = j + 1;
+    }
+    i = i + m;
+    eger (i < n && govde[i] != 32 && govde[i] != 9) { don; }
+    iken (i < n && (govde[i] == 32 || govde[i] == 9)) { i = i + 1; }
+    sayi son = n;
+    iken (son > i) {
+        sayi c = govde[son - 1];
+        eger (c != 32 && c != 9 && c != 13) { dur; }
+        son = son - 1;
+    }
+    eger (son <= i) { don; }
+    lex_kaynak_ad_guncelle(intern(upp.metin.kes(govde, i, son - i)));
+}
+
+fonk lex_kaynak_metin() -> metin {
+    don g_kaynak;
+}
+
+fonk lex_cp() -> sayi {
+    eger (g_cp_i >= upp.uzunluk(g_kaynak)) { don -1; }
+    don upp.metin.kod(g_kaynak, g_cp_i);
+}
+
+fonk lex_bitis() -> mantik {
+    don g_cp_i >= upp.uzunluk(g_kaynak);
+}
+
+fonk lex_pos() -> sayi {
+    don g_cp_i;
+}
+
+fonk lex_satir() -> sayi {
+    don g_lex_satir;
+}
+
+fonk lex_sutun() -> sayi {
+    don g_lex_sutun;
+}
+
+fonk lex_ilerle() -> sayi {
+    eger (g_cp_i >= upp.uzunluk(g_kaynak)) { don -1; }
+    sayi cp = upp.metin.kod(g_kaynak, g_cp_i);
+    g_cp_i = g_cp_i + 1;
+    eger (cp == 10) {
+        g_lex_satir = g_lex_satir + 1;
+        g_lex_sutun = 1;
+    } yoksa {
+        g_lex_sutun = g_lex_sutun + 1;
+    }
+    don cp;
+}
+
+fonk lex_dilim(sayi bas, sayi son) -> metin {
+    don intern_dilim(g_kaynak, bas, son);
+}
+
+fonk lex_cp_ileri(sayi kac) -> sayi {
+    sayi p = g_cp_i + kac;
+    eger (p < 0 || p >= upp.uzunluk(g_kaynak)) { don -1; }
+    don upp.metin.kod(g_kaynak, p);
+}
+
+fonk tampon_sifirla() -> bos {
+    g_tampon = metin_kopya_yeni("");
+    g_indent = 0;
+}
+
+fonk tampon_yaz(metin s) -> bos {
+    eger (s == yok) { s = ""; }
+    g_tampon += s;
+}
+
+fonk tampon_yaz_sayi(sayi n) -> bos {
+    g_tampon += sayi_metin(n);
+}
+
+fonk tampon_al() -> metin {
+    don g_tampon;
+}
+
+fonk bg_yigin_sifirla() -> bos {
+    g_bg = metin_kopya_yeni("");
+}
+
+fonk bg_yigin_ekle(metin s) -> bos {
+    eger (s == yok) { s = ""; }
+    g_bg += s;
+}
+
+fonk bg_yigin_al() -> metin {
+    don g_bg;
+}
+
+fonk emit(metin s) -> bos {
+    eger (s == yok) { s = ""; }
+    eger (g_emit_hedef == 1) {
+        eger (metin_esit(s, "")) {
+            g_bg += "\n";
+            don;
+        }
+        sayi i = 0;
+        iken (i < g_indent) {
+            g_bg += "    ";
+            i = i + 1;
+        }
+        g_bg += s;
+        g_bg += "\n";
+        don;
+    }
+    eger (metin_esit(s, "")) {
+        g_tampon += "\n";
+        don;
+    }
+    sayi k = 0;
+    iken (k < g_indent) {
+        g_tampon += "    ";
+        k = k + 1;
+    }
+    g_tampon += s;
+    g_tampon += "\n";
+}
+
+fonk emit_hedef_yaz(sayi v) -> bos {
+    eger (v != 0) { g_emit_hedef = 1; }
+    yoksa { g_emit_hedef = 0; }
+}
+
+fonk os_hedef_yaz(sayi v) -> bos {
+    eger (v != 0) { g_os_hedef = 1; }
+    yoksa { g_os_hedef = 0; }
+}
+
+fonk os_host_linux() -> sayi {
+    metin p = upp.yol.birlestir("a", "b");
+    sayi i = 0;
+    sayi n = upp.uzunluk(p);
+    iken (i < n) {
+        sayi c = p[i];
+        eger (c == 47) { don 1; }
+        eger (c == 92) { don 0; }
+        i = i + 1;
+    }
+    don 0;
+}
+
+fonk os_hedef_al() -> sayi {
+    eger (g_os_hedef < 0) {
+        g_os_hedef = os_host_linux();
+    }
+    don g_os_hedef;
+}
+
+fonk os_tirnak(metin s) -> metin {
+    eger (s == yok) { s = ""; }
+    metin o = "\"";
+    o += s;
+    o += "\"";
+    don o;
+}
+
+fonk indent_ekle(sayi d) -> bos {
+    g_indent = g_indent + d;
+    eger (g_indent < 0) { g_indent = 0; }
+}
+
+fonk indent_al() -> sayi {
+    don g_indent;
+}
+
+fonk indent_kur(sayi v) -> bos {
+    eger (v < 0) { g_indent = 0; }
+    yoksa { g_indent = v; }
+}
+
+fonk ayristir_i_al() -> sayi { don g_ayristir_i; }
+fonk ayristir_i_yaz(sayi v) -> bos { g_ayristir_i = v; }
+fonk loop_al() -> sayi { don g_loop; }
+fonk loop_yaz(sayi v) -> bos { g_loop = v; }
+fonk switch_al() -> sayi { don g_switch; }
+fonk switch_yaz(sayi v) -> bos { g_switch = v; }
+fonk bg_al() -> sayi { don g_bg_mod; }
+fonk bg_yaz(sayi v) -> bos { g_bg_mod = v; }
+
+fonk tmp_yeni() -> sayi {
+    g_tmp = g_tmp + 1;
+    don g_tmp;
+}
+
+fonk tmp_sifirla() -> bos { g_tmp = 0; }
+
+fonk bgid_yeni() -> sayi {
+    g_bg_id = g_bg_id + 1;
+    don g_bg_id;
+}
+
+fonk cur_fn_yaz(sayi v) -> bos { g_cur_fn = v; }
+fonk cur_fn_al() -> sayi { don g_cur_fn; }
+
+fonk cur_class_yaz(metin s) -> bos { g_cur_class = intern(s); }
+fonk cur_class_al() -> metin { don g_cur_class; }
+
+fonk kapsam_sifirla() -> bos {
+    k_n = 0;
+    k_seviye_cur = 0;
+}
+
+fonk kapsam_ac() -> bos {
+    k_seviye_cur = k_seviye_cur + 1;
+}
+
+fonk kapsam_kapat() -> bos {
+    iken (k_n > 0 && k_seviye.al(k_n - 1) == k_seviye_cur) {
+        k_n = k_n - 1;
+    }
+    eger (k_seviye_cur > 0) {
+        k_seviye_cur = k_seviye_cur - 1;
+    }
+}
+
+fonk kapsam_bagla(metin ad, sayi ty) -> bos {
+    eger (k_seviye_cur <= 0) { kapsam_ac(); }
+    eger (k_n == k_ad.uzunluk()) {
+        k_ad.ekle(intern(ad));
+        k_tip.ekle(ty);
+        k_seviye.ekle(k_seviye_cur);
+    } yoksa {
+        k_ad.yaz(k_n, intern(ad));
+        k_tip.yaz(k_n, ty);
+        k_seviye.yaz(k_n, k_seviye_cur);
+    }
+    k_n = k_n + 1;
+}
+
+fonk kapsam_bul(metin ad) -> sayi {
+    eger (ad == yok) { ad = ""; }
+    sayi i = k_n - 1;
+    iken (i >= 0) {
+        eger (metin_esit(k_ad.al(i), ad)) { don k_tip.al(i); }
+        i = i - 1;
+    }
+    don 0;
+}
+
+fonk kapsam_yerel_var(metin ad) -> mantik {
+    eger (ad == yok) { ad = ""; }
+    eger (k_n <= 0) { don yanlis; }
+    sayi sev = k_seviye_cur;
+    sayi i = k_n - 1;
+    iken (i >= 0 && k_seviye.al(i) == sev) {
+        eger (metin_esit(k_ad.al(i), ad)) { don dogru; }
+        i = i - 1;
+    }
+    don yanlis;
+}
+
+fonk tablo_sifirla() -> bos {
+    t_sinif.bosalt();
+    t_fn.bosalt();
+    t_enum.bosalt();
+    t_global.bosalt();
+    t_sinif_adler.bosalt();
+}
+
+fonk tablo_yaz(sayi kind, metin ad, sayi id) -> sayi {
+    metin k = intern(ad);
+    eger (kind == 0) {
+        eger (t_sinif.var_mi(k)) {
+            t_sinif.koy(k, id);
+            don 1;
+        }
+        t_sinif.koy(k, id);
+        t_sinif_adler.ekle(k);
+        don 0;
+    }
+    eger (kind == 1) {
+        eger (t_fn.var_mi(k)) {
+            t_fn.koy(k, id);
+            don 1;
+        }
+        t_fn.koy(k, id);
+        don 0;
+    }
+    eger (kind == 2) {
+        eger (t_enum.var_mi(k)) {
+            t_enum.koy(k, id);
+            don 1;
+        }
+        t_enum.koy(k, id);
+        don 0;
+    }
+    eger (t_global.var_mi(k)) {
+        t_global.koy(k, id);
+        don 1;
+    }
+    t_global.koy(k, id);
+    don 0;
+}
+
+fonk tablo_bul(sayi kind, metin ad) -> sayi {
+    eger (ad == yok) { ad = ""; }
+    eger (kind == 0) {
+        eger (t_sinif.var_mi(ad)) { don t_sinif.al(ad); }
+        don 0;
+    }
+    eger (kind == 1) {
+        eger (t_fn.var_mi(ad)) { don t_fn.al(ad); }
+        don 0;
+    }
+    eger (kind == 2) {
+        eger (t_enum.var_mi(ad)) { don t_enum.al(ad); }
+        don 0;
+    }
+    eger (t_global.var_mi(ad)) { don t_global.al(ad); }
+    don 0;
+}
+
+fonk tablo_sinif_sayisi() -> sayi {
+    don t_sinif_adler.uzunluk();
+}
+
+fonk tablo_sinif_ad(sayi i) -> metin {
+    eger (i < 0 || i >= t_sinif_adler.uzunluk()) {
+        hata_ver(1, 1, "sınıf tablosu indeksi sınır dışında");
+        don "";
+    }
+    don t_sinif_adler.al(i);
+}
+
+fonk tablo_sinif_id(sayi i) -> sayi {
+    eger (i < 0 || i >= t_sinif_adler.uzunluk()) {
+        hata_ver(1, 1, "sınıf tablosu indeksi sınır dışında");
+        don 0;
+    }
+    don t_sinif.al(t_sinif_adler.al(i));
+}
+
+fonk os_dosya_yaz(metin yol, metin data) -> mantik {
+    eger (yol == yok || metin_esit(yol, "")) { don yanlis; }
+    eger (data == yok) { data = ""; }
+    upp.yol.klasor_olustur(upp.yol.dizin(yol));
+    don upp.dosya_yaz(yol, data) != 0;
+}
+
+fonk os_dosya_var(metin yol) -> mantik {
+    eger (yol == yok || metin_esit(yol, "")) { don yanlis; }
+    don upp.dosya_var_mi(yol);
+}
+
+fonk os_yol_dizin(metin yol) -> metin {
+    don intern(upp.yol.dizin(yol));
+}
+
+fonk os_yol_birlestir(metin dir, metin rel) -> metin {
+    don intern(upp.yol.birlestir(dir, rel));
+}
+
+fonk os_yol_gercek(metin yol) -> metin {
+    don intern(upp.yol.gercek(yol));
+}
+
+fonk os_cwd() -> metin {
+    don intern(upp.yol.calisma());
+}
+
+fonk os_yol_mutlak_mi(metin yol) -> mantik {
+    don upp.yol.mutlak_mi(yol);
+}
+
+fonk os_runtime_dene(metin kok) -> metin {
+    eger (kok == yok || metin_esit(kok, "")) { don ""; }
+    metin a = upp.yol.birlestir(kok, "src/runtime/upp_runtime.c");
+    eger (upp.dosya_var_mi(a)) { don intern(a); }
+    metin b = upp.yol.birlestir(kok, "runtime/upp_runtime.c");
+    eger (upp.dosya_var_mi(b)) { don intern(b); }
+    don "";
+}
+
+fonk os_runtime_bul() -> metin {
+    metin hit = os_runtime_dene(upp.yol.calisma());
+    eger (!metin_esit(hit, "")) { don hit; }
+    metin d = upp.sistem.exe_dizin();
+    sayi i = 0;
+    iken (i < 6) {
+        hit = os_runtime_dene(d);
+        eger (!metin_esit(hit, "")) { don hit; }
+        metin ust = upp.yol.dizin(d);
+        eger (metin_esit(ust, d) || metin_esit(ust, "")) { dur; }
+        d = ust;
+        i = i + 1;
+    }
+    don "";
+}
+
+fonk os_runtime_oku() -> metin {
+    metin p = os_runtime_bul();
+    eger (metin_esit(p, "")) { don intern(""); }
+    metin s = upp.dosya_oku(p);
+    eger (s == yok) { don intern(""); }
+    don intern(s);
+}
+
+fonk os_gcc_aday_dene(metin p) -> metin {
+    eger (upp.dosya_var_mi(p)) { don intern(p); }
+    don "";
+}
+
+fonk os_gcc_bul() -> metin {
+    metin p = upp.sistem.komut_bul("gcc");
+    eger (p != yok && !metin_esit(p, "")) { don intern(p); }
+    p = os_gcc_aday_dene("C:/msys64/ucrt64/bin/gcc.exe");
+    eger (!metin_esit(p, "")) { don p; }
+    p = os_gcc_aday_dene("C:/msys64/mingw64/bin/gcc.exe");
+    eger (!metin_esit(p, "")) { don p; }
+    p = os_gcc_aday_dene("C:/msys64/clang64/bin/gcc.exe");
+    eger (!metin_esit(p, "")) { don p; }
+    p = os_gcc_aday_dene("C:/mingw64/bin/gcc.exe");
+    eger (!metin_esit(p, "")) { don p; }
+    p = os_gcc_aday_dene("C:/MinGW/bin/gcc.exe");
+    eger (!metin_esit(p, "")) { don p; }
+    p = os_gcc_aday_dene("/usr/bin/gcc");
+    eger (!metin_esit(p, "")) { don p; }
+    p = os_gcc_aday_dene("/usr/local/bin/gcc");
+    eger (!metin_esit(p, "")) { don p; }
+    don intern("");
+}
+
+fonk os_yol_bosluk_var(metin s) -> mantik {
+    eger (s == yok) { don yanlis; }
+    sayi i = 0;
+    sayi n = upp.uzunluk(s);
+    iken (i < n) {
+        eger (s[i] == 32) { don dogru; }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+fonk os_cmd_parca(metin s) -> metin {
+    eger (os_yol_bosluk_var(s)) { don os_tirnak(s); }
+    don s;
+}
+
+fonk os_gcc_cagir(metin gcc, metin c_yol, metin exe_yol) -> sayi {
+    g_gcc_log = metin_kopya_yeni("");
+    eger (gcc == yok || metin_esit(gcc, "") || c_yol == yok || exe_yol == yok) { don 1; }
+    metin cmd = metin_kopya_yeni(os_cmd_parca(gcc));
+    cmd += " -std=gnu11 ";
+    eger (os_hedef_al() != 0) {
+        cmd += "-pthread ";
+        cmd += os_cmd_parca(c_yol);
+        cmd += " -o ";
+        cmd += os_cmd_parca(exe_yol);
+        cmd += " -lm";
+    } yoksa {
+        cmd += os_cmd_parca(c_yol);
+        cmd += " -o ";
+        cmd += os_cmd_parca(exe_yol);
+        cmd += " -luser32 -lwinmm -lgdi32";
+    }
+    SurecCikti r = upp.sistem.calistir(cmd);
+    eger (r.cikti != yok) { g_gcc_log = r.cikti; }
+    don r.kod;
+}
+
+fonk os_gcc_cikti() -> metin {
+    eger (g_gcc_log == yok) { don intern(""); }
+    don intern(g_gcc_log);
+}
+
+fonk os_program_calistir(metin yol) -> sayi {
+    eger (yol == yok || metin_esit(yol, "")) { don 1; }
+    SurecCikti r = upp.sistem.calistir(os_cmd_parca(yol));
+    don r.kod;
+}
+
+fonk bicim_icinde(metin s, metin ara) -> mantik {
+    eger (s == yok || ara == yok) { don yanlis; }
+    sayi n = upp.uzunluk(s);
+    sayi m = upp.uzunluk(ara);
+    eger (m <= 0 || m > n) { don yanlis; }
+    sayi i = 0;
+    iken (i + m <= n) {
+        sayi j = 0;
+        mantik ok = dogru;
+        iken (j < m) {
+            eger (s[i + j] != ara[j]) { ok = yanlis; dur; }
+            j = j + 1;
+        }
+        eger (ok) { don dogru; }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+fonk bicim_kaynak(metin src) -> metin {
+    eger (src == yok) { src = ""; }
+    eger (upp.uzunluk(src) > 0 && src[0] == 65279) {
+        src = intern(upp.metin.kes(src, 1, upp.uzunluk(src) - 1));
+    }
+    metin out = "";
+    sayi depth = 0;
+    mantik in_block = yanlis;
+    mantik in_triple = yanlis;
+    sayi p = 0;
+    sayi n = upp.uzunluk(src);
+    iken (p < n) {
+        sayi bas = p;
+        iken (p < n && src[p] != 10 && src[p] != 13) { p = p + 1; }
+        metin line = intern(upp.metin.kes(src, bas, p - bas));
+        eger (in_block || in_triple) {
+            out += line;
+            out += "\n";
+            eger (in_block && bicim_icinde(line, "*/")) { in_block = yanlis; }
+            eger (in_triple) {
+                sayi q = 0;
+                sayi ln = upp.uzunluk(line);
+                iken (q + 2 < ln) {
+                    eger (line[q] == 34 && line[q + 1] == 34 && line[q + 2] == 34) {
+                        eger (in_triple) { in_triple = yanlis; }
+                        yoksa { in_triple = dogru; }
+                        q = q + 3;
+                        devam;
+                    }
+                    q = q + 1;
+                }
+            }
+        } yoksa {
+            sayi t = 0;
+            sayi llen = upp.uzunluk(line);
+            iken (t < llen && (line[t] == 32 || line[t] == 9)) { t = t + 1; }
+            eger (t >= llen) {
+                out += "\n";
+            } yoksa {
+                sayi slen = llen;
+                iken (slen > t && (line[slen - 1] == 32 || line[slen - 1] == 9)) { slen = slen - 1; }
+                metin stripped = intern(upp.metin.kes(line, t, slen - t));
+                sayi lead = depth;
+                sayi tmpi = 0;
+                sayi sn = upp.uzunluk(stripped);
+                iken (tmpi < sn && stripped[tmpi] == 125) {
+                    eger (lead > 0) { lead = lead - 1; }
+                    tmpi = tmpi + 1;
+                    iken (tmpi < sn && (stripped[tmpi] == 32 || stripped[tmpi] == 9)) { tmpi = tmpi + 1; }
+                }
+                sayi k = 0;
+                iken (k < lead) {
+                    out += "    ";
+                    k = k + 1;
+                }
+                out += stripped;
+                out += "\n";
+                sayi i = 0;
+                mantik in_str = yanlis;
+                mantik esc = yanlis;
+                iken (i < llen) {
+                    sayi ch = line[i];
+                    sayi nxt = -1;
+                    eger (i + 1 < llen) { nxt = line[i + 1]; }
+                    eger (in_str) {
+                        eger (esc) { esc = yanlis; }
+                        yoksa eger (ch == 92) { esc = dogru; }
+                        yoksa eger (ch == 34) { in_str = yanlis; }
+                        i = i + 1;
+                        devam;
+                    }
+                    eger (ch == 34 && nxt == 34 && i + 2 < llen && line[i + 2] == 34) {
+                        in_triple = dogru;
+                        i = i + 3;
+                        sayi r = i;
+                        iken (r + 2 < llen) {
+                            eger (line[r] == 34 && line[r + 1] == 34 && line[r + 2] == 34) {
+                                in_triple = yanlis;
+                                i = r + 3;
+                                dur;
+                            }
+                            r = r + 1;
+                        }
+                        eger (in_triple) { dur; }
+                        devam;
+                    }
+                    eger (ch == 34) {
+                        in_str = dogru;
+                        i = i + 1;
+                        devam;
+                    }
+                    eger (ch == 47 && nxt == 47) { dur; }
+                    eger (ch == 47 && nxt == 42) {
+                        in_block = dogru;
+                        i = i + 2;
+                        metin kuyruk = intern(upp.metin.kes(line, i, llen - i));
+                        eger (bicim_icinde(kuyruk, "*/")) { in_block = yanlis; }
+                        dur;
+                    }
+                    eger (ch == 123) { depth = depth + 1; }
+                    yoksa eger (ch == 125) {
+                        eger (depth > 0) { depth = depth - 1; }
+                    }
+                    i = i + 1;
+                }
+            }
+        }
+        eger (p < n && src[p] == 13) { p = p + 1; }
+        eger (p < n && src[p] == 10) { p = p + 1; }
+    }
+    don intern(out);
+}
+
+fonk bicim_norm(metin ham) -> metin {
+    eger (ham == yok) { ham = ""; }
+    metin o = "";
+    sayi i = 0;
+    sayi n = upp.uzunluk(ham);
+    eger (n > 0 && ham[0] == 65279) { i = 1; }
+    iken (i < n) {
+        eger (ham[i] != 13) { o += upp.metin.kes(ham, i, 1); }
+        i = i + 1;
+    }
+    don intern(o);
+}
+
+fonk os_bicim_dosya(metin yol, sayi kontrol) -> sayi {
+    eger (yol == yok || metin_esit(yol, "")) { don 1; }
+    metin ham = upp.dosya_oku(yol);
+    eger (ham == yok) { ham = ""; }
+    metin yeni = bicim_kaynak(ham);
+    eger (kontrol != 0) {
+        eger (!metin_esit(bicim_norm(ham), yeni)) { don 1; }
+        don 0;
+    }
+    eger (!os_dosya_yaz(yol, yeni)) { don 1; }
+    don 0;
+}
+
+fonk havuz_sifirla() -> bos {
+    d_tur.bosalt();
+    d_satir.bosalt();
+    d_sutun.bosalt();
+    d_ad.bosalt();
+    d_kaynak.bosalt();
+    d_sayi.bosalt();
+    d_a.bosalt();
+    d_b.bosalt();
+    d_c.bosalt();
+    d_d.bosalt();
+    d_liste.bosalt();
+    d_liste2.bosalt();
+    d_ptrd.bosalt();
+    d_dims.bosalt();
+    d_bayrak.bosalt();
+    d_n = 0;
+    l_ofset.bosalt();
+    l_uzunluk.bosalt();
+    l_kap.bosalt();
+    l_veri.bosalt();
+    l_n = 0;
+    j_tur.bosalt();
+    j_deger.bosalt();
+    j_satir.bosalt();
+    j_sutun.bosalt();
+    j_n = 0;
+    kapsam_sifirla();
+    tablo_sifirla();
+    tampon_sifirla();
+    bg_yigin_sifirla();
+    g_emit_hedef = 0;
+    g_ayristir_i = 0;
+    g_loop = 0;
+    g_switch = 0;
+    g_bg_mod = 0;
+    g_tmp = 0;
+    g_bg_id = 0;
+    hata_analiz_topla_ayarla(0);
+    hata_sifirla();
+}

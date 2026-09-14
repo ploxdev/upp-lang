@@ -1,0 +1,4 @@
+kullan "06_kullan_dongu.upp";
+
+fonk yardim() -> bos {
+}

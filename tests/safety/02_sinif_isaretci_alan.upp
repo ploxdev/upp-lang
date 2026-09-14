@@ -1,0 +1,11 @@
+// Güvenlik: sınıf içinde ham işaretçi alanı.
+// @icerir: BELLEK GÜVENLİĞİ
+// @icerir: işaretçi
+
+sinif Kutu {
+    sayi* p;
+}
+
+fonk ana() -> sayi {
+    don 0;
+}

@@ -1,0 +1,14 @@
+// Pozitif: arkaplan iş parçacığı ve .bekle().
+// @stdout
+// arka-7
+// bitti
+
+fonk ana() -> sayi {
+    sayi n = 7;
+    oto t = arkaplan {
+        upp.satir_yaz("arka-{n}");
+    };
+    t.bekle();
+    upp.satir_yaz("bitti");
+    don 0;
+}

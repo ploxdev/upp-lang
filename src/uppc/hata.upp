@@ -1,0 +1,239 @@
+sayi g_hata_bayrak = 0;
+sayi g_hata_guvenlik = 0;
+sayi g_json_mod = 0;
+sayi g_analiz_topla = 0;
+sayi g_hata_satir = 0;
+sayi g_hata_sutun = 1;
+metin g_hata_mesaj = "";
+metin g_htampon = "";
+
+liste[sayi] a_satir;
+liste[sayi] a_sutun;
+liste[sayi] a_gv;
+liste[metin] a_mesaj;
+sayi a_n = 0;
+
+fonk hata_var() -> mantik {
+    don g_hata_bayrak != 0;
+}
+
+fonk hata_sifirla() -> bos {
+    g_hata_bayrak = 0;
+    g_hata_guvenlik = 0;
+    g_hata_mesaj = metin_kopya_yeni("");
+    eger (g_analiz_topla == 0) {
+        a_n = 0;
+    }
+}
+
+fonk hata_ver(sayi satir, sayi sutun, metin mesaj) -> bos {
+    eger (mesaj == yok) { mesaj = ""; }
+    eger (g_analiz_topla != 0) {
+        eger (a_n < 50) {
+            eger (a_n == a_satir.uzunluk()) {
+                a_satir.ekle(satir);
+                a_sutun.ekle(sutun < 1 ? 1 : sutun);
+                a_gv.ekle(0);
+                a_mesaj.ekle(mesaj);
+            } yoksa {
+                a_satir.yaz(a_n, satir);
+                a_sutun.yaz(a_n, sutun < 1 ? 1 : sutun);
+                a_gv.yaz(a_n, 0);
+                a_mesaj.yaz(a_n, mesaj);
+            }
+            a_n = a_n + 1;
+        }
+        don;
+    }
+    eger (g_hata_bayrak != 0) { don; }
+    g_hata_bayrak = 1;
+    g_hata_guvenlik = 0;
+    g_hata_satir = satir;
+    g_hata_sutun = sutun < 1 ? 1 : sutun;
+    g_hata_mesaj = mesaj;
+}
+
+fonk hata_guvenlik(sayi satir, sayi sutun, metin mesaj) -> bos {
+    eger (mesaj == yok) { mesaj = ""; }
+    eger (g_analiz_topla != 0) {
+        eger (a_n < 50) {
+            eger (a_n == a_satir.uzunluk()) {
+                a_satir.ekle(satir);
+                a_sutun.ekle(sutun < 1 ? 1 : sutun);
+                a_gv.ekle(1);
+                a_mesaj.ekle(mesaj);
+            } yoksa {
+                a_satir.yaz(a_n, satir);
+                a_sutun.yaz(a_n, sutun < 1 ? 1 : sutun);
+                a_gv.yaz(a_n, 1);
+                a_mesaj.yaz(a_n, mesaj);
+            }
+            a_n = a_n + 1;
+        }
+        don;
+    }
+    eger (g_hata_bayrak != 0) { don; }
+    g_hata_bayrak = 1;
+    g_hata_guvenlik = 1;
+    g_hata_satir = satir;
+    g_hata_sutun = sutun < 1 ? 1 : sutun;
+    g_hata_mesaj = mesaj;
+}
+
+fonk hata_bas() -> bos {
+    metin pref = "[u++ HATA]";
+    eger (g_hata_guvenlik != 0) {
+        pref = "[u++ BELLEK GÜVENLİĞİ İHLALİ]";
+    }
+    metin ad = derleme_kaynak_ad();
+    metin o = "";
+    o += pref;
+    o += " Satır ";
+    o += sayi_metin(g_hata_satir);
+    o += ":";
+    o += sayi_metin(g_hata_sutun);
+    eger (ad != yok && !metin_esit(ad, "")) {
+        o += " (";
+        o += ad;
+        o += ")";
+    }
+    o += ": ";
+    o += g_hata_mesaj;
+    upp.hata_satir_yaz(o);
+    eger (g_hata_guvenlik != 0) {
+        upp.hata_satir_yaz("  -> İpucu: Bu işlemi 'guvensiz { ... }' bloğu içerisine alın.");
+    }
+}
+
+fonk hata_fmt_basla() -> bos {
+    g_htampon = metin_kopya_yeni("");
+}
+
+fonk hata_fmt_yaz(metin s) -> bos {
+    eger (s == yok) { s = ""; }
+    g_htampon += s;
+}
+
+fonk hata_fmt_sayi(sayi n) -> bos {
+    g_htampon += sayi_metin(n);
+}
+
+fonk hata_fmt_al() -> metin {
+    don g_htampon;
+}
+
+fonk hata_fmt_ver(sayi satir, sayi sutun) -> bos {
+    hata_ver(satir, sutun, hata_fmt_al());
+}
+
+fonk hata_fmt_guvenlik(sayi satir, sayi sutun) -> bos {
+    hata_guvenlik(satir, sutun, hata_fmt_al());
+}
+
+fonk hata_json_mod_ayarla(sayi v) -> bos {
+    eger (v != 0) { g_json_mod = 1; }
+    yoksa { g_json_mod = 0; }
+}
+
+fonk hata_json_mod() -> mantik {
+    don g_json_mod != 0;
+}
+
+fonk json_hex_hane(sayi n) -> metin {
+    metin h = "0123456789abcdef";
+    don upp.metin.kes(h, n, 1);
+}
+
+fonk json_kacis(metin s) -> metin {
+    eger (s == yok) { s = ""; }
+    metin o = "\"";
+    sayi i = 0;
+    sayi n = upp.uzunluk(s);
+    iken (i < n) {
+        sayi c = s[i];
+        eger (c == 34 || c == 92) {
+            o += "\\";
+            o += upp.metin.kes(s, i, 1);
+        } yoksa eger (c == 10) { o += "\\n"; }
+        yoksa eger (c == 13) { o += "\\r"; }
+        yoksa eger (c == 9) { o += "\\t"; }
+        yoksa eger (c < 32) {
+            o += "\\u";
+            o += json_hex_hane((c / 4096) % 16);
+            o += json_hex_hane((c / 256) % 16);
+            o += json_hex_hane((c / 16) % 16);
+            o += json_hex_hane(c % 16);
+        } yoksa {
+            o += upp.metin.kes(s, i, 1);
+        }
+        i = i + 1;
+    }
+    o += "\"";
+    don o;
+}
+
+fonk json_hata_nesne(sayi satir, sayi sutun, metin tur, metin mesaj) -> metin {
+    eger (satir < 1) { satir = 1; }
+    eger (sutun < 1) { sutun = 1; }
+    eger (tur == yok) { tur = "hata"; }
+    eger (mesaj == yok) { mesaj = ""; }
+    metin o = "{\"satir\":";
+    o += sayi_metin(satir);
+    o += ",\"sutun\":";
+    o += sayi_metin(sutun);
+    o += ",\"tur\":";
+    o += json_kacis(tur);
+    o += ",\"mesaj\":";
+    o += json_kacis(mesaj);
+    o += "}";
+    don o;
+}
+
+fonk hata_json_yaz(sayi satir, sayi sutun, metin tur, metin mesaj) -> bos {
+    metin o = "{\"ok\":false,\"hatalar\":[";
+    o += json_hata_nesne(satir, sutun, tur, mesaj);
+    o += "]}\n";
+    upp.yaz(o);
+}
+
+fonk hata_json_ok() -> bos {
+    upp.yaz("{\"ok\":true,\"hatalar\":[]}\n");
+}
+
+fonk hata_json_bas() -> bos {
+    eger (a_n > 0) {
+        metin o = "{\"ok\":false,\"hatalar\":[";
+        sayi i = 0;
+        iken (i < a_n) {
+            eger (i > 0) { o += ","; }
+            metin tur = "hata";
+            eger (a_gv.al(i) != 0) { tur = "guvenlik"; }
+            o += json_hata_nesne(a_satir.al(i), a_sutun.al(i), tur, a_mesaj.al(i));
+            i = i + 1;
+        }
+        o += "]}\n";
+        upp.yaz(o);
+        don;
+    }
+    metin tur = "hata";
+    eger (g_hata_guvenlik != 0) { tur = "guvenlik"; }
+    hata_json_yaz(g_hata_satir, g_hata_sutun, tur, g_hata_mesaj);
+}
+
+fonk hata_analiz_topla_ayarla(sayi v) -> bos {
+    eger (v != 0) {
+        g_analiz_topla = 1;
+        a_n = 0;
+        g_hata_bayrak = 0;
+    } yoksa {
+        g_analiz_topla = 0;
+    }
+}
+
+fonk hata_analiz_say() -> sayi {
+    don a_n;
+}
+
+fonk hata_analiz_mi() -> mantik {
+    don g_analiz_topla != 0;
+}

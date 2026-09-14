@@ -1,0 +1,9 @@
+// Negatif: kullan döngüsü
+// @icerir: [u++ HATA]
+// @icerir: döngü
+
+kullan "_dongu_b.upp";
+
+fonk ana() -> sayi {
+    don 0;
+}

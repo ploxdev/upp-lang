@@ -1,0 +1,30 @@
+// Pozitif: bol/birleştir, her(harita), anahtarlar
+// @stdout
+// 3
+// a--b
+// a
+// b
+// 2
+
+fonk ana() -> sayi {
+    liste[metin] p = upp.metin.bol("a,,b", ",");
+    oto n = p.uzunluk();
+    upp.satir_yaz("{n}");
+    oto j = upp.metin.birlestir(p, "-");
+    upp.satir_yaz(j);
+    upp.metin_bosalt(j);
+    p.bosalt();
+
+    harita[metin,sayi] h;
+    h.koy("a", 1);
+    h.koy("b", 2);
+    her (oto k in h) {
+        upp.satir_yaz(k);
+    }
+    liste[metin] ks = h.anahtarlar();
+    oto kn = ks.uzunluk();
+    upp.satir_yaz("{kn}");
+    ks.bosalt();
+    h.bosalt();
+    don 0;
+}

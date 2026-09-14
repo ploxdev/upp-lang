@@ -1,0 +1,12 @@
+// ornek3 — v2.6: kullan, sabit, +=, ?:
+kullan "kutuphane.uph";
+
+fonk ana() -> sayi {
+    merhaba("Arda");
+    sayi n = 10;
+    n += 5;
+    oto sec = n > 10 ? n : CEVAP;
+    oto k = iki_kat(n);
+    upp.satir_yaz("n={n} sec={sec} iki={k}");
+    don 0;
+}

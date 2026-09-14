@@ -1,0 +1,4 @@
+fonk ana() -> sayi {
+    upp.satir_yaz("yerel-ok");
+    don 0;
+}

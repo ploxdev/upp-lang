@@ -1,0 +1,26 @@
+// Pozitif: secenek (enum) tanımı ve kullanımı.
+// @stdout
+// 2
+// yesil
+
+secenek Renk {
+    Kirmizi,
+    Yesil = 2,
+    Mavi
+}
+
+fonk ana() -> sayi {
+    Renk r = Renk.Yesil;
+    upp.satir_yaz("{r}");
+    secim (r) {
+        durum Renk.Kirmizi:
+            upp.satir_yaz("kirmizi");
+            dur;
+        durum Renk.Yesil:
+            upp.satir_yaz("yesil");
+            dur;
+        varsayilan:
+            upp.satir_yaz("diger");
+    }
+    don 0;
+}

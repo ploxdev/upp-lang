@@ -1,0 +1,10 @@
+// Negatif: sabite yeniden atama
+// @icerir: [u++ HATA]
+// @icerir: sabittir
+
+sabit sayi MAX = 10;
+
+fonk ana() -> sayi {
+    MAX = 11;
+    don 0;
+}

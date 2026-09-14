@@ -1,0 +1,7 @@
+// 09_kullan.upp tarafından katılır — fonk ana yok
+
+sabit sayi CEVAP = 21;
+
+fonk iki_kat(sayi x) -> sayi {
+    don x * 2;
+}

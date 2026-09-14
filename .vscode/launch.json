@@ -1,0 +1,12 @@
+{
+  // F5 = açık .upp dosyasını u++ derleyiciyle derleyip çalıştırır
+  // (u++ eklentisinin upp.calistir komutuna bağlı F5 kısayolu).
+  // Bu dosyaya extensionHost debug yapılandırması EKLEMEYİN: tek konfigürasyon
+  // olduğunda F5 onu otomatik başlatır ve kullanıcı kodu yerine eklenti
+  // kaynağı tsc ile derlenir ("Executing task ... npm run compile" hatası).
+  // Eklentinin kendisini debug etmeniz gerekiyorsa eklenti/README.md'deki
+  // "Eklenti geliştirmesi" bölümündeki konfigürasyonu geçici olarak ekleyin,
+  // bitince silin.
+  "version": "0.2.0",
+  "configurations": []
+}

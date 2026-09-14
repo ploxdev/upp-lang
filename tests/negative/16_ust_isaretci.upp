@@ -1,0 +1,9 @@
+// Negatif: üst düzey işaretçi yok
+// @icerir: [u++ HATA]
+// @icerir: işaretçi
+
+sayi* P = yok;
+
+fonk ana() -> sayi {
+    don 0;
+}

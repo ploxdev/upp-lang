@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // isDefault verilmez: varsayılan derleme (Ctrl+Shift+B) u++ görev
+      // sağlayıcısının "Derle" görevini kullanmalı, eklentinin tsc'ini değil.
+      "type": "npm",
+      "script": "compile",
+      "problemMatcher": "$tsc",
+      "label": "npm: compile",
+      "group": "build"
+    }
+  ]
+}

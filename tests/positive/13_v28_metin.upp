@@ -1,0 +1,29 @@
+// Pozitif: UTF-8 kod, s[i], metin +=
+// @stdout
+// 97
+// 97
+// abc
+
+fonk ana() -> sayi {
+    metin s = "a";
+    sayi a0 = s[0];
+    sayi a1 = upp.metin.kod(s, 0);
+    upp.satir_yaz("{a0}");
+    upp.satir_yaz("{a1}");
+    s += "b";
+    s += "c";
+    upp.satir_yaz(s);
+    upp.metin_bosalt(s);
+
+    metin t = "ç";
+    sayi cp = t[0];
+    eger (cp != 231) {
+        don 1;
+    }
+    sayi adv = upp.metin.ileri(t, 0);
+    eger (adv != 2) {
+        don 2;
+    }
+    upp.metin_bosalt(t);
+    don 0;
+}

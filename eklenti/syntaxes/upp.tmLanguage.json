@@ -1,0 +1,129 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "u++",
+  "scopeName": "source.upp",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#ckod" },
+    { "include": "#interpCall" },
+    { "include": "#tripleString" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#builtins" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.upp", "match": "//.*$" },
+        {
+          "name": "comment.block.upp",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "ckod": {
+      "begin": "\\bc_kod\\b\\s*\\{",
+      "end": "\\}",
+      "name": "meta.embedded.c.upp",
+      "beginCaptures": {
+        "0": { "name": "keyword.control.upp" }
+      },
+      "contentName": "source.c.embedded.upp"
+    },
+    "interpCall": {
+      "begin": "\\bupp\\.(yaz|satir_yaz|mesaj|hata|hata_yaz|hata_satir_yaz)\\s*\\(",
+      "end": "\\)",
+      "name": "meta.function-call.interp.upp",
+      "beginCaptures": {
+        "0": { "name": "support.function.upp" }
+      },
+      "patterns": [
+        { "include": "#stringInterp" },
+        { "include": "$self" }
+      ]
+    },
+    "stringInterp": {
+      "name": "string.quoted.double.upp",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.upp", "match": "\\\\." },
+        { "name": "constant.character.escape.upp", "match": "\\{\\{|\\}\\}" },
+        {
+          "name": "variable.other.interpolated.upp",
+          "match": "\\{[A-Za-z_çğıöşüÇĞİÖŞÜ][\\wçğıöşüÇĞİÖŞÜ]*(?:\\.[A-Za-z_çğıöşüÇĞİÖŞÜ][\\wçğıöşüÇĞİÖŞÜ]*)?\\}"
+        }
+      ]
+    },
+    "tripleString": {
+      "name": "string.quoted.triple.upp",
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "patterns": [
+        { "name": "constant.character.escape.upp", "match": "\\{\\{|\\}\\}" },
+        {
+          "name": "variable.other.interpolated.upp",
+          "match": "\\{[A-Za-z_çğıöşüÇĞİÖŞÜ][\\wçğıöşüÇĞİÖŞÜ]*(?:\\.[A-Za-z_çğıöşüÇĞİÖŞÜ][\\wçğıöşüÇĞİÖŞÜ]*)?\\}"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.upp",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.upp", "match": "\\\\." },
+        { "name": "constant.character.escape.upp", "match": "\\{\\{|\\}\\}" },
+        {
+          "name": "variable.other.interpolated.upp",
+          "match": "\\{[A-Za-z_çğıöşüÇĞİÖŞÜ][\\wçğıöşüÇĞİÖŞÜ]*(?:\\.[A-Za-z_çğıöşüÇĞİÖŞÜ][\\wçğıöşüÇĞİÖŞÜ]*)?\\}"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.upp", "match": "\\b0x[0-9A-Fa-f]+\\b" },
+        { "name": "constant.numeric.float.upp", "match": "\\b\\d+\\.\\d+\\b" },
+        { "name": "constant.numeric.integer.upp", "match": "\\b\\d+\\b" }
+      ]
+    },
+    "keywords": {
+      "name": "keyword.control.upp",
+      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|kendi|oto|c_ekle|kullan|olarak|sabit)\\b"
+    },
+    "types": {
+      "name": "storage.type.upp",
+      "match": "\\b(sayi|ondalik|metin|mantik|bos|liste|harita)\\b"
+    },
+    "constants": {
+      "name": "constant.language.upp",
+      "match": "\\b(dogru|yanlis|yok)\\b"
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.class.upp",
+          "match": "\\b(Yonelme|EkranNokta|Vektor3|ArkaplanIs|JSONDeger|SurecCikti|Kilit)\\b"
+        },
+        {
+          "name": "support.namespace.upp",
+          "match": "\\bupp\\.(girdi|bellek|cizim|matematik|metin|json|stdio|sistem|yol|dosya)\\b"
+        },
+        {
+          "name": "support.function.upp",
+          "match": "\\bupp\\.(yaz|satir_yaz|mesaj|hata|hata_yaz|hata_satir_yaz|ses_cal|uyut|rastgele|dosya_oku|dosya_yaz|dosya_ekle|uzunluk|giris|min|max|mutlak|metin_bosalt|bekle|arguman_sayisi|arguman|dosya_var_mi|dosya_sil|zaman|metinden_sayiya|sayidan_metin|ondalikdan_metin|metinden_ondalik|ortam_al)\\b"
+        },
+        { "name": "support.namespace.upp", "match": "\\bupp\\b" }
+      ]
+    },
+    "operators": {
+      "name": "keyword.operator.upp",
+      "match": "->|=>|==|!=|<=|>=|&&|\\|\\||\\+=|-=|\\*=|/=|%=|\\?|[+\\-*/%=<>!&|^]"
+    }
+  }
+}

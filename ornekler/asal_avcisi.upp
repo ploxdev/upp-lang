@@ -1,0 +1,100 @@
+// asal_avcisi.upp — u++'ın "hepsi bir arada" gösterisi:
+// iş parçacığı + Kilit + sınıf + secenek + harita + JSON + özyineleme, tek dosyada.
+
+sabit sayi ARALIK_BASI = 2;
+sabit sayi ARALIK_SONU = 20000;
+sabit sayi PARCA_SAYISI = 4;
+
+secenek Durum {
+    Bekliyor,
+    Calisiyor,
+    Bitti
+}
+
+sinif AvSonucu {
+    sayi bulunan;
+    sayi en_buyuk;
+    Durum su_an;
+
+    fonk olustur() {
+        kendi.bulunan = 0;
+        kendi.en_buyuk = 0;
+        kendi.su_an = Durum.Bekliyor;
+    }
+}
+
+Kilit kilit;
+AvSonucu sonuc;
+
+fonk asal_mi(sayi n) -> mantik {
+    eger (n < 2) { don yanlis; }
+    don asal_mi_yardimci(n, 2);
+}
+
+// özyinelemeli bölen arayıcı — döngü değil, kasıtlı özyineleme
+fonk asal_mi_yardimci(sayi n, sayi bolen) -> mantik {
+    eger (bolen * bolen > n) { don dogru; }
+    eger (n % bolen == 0) { don yanlis; }
+    don asal_mi_yardimci(n, bolen + 1);
+}
+
+fonk parcayi_tara(sayi bas, sayi son) -> bos {
+    sayi i = bas;
+    sayi yerel_bulunan = 0;
+    sayi yerel_en_buyuk = 0;
+    iken (i <= son) {
+        eger (asal_mi(i)) {
+            yerel_bulunan += 1;
+            yerel_en_buyuk = i;
+        }
+        i += 1;
+    }
+    kilit.kilitle();
+    sonuc.bulunan += yerel_bulunan;
+    eger (yerel_en_buyuk > sonuc.en_buyuk) {
+        sonuc.en_buyuk = yerel_en_buyuk;
+    }
+    kilit.birak();
+}
+
+fonk ana() -> sayi {
+    sonuc.su_an = Durum.Calisiyor;
+    sayi parca_genislik = (ARALIK_SONU - ARALIK_BASI) / PARCA_SAYISI;
+
+    liste[sayi] isler_bas;
+    liste[sayi] isler_son;
+
+    oto is1 = arkaplan { parcayi_tara(ARALIK_BASI, ARALIK_BASI + parca_genislik); };
+    oto is2 = arkaplan { parcayi_tara(ARALIK_BASI + parca_genislik + 1, ARALIK_BASI + parca_genislik * 2); };
+    oto is3 = arkaplan { parcayi_tara(ARALIK_BASI + parca_genislik * 2 + 1, ARALIK_BASI + parca_genislik * 3); };
+    oto is4 = arkaplan { parcayi_tara(ARALIK_BASI + parca_genislik * 3 + 1, ARALIK_SONU); };
+
+    is1.bekle();
+    is2.bekle();
+    is3.bekle();
+    is4.bekle();
+
+    sonuc.su_an = Durum.Bitti;
+
+    harita[metin, sayi] ozet;
+    ozet.koy("bulunan", sonuc.bulunan);
+    ozet.koy("en_buyuk", sonuc.en_buyuk);
+    ozet.koy("parca_sayisi", PARCA_SAYISI);
+
+    upp.satir_yaz("--- u++ asal avcisi (4 iş parçacığı) ---");
+    her (oto k in ozet) {
+        oto v = ozet.al(k);
+        upp.satir_yaz("{k} = {v}");
+    }
+
+    metin json_govde = "{\"bulunan\":" + upp.sayidan_metin(sonuc.bulunan) + ",\"en_buyuk\":" + upp.sayidan_metin(sonuc.en_buyuk) + "}";
+    JSONDeger ayrik = upp.json.ayristir(json_govde);
+    eger (upp.json.var_mi(ayrik)) {
+        upp.satir_yaz("JSON dogrulandi: {json_govde}");
+        upp.json.bosalt(ayrik);
+    }
+    upp.metin_bosalt(json_govde);
+
+    ozet.bosalt();
+    don 0;
+}

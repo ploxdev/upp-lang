@@ -1,0 +1,11 @@
+// Pozitif: kullan .uph başlık
+// @stdout
+// 42
+
+kullan "_lib_v26.uph";
+
+fonk ana() -> sayi {
+    oto k = iki_kat(CEVAP);
+    upp.satir_yaz("{k}");
+    don 0;
+}

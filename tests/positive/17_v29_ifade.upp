@@ -1,0 +1,39 @@
+// Pozitif: secim(metin), kurucu, sınıf sabit, varsayılan
+// @stdout
+// ok
+// 3
+// 10
+// 5
+
+sinif Kutu {
+    sabit sayi N = 3;
+    sayi x;
+
+    fonk olustur(sayi n) {
+        kendi.x = n;
+    }
+}
+
+fonk top(sayi a, sayi b = 3) -> sayi {
+    don a + b;
+}
+
+fonk ana() -> sayi {
+    metin k = "ab";
+    secim (k) {
+        durum "ab":
+            upp.satir_yaz("ok");
+            dur;
+        varsayilan:
+            upp.satir_yaz("no");
+    }
+    upp.metin_bosalt(k);
+
+    Kutu t = Kutu(10);
+    upp.satir_yaz("{Kutu.N}");
+    upp.satir_yaz("{t.x}");
+
+    oto s = top(2);
+    upp.satir_yaz("{s}");
+    don 0;
+}

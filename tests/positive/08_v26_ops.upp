@@ -1,0 +1,26 @@
+// Pozitif: +=, sabit, ?: , dizi uzunluk, metin.baslar / kirp
+// @stdout
+// 5
+// 1
+// 3
+
+sabit sayi TABAN = 4;
+
+fonk ana() -> sayi {
+    sayi n = 3;
+    n += 2;
+    oto sec = n > TABAN ? n : TABAN;
+    sayi xs[] = [10, 20, 30];
+    oto L = upp.uzunluk(xs);
+    oto b = upp.metin.baslar("merhaba", "mer");
+    oto k = upp.metin.kirp("  x  ");
+    upp.satir_yaz("{sec}");
+    eger (b) {
+        upp.satir_yaz("1");
+    } yoksa {
+        upp.satir_yaz("0");
+    }
+    upp.satir_yaz("{L}");
+    upp.metin_bosalt(k);
+    don 0;
+}

@@ -1,0 +1,12 @@
+// Güvenlik: guvensiz içinde guvenli moda dönüş; & yasak.
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    guvensiz {
+        guvenli {
+            sayi x = 1;
+            oto p = &x;
+        }
+    }
+    don 0;
+}

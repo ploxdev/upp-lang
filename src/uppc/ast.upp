@@ -1,0 +1,325 @@
+secenek JetonTur {
+    J_EOF,
+    J_ANAHTAR,
+    J_KIMLIK,
+    J_METIN,
+    J_SAYI,
+    J_ONDALIK,
+    J_C_GOMMU,
+    J_ASM_GOMMU,
+    J_YAG_OK,
+    J_OK,
+    J_ESIT_ESIT,
+    J_ESIT_DEGIL,
+    J_KUCUK_ESIT,
+    J_BUYUK_ESIT,
+    J_VE,
+    J_VEYA,
+    J_ARTI,
+    J_EKSI,
+    J_YILDIZ,
+    J_BOLU,
+    J_MOD,
+    J_ATAMA,
+    J_KUCUK,
+    J_BUYUK,
+    J_UNLEM,
+    J_VE_ISARET,
+    J_VAY_ISARET,
+    J_XOR,
+    J_PARANTEZ_AC,
+    J_PARANTEZ_KAPA,
+    J_SLUS_AC,
+    J_SLUS_KAPA,
+    J_KOSE_AC,
+    J_KOSE_KAPA,
+    J_NOKTALI_VIRGUL,
+    J_VIRGUL,
+    J_NOKTA,
+    J_IKI_NOKTA,
+    J_ARTI_ATAMA,
+    J_EKSI_ATAMA,
+    J_YILDIZ_ATAMA,
+    J_BOLU_ATAMA,
+    J_MOD_ATAMA,
+    J_SORU
+}
+
+secenek DugumTur {
+    D_YOK,
+    D_PROGRAM,
+    D_CEKLE,
+    D_SECENEK,
+    D_SECENEK_UYE,
+    D_SINIF,
+    D_ALAN,
+    D_FONK,
+    D_PARAM,
+    D_TUR,
+    D_BLOK,
+    D_GUVENSIZ,
+    D_ARKAPLAN,
+    D_ARKAPLAN_IFADE,
+    D_EGER,
+    D_IKEN,
+    D_DONGU,
+    D_SECIM,
+    D_DURUM,
+    D_HER,
+    D_DON,
+    D_DUR,
+    D_DEVAM,
+    D_IFADE_CUMLE,
+    D_BOS_CUMLE,
+    D_C_GOMMU,
+    D_ASM_GOMMU,
+    D_DEGISKEN,
+    D_ATAMA,
+    D_IKIL,
+    D_TEKIL,
+    D_CAGRI,
+    D_INDIS,
+    D_UYE,
+    D_KIMLIK,
+    D_SABIT,
+    D_DIZI_SABIT,
+    D_KULLAN,
+    D_UCLU,
+    D_GUVENLI
+}
+
+fonk dugum_tur_mi(sayi id, sayi tur) -> mantik {
+    eger (id == 0) {
+        don tur == DugumTur.D_YOK;
+    }
+    don dugum_tur(id) == tur;
+}
+
+fonk tur_dugum(sayi satir, sayi sutun, metin ad, sayi ptrd, sayi dims) -> sayi {
+    sayi n = dugum_yeni(DugumTur.D_TUR, satir, sutun);
+    dugum_yaz_ad(n, ad);
+    dugum_yaz_ptrd(n, ptrd);
+    dugum_yaz_dims(n, dims);
+    don n;
+}
+
+fonk tur_kopya(sayi t) -> sayi {
+    eger (t == 0) {
+        don tur_dugum(0, 1, "bos", 0, 0);
+    }
+    don tur_dugum(dugum_satir(t), dugum_sutun(t), dugum_ad(t), dugum_ptrd(t), dugum_dims(t));
+}
+
+fonk tur_aciklama(sayi t) -> metin {
+    sayi i = 0;
+    eger (t == 0) {
+        don "bos";
+    }
+    hata_fmt_basla();
+    hata_fmt_yaz(dugum_ad(t));
+    dongu (i = 0; i < dugum_ptrd(t); i = i + 1) {
+        hata_fmt_yaz("*");
+    }
+    dongu (i = 0; i < dugum_dims(t); i = i + 1) {
+        hata_fmt_yaz("[]");
+    }
+    don intern(hata_fmt_al());
+}
+
+fonk sabit_sayi(sayi satir, sayi sutun, sayi v) -> sayi {
+    sayi n = dugum_yeni(DugumTur.D_SABIT, satir, sutun);
+    dugum_yaz_ad(n, "sayi");
+    dugum_yaz_sayi(n, v);
+    don n;
+}
+
+fonk kimlik_dugum(sayi satir, sayi sutun, metin ad) -> sayi {
+    sayi n = dugum_yeni(DugumTur.D_KIMLIK, satir, sutun);
+    dugum_yaz_ad(n, ad);
+    don n;
+}
+
+fonk anahtar_mi(metin s) -> mantik {
+    eger (metin_esit(s, "fonk")) { don dogru; }
+    eger (metin_esit(s, "don")) { don dogru; }
+    eger (metin_esit(s, "eger")) { don dogru; }
+    eger (metin_esit(s, "yoksa")) { don dogru; }
+    eger (metin_esit(s, "iken")) { don dogru; }
+    eger (metin_esit(s, "dongu")) { don dogru; }
+    eger (metin_esit(s, "dur")) { don dogru; }
+    eger (metin_esit(s, "devam")) { don dogru; }
+    eger (metin_esit(s, "sayi")) { don dogru; }
+    eger (metin_esit(s, "ondalik")) { don dogru; }
+    eger (metin_esit(s, "metin")) { don dogru; }
+    eger (metin_esit(s, "mantik")) { don dogru; }
+    eger (metin_esit(s, "bos")) { don dogru; }
+    eger (metin_esit(s, "liste")) { don dogru; }
+    eger (metin_esit(s, "harita")) { don dogru; }
+    eger (metin_esit(s, "dogru")) { don dogru; }
+    eger (metin_esit(s, "yanlis")) { don dogru; }
+    eger (metin_esit(s, "yok")) { don dogru; }
+    eger (metin_esit(s, "guvensiz")) { don dogru; }
+    eger (metin_esit(s, "guvenli")) { don dogru; }
+    eger (metin_esit(s, "arkaplan")) { don dogru; }
+    eger (metin_esit(s, "sinif")) { don dogru; }
+    eger (metin_esit(s, "kendi")) { don dogru; }
+    eger (metin_esit(s, "oto")) { don dogru; }
+    eger (metin_esit(s, "c_ekle")) { don dogru; }
+    eger (metin_esit(s, "secim")) { don dogru; }
+    eger (metin_esit(s, "durum")) { don dogru; }
+    eger (metin_esit(s, "varsayilan")) { don dogru; }
+    eger (metin_esit(s, "her")) { don dogru; }
+    eger (metin_esit(s, "in")) { don dogru; }
+    eger (metin_esit(s, "secenek")) { don dogru; }
+    eger (metin_esit(s, "kullan")) { don dogru; }
+    eger (metin_esit(s, "olarak")) { don dogru; }
+    eger (metin_esit(s, "sabit")) { don dogru; }
+    don yanlis;
+}
+
+fonk tur_adi_mi(metin s) -> mantik {
+    eger (metin_esit(s, "sayi")) { don dogru; }
+    eger (metin_esit(s, "ondalik")) { don dogru; }
+    eger (metin_esit(s, "metin")) { don dogru; }
+    eger (metin_esit(s, "mantik")) { don dogru; }
+    eger (metin_esit(s, "bos")) { don dogru; }
+    eger (metin_esit(s, "liste")) { don dogru; }
+    eger (metin_esit(s, "harita")) { don dogru; }
+    don yanlis;
+}
+
+fonk koleksiyon_elem_mi(metin s) -> mantik {
+    eger (metin_esit(s, "sayi")) { don dogru; }
+    eger (metin_esit(s, "ondalik")) { don dogru; }
+    eger (metin_esit(s, "mantik")) { don dogru; }
+    eger (metin_esit(s, "metin")) { don dogru; }
+    don yanlis;
+}
+
+fonk liste_tur_mi(metin n) -> mantik {
+    sayi L = metin_uzun(n);
+    eger (L < 8) { don yanlis; }
+    eger (!metin_esit(intern_dilim(n, 0, 6), "liste[")) { don yanlis; }
+    eger (metin_cp(n, L - 1) != 93) { don yanlis; }
+    don dogru;
+}
+
+fonk liste_elem_ad(metin n) -> metin {
+    don intern_dilim(n, 6, metin_uzun(n) - 1);
+}
+
+fonk harita_tur_mi(metin n) -> mantik {
+    sayi L = metin_uzun(n);
+    eger (L < 10) { don yanlis; }
+    eger (!metin_esit(intern_dilim(n, 0, 7), "harita[")) { don yanlis; }
+    eger (metin_cp(n, L - 1) != 93) { don yanlis; }
+    don dogru;
+}
+
+fonk harita_anahtar_ad(metin n) -> metin {
+    sayi i = 7;
+    sayi L = metin_uzun(n);
+    iken (i < L - 1) {
+        eger (metin_cp(n, i) == 44) { don intern_dilim(n, 7, i); }
+        i = i + 1;
+    }
+    don "";
+}
+
+fonk harita_deger_ad(metin n) -> metin {
+    sayi i = 7;
+    sayi L = metin_uzun(n);
+    iken (i < L - 1) {
+        eger (metin_cp(n, i) == 44) { don intern_dilim(n, i + 1, L - 1); }
+        i = i + 1;
+    }
+    don "";
+}
+
+fonk koleksiyon_etiket(metin e) -> sayi {
+    eger (metin_esit(e, "sayi")) { don 0; }
+    eger (metin_esit(e, "ondalik")) { don 1; }
+    eger (metin_esit(e, "mantik")) { don 2; }
+    eger (metin_esit(e, "metin")) { don 3; }
+    don 0;
+}
+
+fonk interp_ad_mi(metin name) -> mantik {
+    sayi n = metin_uzun(name);
+    sayi i = 0;
+    eger (n == 0) { don yanlis; }
+    eger (!ident_bas(metin_cp(name, 0))) { don yanlis; }
+    i = metin_adv(name, 0);
+    iken (i < n) {
+        sayi c = metin_cp(name, i);
+        sayi adv = metin_adv(name, i);
+        eger (c == 46) {
+            i = i + adv;
+            eger (i >= n || !ident_bas(metin_cp(name, i))) { don yanlis; }
+            i = i + metin_adv(name, i);
+            devam;
+        }
+        eger (!ident_devam(c)) { don yanlis; }
+        i = i + adv;
+    }
+    don dogru;
+}
+
+fonk yerlesik_sinif_mi(metin s) -> mantik {
+    eger (metin_esit(s, "Yonelme")) { don dogru; }
+    eger (metin_esit(s, "EkranNokta")) { don dogru; }
+    eger (metin_esit(s, "Vektor3")) { don dogru; }
+    eger (metin_esit(s, "ArkaplanIs")) { don dogru; }
+    eger (metin_esit(s, "JSONDeger")) { don dogru; }
+    eger (metin_esit(s, "SurecCikti")) { don dogru; }
+    eger (metin_esit(s, "Kilit")) { don dogru; }
+    don yanlis;
+}
+
+fonk c_sembol(metin ad, metin alias) -> metin {
+    eger (metin_esit(alias, "") || alias == yok) { don ad; }
+    don kat3(alias, "_", ad);
+}
+
+fonk nokta_altcizgi(metin n) -> metin {
+    sayi i = 0;
+    sayi L = metin_uzun(n);
+    metin s = "";
+    iken (i < L) {
+        sayi c = metin_cp(n, i);
+        sayi adv = metin_adv(n, i);
+        eger (c == 46) { s = kat(s, "_"); }
+        yoksa { s = kat(s, intern_dilim(n, i, i + adv)); }
+        i = i + adv;
+    }
+    don intern(s);
+}
+
+fonk dugum_alias_ad(sayi n) -> metin {
+    eger (n == 0 || dugum_d(n) == 0) { don ""; }
+    eger (dugum_tur(dugum_d(n)) != DugumTur.D_KIMLIK) { don ""; }
+    don dugum_ad(dugum_d(n));
+}
+
+fonk dugum_c_ad(sayi n) -> metin {
+    don c_sembol(dugum_ad(n), dugum_alias_ad(n));
+}
+
+fonk sinif_tur_ad(sayi cls) -> metin {
+    oto alias = dugum_alias_ad(cls);
+    eger (metin_esit(alias, "")) { don dugum_ad(cls); }
+    don intern(kat3(alias, ".", dugum_ad(cls)));
+}
+
+fonk metot_sinif_tur_ad(sayi fn) -> metin {
+    eger (fn == 0 || dugum_c(fn) == 0) { don ""; }
+    oto ad = dugum_ad(dugum_c(fn));
+    oto alias = dugum_alias_ad(fn);
+    eger (metin_esit(alias, "")) { don ad; }
+    don intern(kat3(alias, ".", ad));
+}
+
+fonk metot_sinif_c_ad(sayi fn) -> metin {
+    eger (fn == 0 || dugum_c(fn) == 0) { don ""; }
+    don c_sembol(dugum_ad(dugum_c(fn)), dugum_alias_ad(fn));
+}

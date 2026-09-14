@@ -1,0 +1,8 @@
+// Güvenlik: guvensiz dışında bellek_ayir.
+// @icerir: BELLEK GÜVENLİĞİ
+// @icerir: bellek_ayir
+
+fonk ana() -> sayi {
+    bellek_ayir(16);
+    don 0;
+}

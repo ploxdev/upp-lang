@@ -1,0 +1,10 @@
+// Negatif: iç içe dizi sabiti sessizce düzleşmez
+// @icerir: [u++ HATA]
+// @icerir: İç içe
+
+fonk ana() -> sayi {
+    her (oto v in [[1, 2], [3, 4]]) {
+        upp.satir_yaz("{v}");
+    }
+    don 0;
+}

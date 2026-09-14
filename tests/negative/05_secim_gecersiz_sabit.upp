@@ -1,0 +1,14 @@
+// Negatif: secim içinde derleme-zamanı sabiti olmayan durum.
+// @icerir: [u++ HATA]
+// @icerir: durum
+
+fonk ana() -> sayi {
+    sayi k = 2;
+    secim (k) {
+        durum k:
+            dur;
+        varsayilan:
+            dur;
+    }
+    don 0;
+}

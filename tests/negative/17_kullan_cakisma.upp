@@ -1,0 +1,10 @@
+// Negatif: kullan üst düzey ad çakışması
+// @icerir: [u++ HATA]
+// @icerir: birden fazla
+
+kullan "_clash_a.upp";
+kullan "_clash_b.upp";
+
+fonk ana() -> sayi {
+    don foo();
+}

@@ -1,0 +1,200 @@
+{
+  "ana": {
+    "prefix": "ana",
+    "body": [
+      "fonk ana() -> sayi {",
+      "    ${1:upp.satir_yaz(\"Merhaba\");}",
+      "    don ${2:0};",
+      "}"
+    ],
+    "description": "fonk ana() giriş noktası"
+  },
+  "fonk": {
+    "prefix": "fonk",
+    "body": [
+      "fonk ${1:ad}(${2}) -> ${3:bos} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "fonksiyon"
+  },
+  "eger": {
+    "prefix": "eger",
+    "body": [
+      "eger (${1:kosul}) {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "eger"
+  },
+  "egeryoksa": {
+    "prefix": "egeryoksa",
+    "body": [
+      "eger (${1:kosul}) {",
+      "    ${2}",
+      "} yoksa {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "eger / yoksa"
+  },
+  "yoksaeger": {
+    "prefix": "yoksaeger",
+    "body": [
+      "} yoksa eger (${1:kosul}) {",
+      "    ${0}"
+    ],
+    "description": "yoksa eger"
+  },
+  "kullan": {
+    "prefix": "kullan",
+    "body": [
+      "kullan \"${1:kutuphane.uph}\";"
+    ],
+    "description": "kullan kütüphane.uph"
+  },
+  "kullanolarak": {
+    "prefix": "kullanolarak",
+    "body": [
+      "kullan \"${1:kutuphane.uph}\" olarak ${2:k};"
+    ],
+    "description": "kullan … olarak (birinci derece önek)"
+  },
+  "sabit": {
+    "prefix": "sabit",
+    "body": [
+      "sabit ${1:sayi} ${2:MAX} = ${3:10};"
+    ],
+    "description": "sabit bildirimi"
+  },
+  "iken": {
+    "prefix": "iken",
+    "body": [
+      "iken (${1:kosul}) {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "iken döngüsü"
+  },
+  "dongu": {
+    "prefix": "dongu",
+    "body": [
+      "dongu (${1:sayi i = 0}; ${2:i < n}; ${3:i += 1}) {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "dongu (for)"
+  },
+  "her": {
+    "prefix": "her",
+    "body": [
+      "her (oto ${1:x} in ${2:xs}) {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "her … in"
+  },
+  "sinif": {
+    "prefix": "sinif",
+    "body": [
+      "sinif ${1:Ad} {",
+      "    ${2:sayi} ${3:alan};",
+      "",
+      "    fonk olustur() {",
+      "        ${0}",
+      "    }",
+      "}"
+    ],
+    "description": "sinif"
+  },
+  "secenek": {
+    "prefix": "secenek",
+    "body": [
+      "secenek ${1:Ad} { ${2:A}, ${3:B} }"
+    ],
+    "description": "secenek"
+  },
+  "secim": {
+    "prefix": "secim",
+    "body": [
+      "secim (${1:x}) {",
+      "    durum ${2:0}:",
+      "        ${3}",
+      "        dur;",
+      "    varsayilan:",
+      "        ${0}",
+      "        dur;",
+      "}"
+    ],
+    "description": "secim / durum"
+  },
+  "arkaplan": {
+    "prefix": "arkaplan",
+    "body": [
+      "oto ${1:is} = arkaplan {",
+      "    ${0}",
+      "};",
+      "upp.bekle(${1:is});"
+    ],
+    "description": "arkaplan işi"
+  },
+  "liste": {
+    "prefix": "liste",
+    "body": ["liste[${1:sayi}] ${2:xs};"],
+    "description": "liste[T]"
+  },
+  "harita": {
+    "prefix": "harita",
+    "body": ["harita[${1:metin},${2:sayi}] ${3:h};"],
+    "description": "harita[K,V]"
+  },
+    "guvensiz": {
+    "prefix": "guvensiz",
+    "body": [
+      "guvensiz {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "guvensiz bloğu"
+  },
+  "guvenli": {
+    "prefix": "guvenli",
+    "body": [
+      "guvenli {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "güvenli moda dönüş"
+  },
+  "c_ekle": {
+    "prefix": "c_ekle",
+    "body": ["c_ekle \"${1:stdio.h}\";"],
+    "description": "C başlığı"
+  },
+  "kilit": {
+    "prefix": "kilit",
+    "body": [
+      "Kilit ${1:k};",
+      "${1:k}.kilitle();",
+      "${0}",
+      "${1:k}.birak();"
+    ],
+    "description": "Kilit kilitle / birak"
+  },
+  "sureccikti": {
+    "prefix": "sureccikti",
+    "body": [
+      "SurecCikti ${1:r} = upp.sistem.calistir(\"${2:echo ok}\");",
+      "upp.satir_yaz(\"{${1:r}.kod}\");",
+      "eger (${1:r}.cikti != yok) {",
+      "    upp.metin_bosalt(${1:r}.cikti);",
+      "}"
+    ],
+    "description": "SurecCikti / calistir"
+  },
+  "hatasatir": {
+    "prefix": "hatasatir",
+    "body": ["upp.hata_satir_yaz(\"${1}\");"],
+    "description": "stderr satır"
+  }
+}

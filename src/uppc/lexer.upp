@@ -1,0 +1,412 @@
+fonk lex_yorum_satir() -> bos {
+    lex_ilerle();
+    lex_ilerle();
+    sayi bas = lex_pos();
+    iken (!lex_bitis() && lex_cp() != 10) {
+        lex_ilerle();
+    }
+    sayi son = lex_pos();
+    lex_yorum_govde(lex_dilim(bas, son));
+}
+
+fonk lex_blok_yorum() -> bos {
+    sayi satir = lex_satir();
+    sayi sutun = lex_sutun();
+    lex_ilerle();
+    lex_ilerle();
+    iken (!lex_bitis()) {
+        eger (lex_cp() == 42 && lex_cp_ileri(1) == 47) {
+            lex_ilerle();
+            lex_ilerle();
+            don;
+        }
+        lex_ilerle();
+    }
+    hata_ver(satir, sutun, "Kapatılmamış blok yorumu (/* ... */)");
+}
+
+fonk lex_bosluk_at() -> bos {
+    iken (!lex_bitis()) {
+        sayi ch = lex_cp();
+        eger (ch == 32 || ch == 9 || ch == 13 || ch == 10) {
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 47 && lex_cp_ileri(1) == 47) {
+            lex_yorum_satir();
+            devam;
+        }
+        eger (ch == 47 && lex_cp_ileri(1) == 42) {
+            lex_blok_yorum();
+            devam;
+        }
+        dur;
+    }
+}
+
+fonk lex_sonraki_bosluksuz_suslu() -> mantik {
+    metin s = lex_kaynak_metin();
+    sayi i = lex_pos();
+    sayi n = upp.uzunluk(s);
+    iken (i < n) {
+        sayi cp = upp.metin.kod(s, i);
+        eger (cp == 32 || cp == 9 || cp == 13 || cp == 10) {
+            i = i + 1;
+            devam;
+        }
+        eger (cp == 47 && i + 1 < n) {
+            sayi n1 = upp.metin.kod(s, i + 1);
+            eger (n1 == 47) {
+                i = i + 2;
+                iken (i < n && upp.metin.kod(s, i) != 10) { i = i + 1; }
+                devam;
+            }
+            eger (n1 == 42) {
+                i = i + 2;
+                iken (i + 1 < n && !(upp.metin.kod(s, i) == 42 && upp.metin.kod(s, i + 1) == 47)) {
+                    i = i + 1;
+                }
+                eger (i + 1 < n) { i = i + 2; }
+                devam;
+            }
+        }
+        don cp == 123;
+    }
+    don yanlis;
+}
+
+fonk lex_gomulu(sayi tur, sayi satir, sayi sutun) -> sayi {
+    lex_bosluk_at();
+    eger (lex_cp() != 123) {
+        hata_ver(satir, sutun, "Gömülü C/asm bloğu '{' ile başlamalı.");
+        don 0;
+    }
+    lex_ilerle();
+    sayi inner_bas = lex_pos();
+    sayi derinlik = 1;
+    mantik in_str = yanlis;
+    mantik in_chr = yanlis;
+    mantik kacis = yanlis;
+    mantik in_line = yanlis;
+    mantik in_block = yanlis;
+    iken (!lex_bitis() && derinlik > 0) {
+        sayi ch = lex_cp();
+        sayi nxt = lex_cp_ileri(1);
+        eger (in_line) {
+            lex_ilerle();
+            eger (ch == 10) {
+                in_line = yanlis;
+            }
+            devam;
+        }
+        eger (in_block) {
+            lex_ilerle();
+            eger (ch == 42 && nxt == 47) {
+                eger (!lex_bitis()) {
+                    lex_ilerle();
+                }
+                in_block = yanlis;
+            }
+            devam;
+        }
+        eger (in_str || in_chr) {
+            lex_ilerle();
+            eger (kacis) {
+                kacis = yanlis;
+                devam;
+            }
+            eger (ch == 92) {
+                kacis = dogru;
+                devam;
+            }
+            eger (in_str && ch == 34) {
+                in_str = yanlis;
+            } yoksa eger (in_chr && ch == 39) {
+                in_chr = yanlis;
+            }
+            devam;
+        }
+        eger (ch == 47 && nxt == 47) {
+            in_line = dogru;
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 47 && nxt == 42) {
+            in_block = dogru;
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 34) {
+            in_str = dogru;
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 39) {
+            in_chr = dogru;
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 123) {
+            derinlik = derinlik + 1;
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 125) {
+            derinlik = derinlik - 1;
+            lex_ilerle();
+            devam;
+        }
+        lex_ilerle();
+    }
+    eger (derinlik != 0) {
+        hata_ver(satir, sutun, "Kapatılmamış gömülü C/asm bloğu.");
+        don 0;
+    }
+    oto inner = lex_dilim(inner_bas, lex_pos() - 1);
+    don jeton_yeni(tur, inner, satir, sutun);
+}
+
+fonk lex_metin() -> sayi {
+    sayi satir = lex_satir();
+    sayi sutun = lex_sutun();
+    sayi bas = lex_pos();
+    lex_ilerle();
+    eger (!lex_bitis() && lex_cp() == 34 && lex_cp_ileri(1) == 34) {
+        lex_ilerle();
+        lex_ilerle();
+        iken (!lex_bitis()) {
+            eger (lex_cp() == 34 && lex_cp_ileri(1) == 34 && lex_cp_ileri(2) == 34) {
+                lex_ilerle();
+                lex_ilerle();
+                lex_ilerle();
+                don jeton_yeni(JetonTur.J_METIN, lex_dilim(bas, lex_pos()), satir, sutun);
+            }
+            lex_ilerle();
+        }
+        hata_ver(satir, sutun, "Kapatılmamış çok satırlı metin sabiti (\"\"\"...\"\"\").");
+        don 0;
+    }
+    iken (!lex_bitis()) {
+        sayi ch = lex_cp();
+        eger (ch == 10) {
+            hata_ver(satir, sutun, "Metin sabitinde satır sonu. Metni kapatın veya \\n kullanın.");
+            don 0;
+        }
+        lex_ilerle();
+        eger (ch == 92) {
+            eger (lex_bitis()) {
+                hata_ver(satir, sutun, "Metin sabiti kaçış karakterinden sonra bitti.");
+                don 0;
+            }
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 34) {
+            don jeton_yeni(JetonTur.J_METIN, lex_dilim(bas, lex_pos()), satir, sutun);
+        }
+    }
+    hata_ver(satir, sutun, "Kapatılmamış metin sabiti.");
+    don 0;
+}
+
+fonk lex_sayi() -> sayi {
+    sayi satir = lex_satir();
+    sayi sutun = lex_sutun();
+    sayi bas = lex_pos();
+    eger (lex_cp() == 48 && (lex_cp_ileri(1) == 120 || lex_cp_ileri(1) == 88)) {
+        lex_ilerle();
+        lex_ilerle();
+        sayi digits = 0;
+        iken (!lex_bitis()) {
+            sayi ch = lex_cp();
+            mantik hex = (ch >= 48 && ch <= 57) || (ch >= 97 && ch <= 102) || (ch >= 65 && ch <= 70);
+            eger (!hex) {
+                dur;
+            }
+            lex_ilerle();
+            digits = digits + 1;
+        }
+        eger (digits == 0) {
+            hata_ver(satir, sutun, "'0x' sonrası onaltılık basamak bekleniyordu.");
+            don 0;
+        }
+        oto lex = lex_dilim(bas, lex_pos());
+        don jeton_yeni(JetonTur.J_SAYI, sayi_metin(hex_deger(lex)), satir, sutun);
+    }
+    iken (!lex_bitis() && lex_cp() >= 48 && lex_cp() <= 57) {
+        lex_ilerle();
+    }
+    eger (!lex_bitis() && lex_cp() == 46) {
+        sayi nxt = lex_cp_ileri(1);
+        eger (nxt >= 48 && nxt <= 57) {
+            lex_ilerle();
+            iken (!lex_bitis() && lex_cp() >= 48 && lex_cp() <= 57) {
+                lex_ilerle();
+            }
+            don jeton_yeni(JetonTur.J_ONDALIK, lex_dilim(bas, lex_pos()), satir, sutun);
+        }
+    }
+    don jeton_yeni(JetonTur.J_SAYI, lex_dilim(bas, lex_pos()), satir, sutun);
+}
+
+fonk lex_tara() -> bos {
+    iken (!lex_bitis() && !hata_var()) {
+        sayi ch = lex_cp();
+        eger (ch == 32 || ch == 9 || ch == 13) {
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 10) {
+            lex_ilerle();
+            devam;
+        }
+        eger (ch == 47 && lex_cp_ileri(1) == 47) {
+            lex_yorum_satir();
+            devam;
+        }
+        eger (ch == 47 && lex_cp_ileri(1) == 42) {
+            lex_blok_yorum();
+            devam;
+        }
+        eger (ch == 34) {
+            lex_metin();
+            devam;
+        }
+        eger (ch >= 48 && ch <= 57) {
+            lex_sayi();
+            devam;
+        }
+        sayi satir = lex_satir();
+        sayi sutun = lex_sutun();
+        eger (ch == 61 && lex_cp_ileri(1) == 62) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_YAG_OK, "=>", satir, sutun);
+            devam;
+        }
+        eger (ch == 45 && lex_cp_ileri(1) == 62) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_OK, "->", satir, sutun);
+            devam;
+        }
+        eger (ch == 61 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_ESIT_ESIT, "==", satir, sutun);
+            devam;
+        }
+        eger (ch == 33 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_ESIT_DEGIL, "!=", satir, sutun);
+            devam;
+        }
+        eger (ch == 60 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_KUCUK_ESIT, "<=", satir, sutun);
+            devam;
+        }
+        eger (ch == 62 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_BUYUK_ESIT, ">=", satir, sutun);
+            devam;
+        }
+        eger (ch == 38 && lex_cp_ileri(1) == 38) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_VE, "&&", satir, sutun);
+            devam;
+        }
+        eger (ch == 124 && lex_cp_ileri(1) == 124) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_VEYA, "||", satir, sutun);
+            devam;
+        }
+        eger (ch == 43 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_ARTI_ATAMA, "+=", satir, sutun);
+            devam;
+        }
+        eger (ch == 45 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_EKSI_ATAMA, "-=", satir, sutun);
+            devam;
+        }
+        eger (ch == 42 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_YILDIZ_ATAMA, "*=", satir, sutun);
+            devam;
+        }
+        eger (ch == 47 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_BOLU_ATAMA, "/=", satir, sutun);
+            devam;
+        }
+        eger (ch == 37 && lex_cp_ileri(1) == 61) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_MOD_ATAMA, "%=", satir, sutun);
+            devam;
+        }
+        eger (ch == 63) { lex_ilerle(); jeton_yeni(JetonTur.J_SORU, "?", satir, sutun); devam; }
+        eger (ch == 43) { lex_ilerle(); jeton_yeni(JetonTur.J_ARTI, "+", satir, sutun); devam; }
+        eger (ch == 45) { lex_ilerle(); jeton_yeni(JetonTur.J_EKSI, "-", satir, sutun); devam; }
+        eger (ch == 42) { lex_ilerle(); jeton_yeni(JetonTur.J_YILDIZ, "*", satir, sutun); devam; }
+        eger (ch == 47) { lex_ilerle(); jeton_yeni(JetonTur.J_BOLU, "/", satir, sutun); devam; }
+        eger (ch == 37) { lex_ilerle(); jeton_yeni(JetonTur.J_MOD, "%", satir, sutun); devam; }
+        eger (ch == 61) { lex_ilerle(); jeton_yeni(JetonTur.J_ATAMA, "=", satir, sutun); devam; }
+        eger (ch == 60) { lex_ilerle(); jeton_yeni(JetonTur.J_KUCUK, "<", satir, sutun); devam; }
+        eger (ch == 62) { lex_ilerle(); jeton_yeni(JetonTur.J_BUYUK, ">", satir, sutun); devam; }
+        eger (ch == 33) { lex_ilerle(); jeton_yeni(JetonTur.J_UNLEM, "!", satir, sutun); devam; }
+        eger (ch == 38) { lex_ilerle(); jeton_yeni(JetonTur.J_VE_ISARET, "&", satir, sutun); devam; }
+        eger (ch == 124) { lex_ilerle(); jeton_yeni(JetonTur.J_VAY_ISARET, "|", satir, sutun); devam; }
+        eger (ch == 94) { lex_ilerle(); jeton_yeni(JetonTur.J_XOR, "^", satir, sutun); devam; }
+        eger (ch == 40) { lex_ilerle(); jeton_yeni(JetonTur.J_PARANTEZ_AC, "(", satir, sutun); devam; }
+        eger (ch == 41) { lex_ilerle(); jeton_yeni(JetonTur.J_PARANTEZ_KAPA, ")", satir, sutun); devam; }
+        eger (ch == 123) { lex_ilerle(); jeton_yeni(JetonTur.J_SLUS_AC, "{", satir, sutun); devam; }
+        eger (ch == 125) { lex_ilerle(); jeton_yeni(JetonTur.J_SLUS_KAPA, "}", satir, sutun); devam; }
+        eger (ch == 91) { lex_ilerle(); jeton_yeni(JetonTur.J_KOSE_AC, "[", satir, sutun); devam; }
+        eger (ch == 93) { lex_ilerle(); jeton_yeni(JetonTur.J_KOSE_KAPA, "]", satir, sutun); devam; }
+        eger (ch == 59) { lex_ilerle(); jeton_yeni(JetonTur.J_NOKTALI_VIRGUL, ";", satir, sutun); devam; }
+        eger (ch == 44) { lex_ilerle(); jeton_yeni(JetonTur.J_VIRGUL, ",", satir, sutun); devam; }
+        eger (ch == 46) { lex_ilerle(); jeton_yeni(JetonTur.J_NOKTA, ".", satir, sutun); devam; }
+        eger (ch == 58) { lex_ilerle(); jeton_yeni(JetonTur.J_IKI_NOKTA, ":", satir, sutun); devam; }
+        eger (ident_bas(ch)) {
+            sayi bas = lex_pos();
+            iken (!lex_bitis() && ident_devam(lex_cp())) {
+                lex_ilerle();
+            }
+            oto deger = lex_dilim(bas, lex_pos());
+            eger ((metin_esit(deger, "c_kod") || metin_esit(deger, "asm_kod")) && lex_sonraki_bosluksuz_suslu()) {
+                sayi tur = JetonTur.J_C_GOMMU;
+                eger (metin_esit(deger, "asm_kod")) {
+                    tur = JetonTur.J_ASM_GOMMU;
+                }
+                lex_gomulu(tur, satir, sutun);
+                devam;
+            }
+            sayi tur = JetonTur.J_KIMLIK;
+            eger (anahtar_mi(deger)) {
+                tur = JetonTur.J_ANAHTAR;
+            }
+            jeton_yeni(tur, deger, satir, sutun);
+            devam;
+        }
+        hata_fmt_basla();
+        hata_fmt_yaz("Tanımlanamayan simge.");
+        hata_fmt_ver(satir, sutun);
+        don;
+    }
+    jeton_yeni(JetonTur.J_EOF, "", lex_satir(), lex_sutun());
+}
+
+/* lex_cp_ileri(1) is NEXT codepoint after current — Python _peek_char(1).
+   Current char is lex_cp(); next is one codepoint ahead. */

@@ -1,0 +1,34 @@
+// u++ birleştirici — Python'sız bootstrap (aşama 0 ile derlenir, ayrı ana).
+// Kullanım: birlestir.exe  (çalışma dizini repo kökü)
+
+fonk kopyala_satir(metin yol, metin ad) -> bos {
+    eger (!os_dosya_var(yol)) {
+        upp.yaz("[birlestir] eksik: ");
+        upp.satir_yaz(yol);
+        don;
+    }
+    tampon_yaz("// @upp-kaynak ");
+    tampon_yaz(ad);
+    tampon_yaz("\n");
+    tampon_yaz(upp.dosya_oku(yol));
+    tampon_yaz("\n");
+}
+
+fonk ana() -> sayi {
+    tampon_sifirla();
+    kopyala_satir("src/uppc/havuz.upp", "havuz.upp");
+    kopyala_satir("src/uppc/hata.upp", "hata.upp");
+    kopyala_satir("src/uppc/ast.upp", "ast.upp");
+    kopyala_satir("src/uppc/lexer.upp", "lexer.upp");
+    kopyala_satir("src/uppc/parser.upp", "parser.upp");
+    kopyala_satir("src/uppc/tur.upp", "tur.upp");
+    kopyala_satir("src/uppc/guvenlik.upp", "guvenlik.upp");
+    kopyala_satir("src/uppc/codegen.upp", "codegen.upp");
+    kopyala_satir("src/uppc/surucu.upp", "surucu.upp");
+    eger (!os_dosya_yaz("derleme/uppc_birlesik.upp", tampon_al())) {
+        upp.satir_yaz("[birlestir] yazılamadı");
+        don 1;
+    }
+    upp.satir_yaz("[birlestir] derleme/uppc_birlesik.upp");
+    don 0;
+}

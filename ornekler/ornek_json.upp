@@ -1,0 +1,49 @@
+// ornek_json — u++ 2.5: JSON-RPC benzeri ayristirma / olusturma (LSP altyapisi)
+
+fonk ana() -> sayi {
+    oto ham = "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"file:///a.upp\"}}}";
+    JSONDeger istek = upp.json.ayristir(ham);
+    eger (!upp.json.var_mi(istek)) {
+        upp.satir_yaz("ayristirma basarisiz");
+        don 1;
+    }
+
+    oto method = upp.json.metin_al(upp.json.anahtar_al(istek, "method"));
+    oto id = upp.json.sayi_al(upp.json.anahtar_al(istek, "id"));
+    JSONDeger params = upp.json.anahtar_al(istek, "params");
+    JSONDeger doc = upp.json.anahtar_al(params, "textDocument");
+    oto uri = upp.json.metin_al(upp.json.anahtar_al(doc, "uri"));
+
+    JSONDeger cevap = upp.json.nesne();
+    upp.json.koy(cevap, "jsonrpc", upp.json.metin_yap("2.0"));
+    upp.json.koy(cevap, "id", upp.json.sayi_yap(id));
+    JSONDeger result = upp.json.nesne();
+    upp.json.koy(result, "method", upp.json.metin_yap(method));
+    upp.json.koy(result, "uri", upp.json.metin_yap(uri));
+    upp.json.koy(cevap, "result", result);
+
+    oto yaz = upp.json.olustur(cevap);
+    upp.yaz(yaz);
+    upp.satir_yaz("");
+
+    JSONDeger anahtarlar = upp.json.anahtarlar(istek);
+    oto nkey = upp.json.uzunluk(anahtarlar);
+    upp.satir_yaz("anahtar sayisi={nkey}");
+    eger (nkey < 3) {
+        don 2;
+    }
+
+    upp.metin_bosalt(yaz);
+    upp.metin_bosalt(method);
+    upp.metin_bosalt(uri);
+    upp.json.bosalt(anahtarlar);
+    upp.json.bosalt(istek);
+    upp.json.bosalt(cevap);
+
+    SurecCikti komut = upp.sistem.calistir("echo json-ok");
+    eger (komut.cikti != yok) {
+        upp.satir_yaz(komut.cikti);
+        upp.metin_bosalt(komut.cikti);
+    }
+    don 0;
+}

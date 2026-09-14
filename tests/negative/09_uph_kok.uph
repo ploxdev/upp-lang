@@ -1,0 +1,7 @@
+// Negatif: .uph derleme girişi olamaz
+// @icerir: [u++ HATA]
+// @icerir: .uph
+
+fonk yardim() -> sayi {
+    don 1;
+}

@@ -1,0 +1,12 @@
+// Negatif: sınıf sabiti örnek üzerinden yok
+// @icerir: [u++ HATA]
+
+sinif A {
+    sabit sayi N = 1;
+    sayi x;
+}
+
+fonk ana() -> sayi {
+    A a;
+    don a.N;
+}

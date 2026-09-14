@@ -1,0 +1,13 @@
+// Negatif: secim(metin) durum çalışma anı
+// @icerir: [u++ HATA]
+
+fonk ana() -> sayi {
+    metin k = "ab";
+    metin d = "ab";
+    secim (k) {
+        durum d:
+            don 1;
+        varsayilan:
+            don 0;
+    }
+}

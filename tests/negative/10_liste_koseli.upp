@@ -1,0 +1,7 @@
+// Negatif: liste[T] köşeli parantez zorunlu
+// @icerir: [u++ HATA]
+
+fonk ana() -> sayi {
+    liste xs;
+    don 0;
+}

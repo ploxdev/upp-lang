@@ -1,0 +1,11 @@
+// ornek3'ün kullandığı başlık — fonk ana yok
+
+sabit sayi CEVAP = 42;
+
+fonk merhaba(metin kim) -> bos {
+    upp.satir_yaz("kutuphane: merhaba {kim}");
+}
+
+fonk iki_kat(sayi x) -> sayi {
+    don x * 2;
+}

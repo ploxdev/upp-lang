@@ -1,0 +1,9 @@
+.vscode/**
+.vscode-test/**
+src/**
+server/**/*.pyc
+server/**/__pycache__/**
+tsconfig.json
+**/*.ts
+**/*.map
+*.vsix

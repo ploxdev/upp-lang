@@ -1,0 +1,19 @@
+// Pozitif: eger / yoksa.
+// @stdout
+// buyuk
+// yoksa-ok
+
+fonk ana() -> sayi {
+    oto x = 10;
+    eger (x > 5) {
+        upp.satir_yaz("buyuk");
+    } yoksa {
+        upp.satir_yaz("kucuk");
+    }
+    eger (x < 0) {
+        upp.satir_yaz("negatif");
+    } yoksa {
+        upp.satir_yaz("yoksa-ok");
+    }
+    don 0;
+}

@@ -1,0 +1,19 @@
+// Pozitif: boş durum C gibi düşer; her yol don verir
+// @stdout
+// 2
+
+fonk f(sayi x) -> sayi {
+    secim (x) {
+        durum 1:
+        durum 2:
+            don x;
+        varsayilan:
+            don 0;
+    }
+}
+
+fonk ana() -> sayi {
+    sayi n = f(2);
+    upp.satir_yaz("{n}");
+    don 0;
+}

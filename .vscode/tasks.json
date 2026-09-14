@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "eklenti: compile",
+      "type": "npm",
+      "script": "compile",
+      "path": "eklenti/",
+      "group": "build",
+      "problemMatcher": "$tsc"
+    }
+  ]
+}

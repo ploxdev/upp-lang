@@ -1,0 +1,11 @@
+// Negatif: birden fazla fonk ana.
+// @icerir: [u++ HATA]
+// @icerir: ana
+
+fonk ana() -> sayi {
+    don 0;
+}
+
+fonk ana() -> sayi {
+    don 1;
+}

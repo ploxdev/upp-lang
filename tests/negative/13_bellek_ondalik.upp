@@ -1,0 +1,10 @@
+// Negatif: bellek adresi ondalik olamaz
+// @icerir: [u++ HATA]
+// @icerir: sayi
+
+fonk ana() -> sayi {
+    guvensiz {
+        upp.bellek.sayioku(1.5);
+    }
+    don 0;
+}

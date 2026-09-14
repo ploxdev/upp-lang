@@ -1,0 +1,11 @@
+fonk ping() -> sayi {
+    don 7;
+}
+
+sinif Kutu {
+    sayi n;
+
+    fonk olustur(sayi x) {
+        kendi.n = x;
+    }
+}

@@ -1,0 +1,32 @@
+// Pozitif: sinif, metot, kendi.
+// @stdout
+// 5
+// Toros
+
+sinif Araba {
+    metin model;
+    sayi hiz;
+
+    fonk olustur(metin m) {
+        kendi.model = m;
+        kendi.hiz = 0;
+    }
+
+    fonk hizlan(sayi artis) {
+        kendi.hiz = kendi.hiz + artis;
+    }
+
+    fonk oku() -> sayi {
+        don kendi.hiz;
+    }
+}
+
+fonk ana() -> sayi {
+    Araba a;
+    a.olustur("Toros");
+    a.hizlan(5);
+    oto h = a.oku();
+    upp.satir_yaz("{h}");
+    upp.satir_yaz("{a.model}");
+    don 0;
+}

@@ -1,0 +1,18 @@
+{
+  // F5 = açık .upp dosyasını u++ derleyiciyle derleyip çalıştırır (upp.calistir
+  // komutuna bağlı; eklentideki F5 kısayolu içe gömülü debug F5'ünden önceliklidir).
+  // Bu dosyada debug yapılandırması BIRAKMAYIN: bir extensionHost konfigürasyonu
+  // varsa F5 kullanıcı kodunu değil, eklenti kendisini derler (npm: compile).
+  // Eklentinin KENDİNİ geliştirmek için aşağıdaki konfigürasyonu geçici olarak
+  // ekleyin (bknz. README "Eklenti geliştirmesi" bölümü):
+  // {
+  //   "name": "Eklentiyi başlat",
+  //   "type": "extensionHost",
+  //   "request": "launch",
+  //   "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+  //   "outFiles": ["${workspaceFolder}/out/**/*.js"],
+  //   "preLaunchTask": "npm: compile"
+  // }
+  "version": "0.2.0",
+  "configurations": []
+}
