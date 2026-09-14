@@ -1,12 +1,43 @@
+# Python ve önbellekler
 __pycache__/
-*.pyc
-cikti.c
-program.exe
+*.py[cod]
+*$py.class
+*.pyd
+
+# Derleyici çıktıları ve ara dosyalar
+*.c
+*.o
+*.obj
 *.exe
-selam.txt
-ornek1.c
-ornek2.c
+*.out
+*.dll
+*.so
+*.dylib
 derleme/
 tests/_cikti/
+cikti.c
+program.exe
+selam.txt
+
+# Geçici test ve otomasyon betikleri / çıktıları
+_*.txt
+_*.bat
+_*.py
+_*.c
+
+# VS Code / Cursor eklentisi (Node / build / paketler)
 eklenti/node_modules/
 eklenti/out/
+*.vsix
+.vscode-test/
+
+# IDE & Editor yerel ayarları
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
