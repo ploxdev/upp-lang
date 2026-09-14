@@ -1,0 +1,2 @@
+# Python dosyalarını dil istatistiklerinden hariç tut
+*.py linguist-detectable=false
