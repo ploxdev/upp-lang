@@ -1,8 +1,8 @@
 # u++ ile Programlamaya Giriş ve Dil Rehberi
 
-Hoş geldiniz! Bu rehber, **u++ (u-plus-plus)** programlama dilini sıfırdan öğrenmeniz için hazırlanmış kapsamlı bir kitaptır.
+Bu rehber, **u++ (u-plus-plus)** programlama dilini sıfırdan öğrenmeniz için hazırlanmış kapsamlı bir kitaptır.
 
-Daha önce hiç kod yazmamış olsanız bile endişelenmeyin. Bu dokümanda değişkenlerden döngülere, nesne yönelimli programlamadan çoklu iş parçacıklarına (multithreading) ve düşük seviyeli sistem güvenliğine kadar tüm kavramları adım adım, bol örnek ve açıklamalarla öğreneceksiniz.
+Bu rehber en temelden ileri seviyeye kadar hazırlandı. Bu dokümanda değişkenlerden döngülere, nesne yönelimli programlamadan çoklu iş parçacıklarına (multithreading) ve düşük seviyeli sistem güvenliğine kadar tüm kavramları adım adım, bol örnek ve açıklamalarla öğreneceksiniz.
 
 ---
 
