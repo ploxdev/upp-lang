@@ -1,260 +1,327 @@
-# u++
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ploxdev/upp-lang/main/docs/logo.png" alt="u++ logo" width="120" onerror="this.style.display='none'"/>
+</p>
 
-> **Türkçe kaynak kodlu, C11 transpile eden, GCC ile native ikili üreten açık kaynak programlama dili.**
+<h1 align="center">u++ Programlama Dili</h1>
 
-u++ ile `fonk ana()` yazarsınız; derleyici **GNU C11** (`-std=gnu11`) üretir, **GCC** bağlar. Windows’ta `.exe`, Linux’ta `.out` çıkar. Bellek güvenliği varsayılan; `guvensiz { }` ile işaretçi ve süreç belleği açılır.
+<p align="center">
+  <strong>Türkçe sözdizimli, C11 transpile eden, GCC ile doğrudan native makine kodu üreten ve bellek güvenliğini önceleyen modern sistem programlama dili.</strong>
+</p>
 
-[![Sürüm](https://img.shields.io/badge/sürüm-v3.0-blue)](OGREN.md)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](#gereksinimler)
-[![Derleyici](https://img.shields.io/badge/derleyici-Python%20%2B%20native-green)](#iki-derleyici-tek-dil)
-[![Testler](https://img.shields.io/badge/testler-62%2B139%20geçti-brightgreen)](#testler)
-
----
-
-## Neden u++?
-
-| Özellik | Açıklama |
-|---|---|
-| **Türkçe sözdizimi** | `fonk`, `eger`, `dongu`, `sinif`, `don` — öğrenmesi kolay, okunaklı kaynak |
-| **Gerçek native çıktı** | Ara C + GCC; yorumlayıcı değil, `.exe` / `.out` ikili |
-| **Bellek güvenliği** | Güvenli modda işaretçi, `c_kod` ve `upp.bellek` yasak; `guvensiz` kapısı |
-| **Zengin standart kitaplık** | `upp.*` — dosya, yol, metin, JSON, iş parçacığı, matematik |
-| **İki derleyici** | `uppc.py` (bootstrap) ve `uppc.exe` (native, kendi dilinde yazılmış) |
-| **VS Code / Cursor** | LSP tanısı, tamamlama, F5 derle/çalıştır — [eklenti](eklenti/README.md) |
+<p align="center">
+  <a href="OGREN.md"><img src="https://img.shields.io/badge/sürüm-v3.0-007ACC.svg?style=flat-square" alt="Sürüm" /></a>
+  <a href="#-lisans"><img src="https://img.shields.io/badge/lisans-Apache%202.0-blue.svg?style=flat-square" alt="Lisans" /></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-222222.svg?style=flat-square" alt="Platform" />
+  <img src="https://img.shields.io/badge/derleyici-Python%20%2B%20Native%20(Self--Hosting)-success.svg?style=flat-square" alt="Derleyici" />
+  <img src="https://img.shields.io/badge/testler-200%2B%20geçti-brightgreen.svg?style=flat-square" alt="Testler" />
+  <a href="eklenti/README.md"><img src="https://img.shields.io/badge/IDE-VS%20Code%20%7C%20Cursor-blueviolet.svg?style=flat-square" alt="IDE Desteği" /></a>
+</p>
 
 ---
 
-## Hızlı başlangıç
+## 📌 Proje Nedir?
 
-### Gereksinimler
+**u++**, geliştiricilerin kendi anadilinde (Türkçe) sistem seviyesinde yazılım geliştirmesini sağlayan, yorumlayıcı (interpreter) katmanını aradan çıkararak **doğrudan makine koduna (native binary)** derlenen açık kaynak bir programlama dilidir.
 
-- [Python 3.8+](https://www.python.org/) (ek paket yok)
-- [GCC](https://gcc.gnu.org/) — Windows: [MinGW-w64](https://www.msys2.org/) (`C:\msys64\ucrt64\bin`)
+Yüksek seviyeli dillerin okunabilirliğini, C'nin çıplak metal performansıyla buluşturur. Yazdığınız u++ kodu önce temiz ve standart **GNU C11 (`-std=gnu11`)** koduna dönüştürülür (transpile), ardından sistemdeki **GCC** derleyicisi kullanılarak Windows üzerinde bağımsız `.exe`, Linux üzerinde `.out` ikili dosyalarına bağlanır. C çalışma zamanı kütüphanesi derleme sırasında doğrudan ikiliye gömülür; harici `.dll` veya runtime bağımlılığı gerektirmez.
+
+### 🎯 Projenin Amacı (Eğitim & Hobi)
+Bu proje; derleyici mühendisliği (compiler design), soyut sözdizim ağaçları (AST), transpile teknikleri, dil sunucusu mimarisi (LSP) ve düşük seviye bellek yönetimi konularını derinlemesine anlamak ve deneysel olarak keşfetmek amacıyla **tamamen bir eğitim, araştırma ve hobi projesi** olarak geliştirilmiştir. Ticari bir iddia taşımamakla birlikte, kendi kendini derleyebilen (self-hosting) ve gerçek native ikililer üretebilen uçtan uca eksiksiz bir sistem dili altyapısı sunar.
+
+> 📚 **Dili Detaylı Öğrenmek İçin:** Sözdizimi kuralları, tüm anahtar sözcükler, tür kuralları ve standart kitaplık sözleşmesinin yer aldığı kapsamlı rehber için **[OGREN.md (Dil Sözleşmesi)](OGREN.md)** belgesini inceleyebilirsiniz.
+
+---
+
+## 🚀 Temel Özellikler
+
+- **🇹🇷 Doğal Türkçe Sözdizimi:** `fonk`, `eger`, `dongu`, `sinif`, `don`, `kullan` gibi akıcı, okunaklı ve tutarlı anahtar sözcükler.
+- **⚡ Gerçek Native Performans:** Yorumlayıcı ya da VM (sanal makine) yükü yoktur. Doğrudan optimize C11 çıktısı ve GCC derlemesiyle en yüksek çalışma hızı.
+- **🛡️ Varsayılan Bellek Güvenliği:** Ham işaretçiler (`*`, `&`), doğrudan bellek manipülasyonu ve harici C blokları yalnızca açıkça belirtilen `guvensiz { ... }` blokları içerisinde serbesttir. Güvenli kodda bellek ihlallerine derleme anında geçit verilmez.
+- **🔄 İki Derleyici & Self-Hosting:**
+  - **`uppc.py`:** Sıfır dış bağımlılıkla her ortamda çalışan Python bootstrap derleyicisi.
+  - **`derleme/uppc.exe`:** Tamamen saf u++ diliyle yazılmış, kendi kendini derleyebilen (self-hosting) native derleyici.
+- **📦 Zengin Standart Kütüphane (`upp.*`):**
+  - Dosya & Klasör I/O (`upp.dosya`, `upp.yol`)
+  - Gelişmiş Metin ve UTF-8 İşlemleri (`upp.metin`)
+  - Süreç Yönetimi (`upp.sistem.calistir` & `SurecCikti`)
+  - JSON Ayrıştırma ve Yönetimi (`upp.json`)
+  - Milisaniyelik Hassas Zaman ve Matematik (`upp.zaman`, `upp.matematik`)
+  - Çoklu İş Parçacığı & Senkronizasyon (`arkaplan { }`, `Kilit`)
+- **🧩 Tam IDE & LSP Entegrasyonu:** VS Code ve Cursor için geliştirilmiş resmi eklenti; GCC çağırmadan milisaniyeler içinde çalışan canlı sözdizimi analizi (`--analiz`), akıllı kod tamamlama, hover ipuçları ve `F5` ile doğrudan derle/çalıştır desteği sunar.
+
+---
+
+## 🛠️ Mimari ve Çalışma Mantığı
+
+u++ derleme hattı, kaynak koddan çalıştırılabilir ikiliye kadar modüler bir hiyerarşiyle işler:
+
+```text
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│  Kaynak (.upp)  │ ──> │ Lexer & Parser   │ ──> │ Tip & Güvenlik Den. │
+└─────────────────┘     └──────────────────┘     └──────────┬──────────┘
+                                                            │
+┌─────────────────┐     ┌──────────────────┐                ▼
+│ Native (.exe)   │ <── │ GCC Bağlama      │ <── ┌─────────────────────┐
+│ Linux (.out)    │     │ (-std=gnu11)     │     │ C11 Kod Üretimi     │
+└─────────────────┘     └──────────────────┘     └─────────────────────┘
+```
+
+1. **Ayrıştırma (Frontend):** Kaynak kod taranır, AST (Soyut Sözdizim Ağacı) inşa edilir.
+2. **Denetim Katmanı:** Tür kontrolü yapılır, ardından bellek güvenlik analizcisi yetkisiz işaretçi veya sistem çağrılarını denetler.
+3. **C Kod Üretimi (Backend):** AST, optimize C11 eşdeğerine dönüştürülür ve yerleşik `src/runtime/upp_runtime.c` modülü ile birleştirilir.
+4. **Bağlama (Linker):** Platforma uygun bayraklarla GCC tetiklenir ve hedef makine ikilisi üretilir.
+
+---
+
+## 📦 Gereksinimler ve Kurulum
+
+### Sistem Gereksinimleri
+- **Python 3.8+** (Bootstrap derleyici ve LSP sunucusu için; ek bir pip paketi gerekmez)
+- **GCC Derleyicisi:**
+  - **Windows:** [MinGW-w64](https://www.msys2.org/) (Örn: MSYS2 `ucrt64` veya `mingw64` ortamı, PATH'e ekli olmalıdır)
+  - **Linux:** `build-essential` (`sudo apt install build-essential`)
 
 ### Kurulum
 
-Depoyu klonlayın; ek kurulum adımı yoktur:
+Depoyu doğrudan klonlayın, ek bir paket yükleme adımı yoktur:
 
 ```bash
-git clone <repo-url> uplusplus
-cd uplusplus
+git clone https://github.com/ploxdev/upp-lang.git
+cd upp-lang
 ```
 
-### İlk derleme
+---
 
-```bash
-# Derle ve çalıştır
-python uppc.py ornekler/ornek1.upp
+## 💻 Hızlı Başlangıç & Kullanım
 
-# Derle, çalıştırma — çıktı: ornek1.c + ornek1.exe
-python uppc.py ornekler/ornek1.upp --cikti ornek1 --sadece-derle
-```
+### 1. Merhaba Dünya
 
-### İlk program
+Bir `merhaba.upp` dosyası oluşturun:
 
 ```text
 fonk ana() -> sayi {
-    upp.satir_yaz("Merhaba, u++!");
+    upp.satir_yaz("Merhaba, u++ dünyası!");
+    don 0;
+}
+```
+
+### 2. Derleme ve Çalıştırma
+
+```bash
+# Doğrudan derle ve anında çalıştır:
+python uppc.py merhaba.upp
+
+# Yalnızca çalıştırılabilir ikiliyi (.exe / .out) üret:
+python uppc.py merhaba.upp --cikti merhaba --sadece-derle
+
+# Yalnızca üretilen C11 transpile kodunu incele (GCC çağrılmaz):
+python uppc.py merhaba.upp --sadece-c
+
+# IDE / Canlı Tanı modu (AST, tür ve güvenlik kontrolü yapar, JSON döner):
+python uppc.py merhaba.upp --analiz
+```
+
+---
+
+## 🔍 Dil Sözdiziminden Örnekler
+
+### Değişkenler, Türler ve İnterpolasyon
+```text
+fonk ana() -> sayi {
+    oto isim = "Arda";
+    sayi yas = 24;
+    ondalik pi = 3.1415;
+    mantik aktif = dogru;
+
+    // Doğrudan süslü parantez ile metin interpolasyonu:
+    upp.satir_yaz("Kullanıcı: {isim}, Yaş: {yas}, Aktif: {aktif}");
+    don 0;
+}
+```
+
+### Nesne Yönelim (Sınıflar)
+```text
+sinif Motor {
+    metin model;
+    sayi beygir;
+
+    fonk olustur(metin m, sayi bg) {
+        kendi.model = m;
+        kendi.beygir = bg;
+    }
+
+    fonk bilgi_ver() {
+        upp.satir_yaz("Model: {kendi.model} ({kendi.beygir} HP)");
+    }
+}
+
+fonk ana() -> sayi {
+    Motor m = Motor("V8 Twin-Turbo", 650);
+    m.bilgi_ver();
+    don 0;
+}
+```
+
+### Çoklu İş Parçacığı (Eşzamanlılık) & Senkronizasyon
+```text
+fonk ana() -> sayi {
+    Kilit k;
+
+    oto gorev = arkaplan {
+        k.kilitle();
+        upp.satir_yaz("Arka plan iş parçacığı güvenli bölgede çalışıyor.");
+        k.birak();
+    };
+
+    gorev.bekle();
+    upp.satir_yaz("Görev tamamlandı.");
+    don 0;
+}
+```
+
+### Bellek Güvenliği Kapısı (`guvensiz`)
+```text
+fonk ana() -> sayi {
+    sayi x = 100;
+
+    // Güvenli alanda işaretçi kullanımı derleme hatasıdır!
+    guvensiz {
+        sayi* p = &x;
+        *p = 200;
+        upp.satir_yaz("İşaretçi üzerinden yeni değer: {x}");
+    }
+
     don 0;
 }
 ```
 
 ---
 
-## Örnekler
+## ⚙️ İki Derleyici: Native Self-Hosting
 
-| Dosya | Konu |
-|---|---|
-| [`ornekler/ornek1.upp`](ornekler/ornek1.upp) | Temel sözdizimi, `upp.*` |
-| [`ornekler/ornek2.upp`](ornekler/ornek2.upp) | Sınıf, `secenek`, `arkaplan` |
-| [`ornekler/ornek3.upp`](ornekler/ornek3.upp) | `kullan`, `sabit`, `+=` |
-| [`ornekler/kutuphane.uph`](ornekler/kutuphane.uph) | Başlık dosyası (`.uph`) |
-| [`ornekler/ornek_json.upp`](ornekler/ornek_json.upp) | JSON, `upp.stdio` |
+u++, bootstrap döngüsünü tamamlamış self-hosting bir mimariye sahiptir:
 
-```bash
-python uppc.py ornekler/ornek2.upp --cikti ornek2 --sadece-derle
-python uppc.py ornekler/ornek_json.upp --cikti ornek_json --sadece-derle
-```
+| Derleyici | Konum | Altyapı | Rol |
+|---|---|---|---|
+| **Python Derleyicisi** | `uppc.py` | Python 3 | Referans derleyici, geliştirme ve bootstrap |
+| **Native Derleyici** | `derleme/uppc.exe` | Saf u++ (`src/uppc/`) | Yüksek hızlı, bağımsız yerel derleyici |
 
----
-
-## İki derleyici, tek dil
-
-| | **Python** (`uppc.py`) | **Native** (`derleme/uppc.exe`) |
-|---|---|---|
-| Konum | Kök dizin | `derleme/` |
-| Kaynak | Python | `src/uppc/` (saf u++; `c_kod` yok) |
-| Rol | Bootstrap; her zaman çalışır | Aynı bayraklar, daha hızlı |
-| Kullanım | Varsayılan | Üretildikten sonra; eklentide `upp.derleyici: native` |
-
-Native derleyiciyi üretmek için (bir kez):
+Native derleyiciyi üretmek için:
 
 ```bash
+# 1. Modülleri tek bir u++ kaynağında birleştir:
 python araclar/birlestir.py
+
+# 2. Python derleyicisi ile native binary'yi üret:
 python uppc.py derleme/uppc_birlesik.upp --sadece-derle --cikti derleme/uppc
-```
 
-Derleyici kaynağı `c_kod` kullanmaz; dilin `guvensiz` / `c_kod` kaçışı kullanıcı programlarında durur.
-
-Sonra:
-
-```bash
-derleme/uppc.exe ornekler/ornek1.upp --sadece-derle --cikti derleme/ornek1
-derleme/uppc.exe ornekler/ornek3.upp --analiz
-```
-
-> **Windows notu:** Taze üretilen `.exe` bazen Uygulama Denetimi tarafından kesilir (`WinError 4551`). Bu derleyici hatası değil; Python derleyici etkilenmez.
-
----
-
-## Komut satırı
-
-Python ve native **aynı bayrakları** konuşur.
-
-| Bayrak | Açıklama |
-|---|---|
-| `--cikti AD` | `AD.c` + `AD.exe` / `AD.out`. Yoksa `cikti.c` + `program.exe` |
-| `--sadece-derle` | İkili üretir, çalıştırmaz |
-| `--sadece-c` | Yalnızca C üretir; GCC çağrılmaz |
-| `--linux` / `--windows` | Hedef ABI. İkisi birden verilemez; yoksa host |
-| `--analiz` | Lex / parse / tür / güvenlik → JSON. C ve GCC yok (düzenleyici) |
-| `--json-hata` | Tam derleme (C + GCC) → tek satır JSON |
-| `--bicim` | Kaynağı yerinde biçimler (girinti 4) |
-| `--bicim-kontrol` | Biçimsizse çıkış kodu 1 (CI) |
-| `--ast` | Ayrıştırılmış ağacı basar |
-
-```bash
-# Canlı tanı (eklenti ile aynı JSON şeması)
-python uppc.py ornekler/ornek3.upp --analiz
-
-# Linux hedefi (Windows’ta .out üretir, çalıştırılmaz)
-python uppc.py ornekler/ornek1.upp --linux --sadece-derle --cikti ornek1
+# 3. Artık derleme işlemlerinde doğrudan native derleyiciyi kullanabilirsiniz:
+./derleme/uppc.exe ornekler/ornek1.upp --cikti ornek1
 ```
 
 ---
 
-## Dil özeti (v3.0)
+## 🧩 Editör Desteği (VS Code & Cursor)
+
+Proje, geliştirme deneyimini üst düzeye taşımak için özel bir IDE eklentisi (`eklenti/`) içerir:
+
+- **Canlı Tanı (Diagnostics):** Kod yazıldığı anda hata tespiti (`--analiz` motoru).
+- **IntelliSense & Snippets:** Sözdizimi renklendirme, `upp.*` fonksiyonları ve döngü şablonları.
+- **Kısayollar:** **`F5`** ile doğrudan derleyip çalıştırma, **`Ctrl+Shift+B`** ile derleme.
+
+Kurulum detayları için [eklenti/README.md](eklenti/README.md) dosyasını inceleyebilirsiniz.
+
+---
+
+## 🧪 Testler ve Kalite Güvencesi
+
+u++, kapsamlı bir test paketiyle sürekli doğrulanır:
+
+```bash
+# Tüm entegrasyon ve parite testlerini çalıştır:
+python tests/run_tests.py
+
+# Yalnızca birim (unit) testlerini çalıştır (139 test):
+python tests/test_uppc.py
+
+# Kategoriye göre test koşumu:
+python tests/run_tests.py --kategori positive   # Başarılı E2E senaryoları
+python tests/run_tests.py --kategori safety     # Bellek güvenliği ihlal testleri
+python tests/run_tests.py --kategori negative   # Derleme hatası yakalama testleri
+```
+
+---
+
+## 📂 Proje Dizin Yapısı
 
 ```text
-// Giriş noktası
-fonk ana() -> sayi { don 0; }
-
-// Modüller
-kullan "kutuphane.uph";
-kullan "yardim.uph" olarak y;
-
-// Koleksiyonlar
-liste[sayi] xs;
-harita[metin, sayi] skor;
-
-// İş parçacığı
-oto is = arkaplan { upp.satir_yaz("arka plan"); };
-is.bekle();
-
-// Süreç
-SurecCikti r = upp.sistem.calistir("echo tamam");
-```
-
-| Alan | Öne çıkanlar |
-|---|---|
-| **Türler** | `sayi`, `ondalik`, `mantik`, `metin`, `liste[T]`, `harita[K,V]`, sınıf, `secenek` |
-| **Metin** | UTF-8, `{ad}` interpolasyon, `s[i]` kod noktası, `metin +=` |
-| **Kontrol** | `eger` / `iken` / `dongu` / `her` / `secim` (sayı ve metin) |
-| **Modüller** | `kullan` / `.uph` başlık / `olarak` önek |
-| **Güvenlik** | `guvensiz { }` — işaretçi, `c_kod`, `upp.bellek` |
-| **v3.0 yenilikleri** | `Kilit`, `--analiz` çok hata, `--bicim`, `SurecCikti`, `upp.yol` |
-
-Tam sözleşme: **[OGREN.md](OGREN.md)** · Kamu API: **[docs/API_tr.md](docs/API_tr.md)** · English: **[docs/API_en.md](docs/API_en.md)**
-
----
-
-## VS Code / Cursor eklentisi
-
-Yerel `.vsix` ile kurulur; Marketplace gerekmez.
-
-- Sözdizimi vurgulama (`.upp` + `.uph`)
-- Canlı LSP tanısı (`--analiz`)
-- Tamamlama, hover, tanıma git
-- **F5** derle + çalıştır · **Ctrl+Shift+B** derle
-
-Kurulum ve ayarlar: **[eklenti/README.md](eklenti/README.md)**
-
----
-
-## Testler
-
-```bash
-python tests/run_tests.py          # 62 entegrasyon (positive / negative / safety / parite)
-python tests/test_uppc.py          # 139 birim testi
-python tests/run_tests.py --kategori positive
-```
-
-Kategoriler: `positive/` (derle + stdout), `negative/` (derleme hatası), `safety/` (bellek güvenliği ihlali).
-
----
-
-## Proje yapısı
-
-```text
-u++/
-├── uppc.py                 # Python derleyici (bootstrap)
-├── OGREN.md                # Dil sözleşmesi (TR)
-├── docs/
-│   ├── API_tr.md           # Kamu API (TR)
-│   └── API_en.md           # Public API (EN)
-├── derleyici.md            # Native derleyici mimarisi
-├── eklenti/                # VS Code / Cursor eklentisi
+upp-lang/
+├── uppc.py                 # Python bootstrap derleyicisi (CLI & transpile motoru)
+├── OGREN.md                # Kapsamlı dil spesifikasyonu ve başvuru kılavuzu
+├── derleyici.md            # Native derleyici mimari dokümantasyonu
+├── docs/                   # Ayrıntılı API referansları (TR / EN)
+│   ├── API_tr.md
+│   └── API_en.md
 ├── src/
-│   ├── runtime/            # C çalışma zamanı (upp.*)
-│   └── uppc/               # Native derleyici kaynağı (u++)
-├── araclar/birlestir.py    # Native birleştirme
-├── derleme/                # uppc.exe, ara C dosyaları
-├── ornekler/               # Örnek programlar
-└── tests/                  # Test paketi
+│   ├── runtime/            # C çalışma zamanı kütüphanesi (upp_runtime.c)
+│   └── uppc/               # Native derleyici kaynak kodları (saf u++)
+├── eklenti/                # VS Code & Cursor IDE eklentisi (TypeScript + Python LSP)
+├── araclar/                # Derleyici derleme ve birleştirme yardımcı araçları
+├── ornekler/               # Dil yeteneklerini sergileyen örnek kodlar (.upp, .uph)
+└── tests/                  # Entegrasyon, güvenlik, parite ve birim test paketi
 ```
 
 ---
 
-## Gereksinimler
+## 📄 Lisans
 
-| Bileşen | Windows | Linux |
-|---|---|---|
-| Python | 3.8+ | 3.8+ |
-| GCC | MinGW-w64 (MSYS2) | `build-essential` |
-| Bağlama | `-luser32 -lwinmm -lgdi32` | `-pthread -lm` |
-
-**Platform farkları:** Linux’ta pencere üzerine çizim, sentetik girdi ve yabancı süreç belleği yoktur. Çağrılar patlamaz; `0` döner veya no-op olur.
+Bu proje **[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)** kapsamında lisanslanmıştır. Açık kaynak standartlarına uygun olarak serbestçe incelenebilir, kullanılabilir ve geliştirilebilir.
 
 ---
 
-## Belgeler
+<br/>
 
-| Belge | Ne için? |
-|---|---|
-| [OGREN.md](OGREN.md) | Dil öğrenmek, sözleşmeyi anlamak |
-| [docs/API_tr.md](docs/API_tr.md) | `upp.*` referansı (TR) |
-| [docs/API_en.md](docs/API_en.md) | `upp.*` reference (EN) |
-| [derleyici.md](derleyici.md) | Native derleyici iç yapısı |
-| [eklenti/README.md](eklenti/README.md) | Düzenleyici kurulumu |
+## 🌐 English Summary
 
----
+### About the Project
+**u++** is an open-source, statically-typed systems programming language with **Turkish syntax**. It is designed to combine expressive, readable syntax with the raw performance of native binaries. 
 
-## Sürüm geçmişi (kısa)
+Instead of relying on an interpreter or virtual machine, u++ transpiles source code into clean, standard **GNU C11 (`-std=gnu11`)** and uses **GCC** (MinGW-w64 on Windows, native GCC on Linux) to produce standalone executables (`.exe` / `.out`).
 
-| Sürüm | Öne çıkanlar |
-|---|---|
-| **v3.0** | `Kilit`, `--analiz` çok hata, `--bicim`, `SurecCikti`, `upp.yol` |
-| **v2.9** | `secim(metin)`, kurucu şekeri, `kullan … olarak`, varsayılan parametre |
-| **v2.8** | UTF-8 `s[i]`, `metin +=`, üst düzey değişken, `bol`/`birlestir`, `her(harita)` |
+> 🎓 **Educational & Hobby Scope:** This project was developed purely as an educational research and hobby exploration into compiler design, AST construction, transpilation, Language Server Protocols (LSP), and native runtime systems. For full language specifications and semantics, please refer to **[OGREN.md](OGREN.md)**.
 
-Semver kırıkları (v2.8): `s[i]` artık kod noktası; `upp.sistem.calistir` → `SurecCikti`.
+### Key Features
+- **Native Performance:** Zero interpreter overhead; direct compilation to machine code via C11 and GCC.
+- **Memory Safety by Default:** Raw pointers, manual memory management, inline C code, and foreign process access are strictly prohibited unless wrapped in an explicit `guvensiz { ... }` (unsafe) block.
+- **Self-Hosting Dual Compiler:**
+  - `uppc.py`: Zero-dependency Python 3 bootstrap compiler.
+  - `derleme/uppc.exe`: Fast native compiler written purely in u++.
+- **Comprehensive Standard Library (`upp.*`):** Built-in modules for high-performance I/O, UTF-8 strings, JSON, processes, threading (`arkaplan` / `Kilit`), and math.
+- **Modern Tooling & IDE Support:** Official VS Code and Cursor extension featuring a full Language Server Protocol (LSP) implementation, real-time diagnostics (`--analiz`), autocompletion, and one-click build & run (`F5`).
 
----
+### Quick Start
 
-## Anahtar kelimeler
+```bash
+# Clone the repository
+git clone https://github.com/ploxdev/upp-lang.git
+cd upp-lang
 
-`u++` · `uplusplus` · `Türkçe programlama dili` · `Turkish programming language` · `transpiler` · `C11` · `GCC` · `MinGW` · `self-hosting compiler` · `memory safety` · `uppc` · `sistem programlama`
+# Compile and run an example
+python uppc.py ornekler/ornek1.upp
 
----
+# Compile to standalone binary without running
+python uppc.py ornekler/ornek1.upp --cikti ornek1 --sadece-derle
 
-*Son güncelleme: u++ v3.0*
+# Run the test suite
+python tests/run_tests.py
+```
+
+### Hello World in u++
+```text
+fonk ana() -> sayi {
+    upp.satir_yaz("Hello, World from u++!");
+    don 0;
+}
+```
+
+Licensed under the **Apache License 2.0**. Contributions and feedback are welcome!
