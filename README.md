@@ -21,7 +21,7 @@
 
 ## 📌 Proje Nedir?
 
-**u++**, geliştiricilerin kendi anadilinde (Türkçe) sistem seviyesinde yazılım geliştirmesini sağlayan, yorumlayıcı (interpreter) katmanını aradan çıkararak **doğrudan makine koduna (native binary)** derlenen açık kaynak bir programlama dilidir.
+**u++**, geliştiricilerin Türkçe olarak sistem seviyesinde yazılım geliştirmesini sağlayan, yorumlayıcı (interpreter) katmanı OLMADAN **doğrudan makine koduna (native binary)** derlenen açık kaynak bir programlama dilidir.
 
 Yüksek seviyeli dillerin okunabilirliğini, C'nin çıplak metal performansıyla buluşturur. Yazdığınız u++ kodu önce temiz ve standart **GNU C11 (`-std=gnu11`)** koduna dönüştürülür (transpile), ardından sistemdeki **GCC** derleyicisi kullanılarak Windows üzerinde bağımsız `.exe`, Linux üzerinde `.out` ikili dosyalarına bağlanır. C çalışma zamanı kütüphanesi derleme sırasında doğrudan ikiliye gömülür; harici `.dll` veya runtime bağımlılığı gerektirmez.
 
