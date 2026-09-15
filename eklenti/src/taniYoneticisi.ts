@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
+import { nesilUygula } from "./nesil";
 import { taniHarita } from "./tani";
 import type { DurumCubugu } from "./durum";
 import type { Motor } from "./motor";
@@ -11,6 +12,8 @@ export class TaniYoneticisi {
   private koleksiyon: vscode.DiagnosticCollection;
   private timer: NodeJS.Timeout | undefined;
   private motor: Motor = { hazir: false, neden: "" };
+  private nesil = 0;
+  private iptal: AbortController | undefined;
 
   constructor(
     private durum: DurumCubugu,
@@ -23,7 +26,13 @@ export class TaniYoneticisi {
   motorYaz(m: Motor): void {
     this.motor = m;
     if (!m.hazir) {
-      this.koleksiyon.clear();
+      this.nesil += 1;
+      this.iptal?.abort();
+      for (const d of vscode.workspace.textDocuments) {
+        if (d.languageId === "upp") {
+          this.koleksiyon.set(d.uri, []);
+        }
+      }
       this.durum.hataYaz(0);
     }
   }
@@ -45,6 +54,11 @@ export class TaniYoneticisi {
       this.koleksiyon.set(doc.uri, []);
       return;
     }
+    this.nesil += 1;
+    const ben = this.nesil;
+    this.iptal?.abort();
+    this.iptal = new AbortController();
+    const signal = this.iptal.signal;
     const exe = this.motor.yol;
     const dizin = path.dirname(doc.uri.fsPath);
     const tmpKok = fs.existsSync(dizin) ? dizin : os.tmpdir();
@@ -61,8 +75,13 @@ export class TaniYoneticisi {
             timeout: 20000,
             windowsHide: true,
             encoding: "utf8",
+            signal,
           },
           (err, out, errOut) => {
+            if (signal.aborted) {
+              reject(new Error("aborted"));
+              return;
+            }
             const ham = String(out || "");
             if (!ham && err) {
               reject(new Error(String(errOut || err.message)));
@@ -72,6 +91,9 @@ export class TaniYoneticisi {
           }
         );
       });
+      if (!nesilUygula(ben, this.nesil)) {
+        return;
+      }
       const tani = taniHarita(stdout);
       const diags = tani.map((t) => {
         const line = Math.max(0, t.satir - 1);
@@ -89,11 +111,18 @@ export class TaniYoneticisi {
         this.durum.hataYaz(diags.length);
       }
     } catch (e) {
+      if (signal.aborted || (e instanceof Error && e.message === "aborted")) {
+        return;
+      }
+      if (!nesilUygula(ben, this.nesil)) {
+        return;
+      }
       const d = new vscode.Diagnostic(
         new vscode.Range(0, 0, 0, 1),
         e instanceof Error ? e.message : String(e),
         vscode.DiagnosticSeverity.Error
       );
+      d.source = "u++";
       this.koleksiyon.set(doc.uri, [d]);
     } finally {
       try {

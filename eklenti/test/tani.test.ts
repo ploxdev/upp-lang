@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { taniHarita } from "../src/tani";
+import { taniHarita, taniKaynakUppMi } from "../src/tani";
 
 test("ok true boş tanı", () => {
   assert.deepEqual(taniHarita('{"ok":true,"hatalar":[]}\n'), []);
@@ -28,4 +28,16 @@ test("bozuk JSON tek tanı", () => {
   const t = taniHarita("not json");
   assert.equal(t.length, 1);
   assert.match(t[0].mesaj, /JSON/);
+});
+
+test("ok false hatalar yoksa sentetik tanı", () => {
+  const t = taniHarita('{"ok":false}\n');
+  assert.equal(t.length, 1);
+  assert.match(t[0].mesaj, /ok:false/);
+});
+
+test("durum cubuğu yalnızca u++ kaynağı", () => {
+  assert.equal(taniKaynakUppMi("u++"), true);
+  assert.equal(taniKaynakUppMi("u++ güvenlik"), true);
+  assert.equal(taniKaynakUppMi("eslint"), false);
 });

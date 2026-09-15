@@ -1,0 +1,7 @@
+// Güvenlik: işaretçi bildirimi (çağrı/cast sızıntısı yok) guvensiz dışında yasak.
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    sayi* p;
+    don 0;
+}

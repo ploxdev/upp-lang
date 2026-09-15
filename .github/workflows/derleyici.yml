@@ -1,0 +1,81 @@
+name: derleyici
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "araclar/**"
+      - ".github/workflows/derleyici.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "araclar/**"
+      - ".github/workflows/derleyici.yml"
+
+jobs:
+  native-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Native uppc var mı
+        id: uppc
+        shell: bash
+        run: |
+          for c in derleyici/uppc.exe derleyici/uppc derleyici/uppc.out; do
+            if [ -f "$c" ]; then
+              echo "yol=$c" >> "$GITHUB_OUTPUT"
+              echo "var=1" >> "$GITHUB_OUTPUT"
+              echo "bulundu: $c"
+              exit 0
+            fi
+          done
+          echo "var=0" >> "$GITHUB_OUTPUT"
+          echo "native uppc yok (derleyici/ gitignore); bootstrap C veya artifact olmadan atlanır"
+      - name: Testler
+        if: steps.uppc.outputs.var == '1'
+        env:
+          PYTHONUTF8: "1"
+        run: python tests/run_tests.py --uppc ${{ steps.uppc.outputs.yol }}
+      - name: Atlandı
+        if: steps.uppc.outputs.var != '1'
+        run: echo "derleyici/uppc commit edilmiyor; native test skip"
+
+  tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Native uppc var mı
+        id: uppc
+        shell: bash
+        run: |
+          for c in derleyici/uppc derleyici/uppc.out derleyici/uppc.exe; do
+            if [ -f "$c" ]; then
+              echo "yol=$c" >> "$GITHUB_OUTPUT"
+              echo "var=1" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "var=0" >> "$GITHUB_OUTPUT"
+      - name: TSAN runtime + yoğun arkaplan
+        if: steps.uppc.outputs.var == '1'
+        env:
+          PYTHONUTF8: "1"
+          UPP_SANITIZE: "-fsanitize=thread -g -O1"
+        run: |
+          python tests/run_tests.py --uppc ${{ steps.uppc.outputs.yol }} --kategori runtime
+          python tests/run_tests.py --uppc ${{ steps.uppc.outputs.yol }} --dosya tests/positive/20_arkaplan_yogun.upp
+      - name: Atlandı
+        if: steps.uppc.outputs.var != '1'
+        run: echo "native uppc yok; TSAN skip"

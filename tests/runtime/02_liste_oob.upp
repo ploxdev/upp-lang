@@ -1,0 +1,10 @@
+// Runtime: liste.al sınır dışı → panik.
+// @cikis: 1
+// @icerir: [u++ HATA]
+// @icerir: liste
+
+fonk ana() -> sayi {
+    liste[sayi] xs;
+    xs.ekle(1);
+    don xs.al(9);
+}

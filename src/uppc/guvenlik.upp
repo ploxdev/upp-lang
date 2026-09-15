@@ -62,13 +62,7 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
     }
     eger (t == DugumTur.D_DEGISKEN) {
         sayi ty = dugum_a(node);
-        sayi init = dugum_c(node);
-        mantik init_ptr = yanlis;
-        eger (init != 0 && dugum_tur(init) == DugumTur.D_TEKIL) {
-            oto iop = dugum_ad(init);
-            eger (metin_esit(iop, "*") || metin_esit(iop, "&")) { init_ptr = dogru; }
-        }
-        eger (ty != 0 && dugum_ptrd(ty) > 0 && !unsafe && !init_ptr) {
+        eger (ty != 0 && dugum_ptrd(ty) > 0 && !unsafe) {
             hata_guvenlik(dugum_satir(node), dugum_sutun(node), "İşaretçi türü yalnızca 'guvensiz' blokta bildirilebilir.");
         }
     }

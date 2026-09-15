@@ -32,6 +32,8 @@ liste[sayi] l_uzunluk;
 liste[sayi] l_kap;
 liste[sayi] l_veri;
 sayi l_n = 0;
+liste[sayi] l_bos_of;
+liste[sayi] l_bos_kap;
 
 liste[sayi] j_tur;
 liste[metin] j_deger;
@@ -83,6 +85,12 @@ fonk metin_kopya_yeni(metin s) -> metin {
     eger (s == yok) { don o; }
     o += s;
     don o;
+}
+
+fonk intern_sifirla() -> bos {
+    intern_map.temizle();
+    intern_metin.temizle();
+    intern_n = 0;
 }
 
 fonk intern(metin s) -> metin {
@@ -533,9 +541,46 @@ fonk liste_ok(sayi id) -> mantik {
 fonk liste_buyut(sayi id) -> bos {
     sayi eski_of = l_ofset.al(id);
     sayi eski_n = l_uzunluk.al(id);
-    sayi yeni_kap = l_kap.al(id);
+    sayi eski_kap = l_kap.al(id);
+    sayi yeni_kap = eski_kap;
     eger (yeni_kap <= 0) { yeni_kap = 4; }
-    yoksa { yeni_kap = yeni_kap * 2; }
+    yoksa {
+        eger (yeni_kap > 4611686018427387903) {
+            hata_ver(1, 1, "liste kapasitesi taştı");
+            don;
+        }
+        yeni_kap = yeni_kap * 2;
+    }
+    eger (eski_kap > 0 && eski_of + eski_kap == l_veri.uzunluk()) {
+        sayi i = eski_kap;
+        iken (i < yeni_kap) {
+            l_veri.ekle(0);
+            i = i + 1;
+        }
+        l_kap.yaz(id, yeni_kap);
+        don;
+    }
+    sayi bi = 0;
+    iken (bi < l_bos_of.uzunluk()) {
+        eger (l_bos_kap.al(bi) >= yeni_kap) {
+            sayi yeni_of = l_bos_of.al(bi);
+            sayi i = 0;
+            iken (i < eski_n) {
+                l_veri.yaz(yeni_of + i, l_veri.al(eski_of + i));
+                i = i + 1;
+            }
+            l_ofset.yaz(id, yeni_of);
+            l_kap.yaz(id, l_bos_kap.al(bi));
+            l_bos_of.sil(bi);
+            l_bos_kap.sil(bi);
+            eger (eski_kap > 0) {
+                l_bos_of.ekle(eski_of);
+                l_bos_kap.ekle(eski_kap);
+            }
+            don;
+        }
+        bi = bi + 1;
+    }
     sayi yeni_of = l_veri.uzunluk();
     sayi i = 0;
     iken (i < eski_n) {
@@ -548,6 +593,10 @@ fonk liste_buyut(sayi id) -> bos {
     }
     l_ofset.yaz(id, yeni_of);
     l_kap.yaz(id, yeni_kap);
+    eger (eski_kap > 0) {
+        l_bos_of.ekle(eski_of);
+        l_bos_kap.ekle(eski_kap);
+    }
 }
 
 fonk liste_yeni() -> sayi {
@@ -1171,6 +1220,11 @@ fonk os_gcc_cagir(metin gcc, metin c_yol, metin exe_yol) -> sayi {
     eger (gcc == yok || metin_esit(gcc, "") || c_yol == yok || exe_yol == yok) { don 1; }
     metin cmd = metin_kopya_yeni(os_cmd_parca(gcc));
     cmd += " -std=gnu11 ";
+    oto san = upp.ortam_al("UPP_SANITIZE");
+    eger (san != yok && !metin_esit(san, "")) {
+        cmd += san;
+        cmd += " ";
+    }
     eger (os_hedef_al() != 0) {
         cmd += "-pthread ";
         cmd += os_cmd_parca(c_yol);
@@ -1378,6 +1432,8 @@ fonk havuz_sifirla() -> bos {
     l_uzunluk.bosalt();
     l_kap.bosalt();
     l_veri.bosalt();
+    l_bos_of.temizle();
+    l_bos_kap.temizle();
     l_n = 0;
     j_tur.bosalt();
     j_deger.bosalt();
@@ -1397,4 +1453,5 @@ fonk havuz_sifirla() -> bos {
     g_bg_id = 0;
     hata_analiz_topla_ayarla(0);
     hata_sifirla();
+    intern_sifirla();
 }

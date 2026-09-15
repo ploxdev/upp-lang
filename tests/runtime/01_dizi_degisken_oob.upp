@@ -1,0 +1,14 @@
+// Runtime: değişken indeks sınır dışı → panik, UB değil.
+// @cikis: 1
+// @icerir: [u++ HATA]
+// @icerir: indeks
+
+fonk ana() -> sayi {
+    sayi d[3];
+    d[0] = 1;
+    d[1] = 2;
+    d[2] = 3;
+    sayi i = 8;
+    sayi x = d[i];
+    don x;
+}

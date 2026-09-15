@@ -1,0 +1,71 @@
+// Pozitif: eşzamanlı UTF-8 uzunluk (thread-local önbellek).
+// @stdout
+// 6
+// 6
+// 6
+// 6
+// 6
+// 6
+// 6
+// 6
+
+fonk ana() -> sayi {
+    Kilit k;
+    oto t1 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t2 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t3 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t4 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t5 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t6 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t7 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    oto t8 = arkaplan {
+        sayi n = upp.uzunluk("çğıöşü");
+        k.kilitle();
+        upp.satir_yaz("{n}");
+        k.birak();
+    };
+    t1.bekle();
+    t2.bekle();
+    t3.bekle();
+    t4.bekle();
+    t5.bekle();
+    t6.bekle();
+    t7.bekle();
+    t8.bekle();
+    don 0;
+}

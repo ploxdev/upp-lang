@@ -23,6 +23,10 @@ function sonJsonSatir(ham: string): string | undefined {
   return satirlar[satirlar.length - 1];
 }
 
+export function taniKaynakUppMi(source: string | undefined): boolean {
+  return source === "u++" || source === "u++ güvenlik";
+}
+
 export function taniHarita(ham: string): Tani[] {
   const satir = sonJsonSatir(ham || "");
   if (!satir) {
@@ -44,7 +48,18 @@ export function taniHarita(ham: string): Tani[] {
   if (!data || typeof data !== "object") {
     return [];
   }
-  const hatalar = (data as { hatalar?: unknown }).hatalar;
+  const obj = data as { ok?: unknown; hatalar?: unknown };
+  const hatalar = obj.hatalar;
+  if (obj.ok === false && !Array.isArray(hatalar)) {
+    return [
+      {
+        satir: 1,
+        sutun: 1,
+        mesaj: "Analiz başarısız (ok:false).",
+        guvenlik: false,
+      },
+    ];
+  }
   if (!Array.isArray(hatalar)) {
     return [];
   }

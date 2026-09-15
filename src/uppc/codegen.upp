@@ -644,6 +644,14 @@ fonk uret_metot(sayi expr) -> metin {
     don kat(s, ")");
 }
 
+fonk uret_dizi_idx(sayi arr_t, sayi idx_e) -> metin {
+    oto idx = uret_ifade(idx_e);
+    eger (arr_t != 0 && dugum_dims(arr_t) > 0 && dugum_sayi(arr_t) > 0) {
+        don kat4("upp_dizi_idx(", idx, ", ", kat(sayi_metin(dugum_sayi(arr_t)), ")"));
+    }
+    don idx;
+}
+
 fonk uret_ifade(sayi e) -> metin {
     eger (e == 0) { don ""; }
     sayi t = dugum_tur(e);
@@ -719,7 +727,7 @@ fonk uret_ifade(sayi e) -> metin {
         eger (tip_metin_mi(arr_t)) {
             don kat4("upp_metin_kod(", uret_ifade(dugum_a(e)), ", ", kat(uret_ifade(dugum_b(e)), ")"));
         }
-        don kat4(uret_ifade(dugum_a(e)), "[", uret_ifade(dugum_b(e)), "]");
+        don kat4(uret_ifade(dugum_a(e)), "[", uret_dizi_idx(arr_t, dugum_b(e)), "]");
     }
     eger (t == DugumTur.D_DIZI_SABIT) {
         don kat3("{", uret_args(dugum_liste(e)), "}");
@@ -946,10 +954,10 @@ fonk uret_bg_isci(sayi node) -> bos {
                 emit("}");
             }
             eger (linux_mi()) {
-                emit(kat3("{ pthread_t _th; if (pthread_create(&_th, NULL, ", fn, ", _ctx) == 0) { _j.handle = (long long)(uintptr_t)_th; } else {"));
+                emit(kat3("{ pthread_t _th; if (pthread_create(&_th, NULL, ", fn, ", _ctx) == 0) { _j.handle = (long long)(uintptr_t)_th; upp_arkaplan_kaydet(_j.handle); } else {"));
             } yoksa {
                 emit(kat3("{ HANDLE _th = CreateThread(NULL, 0, ", fn, ", _ctx, 0, NULL);"));
-                emit("  if (_th) { _j.handle = (long long)(intptr_t)_th; } else {");
+                emit("  if (_th) { _j.handle = (long long)(intptr_t)_th; upp_arkaplan_kaydet(_j.handle); } else {");
             }
             indent_ekle(1);
             emit("fprintf(stderr, \"[u++] arkaplan: is parcacigi baslatilamadi.\\n\");");
@@ -959,10 +967,10 @@ fonk uret_bg_isci(sayi node) -> bos {
             emit("} }");
         } yoksa {
             eger (linux_mi()) {
-                emit(kat3("{ pthread_t _th; if (pthread_create(&_th, NULL, ", fn, ", NULL) == 0) { _j.handle = (long long)(uintptr_t)_th; } else {"));
+                emit(kat3("{ pthread_t _th; if (pthread_create(&_th, NULL, ", fn, ", NULL) == 0) { _j.handle = (long long)(uintptr_t)_th; upp_arkaplan_kaydet(_j.handle); } else {"));
             } yoksa {
                 emit(kat3("{ HANDLE _th = CreateThread(NULL, 0, ", fn, ", NULL, 0, NULL);"));
-                emit("  if (_th) { _j.handle = (long long)(intptr_t)_th; } else {");
+                emit("  if (_th) { _j.handle = (long long)(intptr_t)_th; upp_arkaplan_kaydet(_j.handle); } else {");
             }
             emit("    fprintf(stderr, \"[u++] arkaplan: is parcacigi baslatilamadi.\\n\");");
             emit("} }");
@@ -1507,6 +1515,9 @@ fonk uret_program(sayi program) -> bos {
     tmp_sifirla();
     eger (linux_mi()) {
         emit("#define UPP_HEDEF_LINUX 1");
+        emit("#ifndef _FILE_OFFSET_BITS");
+        emit("#define _FILE_OFFSET_BITS 64");
+        emit("#endif");
         emit("#ifndef _DEFAULT_SOURCE");
         emit("#define _DEFAULT_SOURCE 1");
         emit("#endif");
@@ -1530,10 +1541,13 @@ fonk uret_program(sayi program) -> bos {
         emit("#include <fcntl.h>");
         emit("#include <errno.h>");
         emit("#include <sys/types.h>");
+        emit("#include <sys/stat.h>");
     } yoksa {
         emit("#include <windows.h>");
         emit("#include <mmsystem.h>");
         emit("#include <tlhelp32.h>");
+        emit("#include <io.h>");
+        emit("#include <sys/stat.h>");
     }
     sayi decls = dugum_liste(program);
     sayi i = 0;

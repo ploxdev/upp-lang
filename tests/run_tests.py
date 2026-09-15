@@ -6,10 +6,12 @@ Kategoriler (tests/ altında otomatik taranır):
   positive/  derle + çalıştır; stdout @stdout ile kıyaslanır
   negative/  derleme [u++ HATA] vermeli
   safety/    derleme [u++ BELLEK GÜVENLİĞİ İHLALİ] vermeli
+  runtime/   derle + çalıştır; sıfır olmayan çıkış + stderr @icerir
 
 Kaynak yorumları:
   // @stdout          sonraki // satırlar beklenen çıktı
-  // @icerir: METİN   derleyici çıktısında bulunması gereken alt dize
+  // @icerir: METİN   derleyici/çalıştırma çıktısında bulunması gereken alt dize
+  // @cikis: N        runtime kategorisinde beklenen süreç çıkış kodu (varsayılan 1)
 
 Kullanım:
   python tests/run_tests.py
@@ -29,11 +31,12 @@ from typing import List, Optional, Tuple
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.dirname(os.path.abspath(__file__))
 
-KATEGORILER = ("positive", "negative", "safety", "ozel")
+KATEGORILER = ("positive", "negative", "safety", "runtime", "ozel")
 KATEGORI_BASLIK = {
     "positive": "Pozitif / E2E",
     "negative": "Negatif / derleyici hataları",
     "safety": "Güvenlik ihlalleri",
+    "runtime": "Çalışma zamanı / güvenli hata",
     "ozel": "Özel / Beta Özellikleri",
 }
 
@@ -98,6 +101,7 @@ def norm_cikti(s: str) -> str:
 class Meta:
     stdout: Optional[str] = None
     icerir: List[str] = field(default_factory=list)
+    cikis: Optional[int] = None
 
 
 def meta_oku(kaynak: str, yol: str) -> Meta:
@@ -120,6 +124,14 @@ def meta_oku(kaynak: str, yol: str) -> Meta:
             parca = s.split(":", 1)[1].strip()
             if parca:
                 meta.icerir.append(parca)
+            continue
+        if s.startswith("// @cikis:"):
+            stdout_mod = False
+            parca = s.split(":", 1)[1].strip()
+            try:
+                meta.cikis = int(parca, 10)
+            except ValueError:
+                meta.cikis = 1
             continue
         if stdout_mod:
             if s.startswith("//"):
@@ -283,6 +295,69 @@ def calistir_hata(
     return Sonuc(kategori, ad, True)
 
 
+def calistir_runtime(uppc: str, yol: str, kaynak: str, meta: Meta, cikti_dir: str, timeout: float) -> Sonuc:
+    ad = os.path.relpath(yol, TESTS)
+    bek_cikis = 1 if meta.cikis is None else meta.cikis
+    os.makedirs(cikti_dir, exist_ok=True)
+    kok = os.path.splitext(os.path.basename(yol))[0]
+    stem = os.path.join(cikti_dir, kok)
+    try:
+        der = subprocess.run(
+            [uppc, yol, "--sadece-derle", "--cikti", stem],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=max(timeout, 60.0),
+            encoding="utf-8",
+            errors="replace",
+        )
+    except subprocess.TimeoutExpired:
+        return Sonuc("runtime", ad, False, f"derleme zaman aşımı ({timeout:.0f}s)")
+    except OSError as err:
+        return Sonuc("runtime", ad, False, str(err))
+    if der.returncode != 0:
+        msg = (der.stderr or der.stdout or "").strip()
+        return Sonuc("runtime", ad, False, f"derleme başarısız (runtime bekleniyordu):\n{msg}")
+    exe_yol = stem + (".exe" if sys.platform == "win32" else ".out")
+    if not os.path.isfile(exe_yol):
+        alt = stem if os.path.isfile(stem) else None
+        if alt is None:
+            return Sonuc("runtime", ad, False, f"üretilen ikili yok: {exe_yol}")
+        exe_yol = alt
+    try:
+        cal = subprocess.run(
+            [exe_yol],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=timeout,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except subprocess.TimeoutExpired:
+        return Sonuc("runtime", ad, False, f"çalıştırma zaman aşımı ({timeout:.0f}s)")
+    except OSError as err:
+        return Sonuc("runtime", ad, False, str(err))
+    if cal.returncode == 0:
+        return Sonuc("runtime", ad, False, "çıkış kodu 0; çalışma zamanı hatası bekleniyordu")
+    if bek_cikis not in (0, 1) and cal.returncode != bek_cikis:
+        return Sonuc(
+            "runtime",
+            ad,
+            False,
+            f"çıkış kodu {cal.returncode}, beklenen {bek_cikis}\nstderr:\n{cal.stderr}",
+        )
+    metin = (cal.stderr or "") + "\n" + (cal.stdout or "")
+    aranan = list(meta.icerir) if meta.icerir else ["[u++ HATA]"]
+    eksik = [p for p in aranan if p not in metin]
+    if eksik:
+        return Sonuc(
+            "runtime",
+            ad,
+            False,
+            "çıktıda yok: " + ", ".join(eksik) + f"\n  bulunan:\n{metin}",
+        )
+    return Sonuc("runtime", ad, True)
+
+
 def dosya_calistir(uppc: str, yol: str, kategori: str, cikti_dir: str, timeout: float) -> Sonuc:
     with open(yol, encoding="utf-8") as handle:
         kaynak = handle.read()
@@ -295,6 +370,8 @@ def dosya_calistir(uppc: str, yol: str, kategori: str, cikti_dir: str, timeout: 
         return calistir_hata(uppc, yol, kaynak, meta, kategori, "[u++ HATA]", timeout)
     if kategori == "safety":
         return calistir_hata(uppc, yol, kaynak, meta, kategori, "BELLEK GÜVENLİĞİ", timeout)
+    if kategori == "runtime":
+        return calistir_runtime(uppc, yol, kaynak, meta, cikti_dir, timeout)
     return Sonuc(kategori, yol, False, f"bilinmeyen kategori: {kategori}")
 
 
@@ -346,12 +423,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="u++ tests/ native test runner")
     parser.add_argument(
         "--kategori",
-        choices=["positive", "negative", "safety", "ozel", "hepsi"],
+        choices=["positive", "negative", "safety", "runtime", "ozel", "hepsi"],
         default="hepsi",
         help="yalnız bu kategoriyi çalıştır (varsayılan: hepsi)",
     )
     parser.add_argument("--uppc", default="", help="Özel native uppc yolu")
     parser.add_argument("--timeout", type=float, default=30.0, help="pozitif exe zaman aşımı (s)")
+    parser.add_argument("--dosya", default="", help="yalnız bu .upp dosyasını çalıştır")
     args = parser.parse_args(argv)
 
     uppc = args.uppc or native_uppc_yol()
@@ -361,7 +439,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     cikti_dir = os.path.join(TESTS, "_cikti")
-    secilen = ["positive", "negative", "safety", "ozel"] if args.kategori == "hepsi" else [args.kategori]
+    if args.dosya:
+        yol = args.dosya
+        if not os.path.isabs(yol):
+            yol = os.path.join(ROOT, yol)
+        if not os.path.isfile(yol):
+            print(kirmizi(f"[HATA] dosya yok: {yol}"))
+            return 1
+        rel = os.path.relpath(yol, TESTS).replace("\\", "/")
+        kat = rel.split("/", 1)[0]
+        if kat not in KATEGORILER:
+            kat = "positive"
+        return raporla([dosya_calistir(uppc, yol, kat, cikti_dir, args.timeout)])
+
+    secilen = (
+        ["positive", "negative", "safety", "runtime", "ozel"]
+        if args.kategori == "hepsi"
+        else [args.kategori]
+    )
     sonuclar: List[Sonuc] = []
 
     for kat in secilen:
@@ -374,6 +469,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         uzantilar: Tuple[str, ...] = (".upp", ".uph") if kat == "negative" else (".upp",)
         dosyalar = upp_dosyalari(klasor, uzantilar)
         if not dosyalar:
+            if kat == "runtime":
+                continue
             sonuclar.append(Sonuc(kat, f"{kat}/ (dosya yok)", False, "hiç .upp bulunamadı"))
             continue
         for yol in dosyalar:

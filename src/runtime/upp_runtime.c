@@ -16,9 +16,39 @@
 #define UPP_WIN 0
 #endif
 
+#if !UPP_WIN
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 typedef uint8_t bayt;
+
+#if defined(_MSC_VER)
+#define UPP_TLS __declspec(thread)
+#else
+#define UPP_TLS __thread
+#endif
+
+static void upp_panik(const char* mesaj) {
+    fprintf(stderr, "[u++ HATA] %s\n", mesaj ? mesaj : "iç hata");
+    fflush(stderr);
+    abort();
+}
+
+static long long upp_dizi_idx(long long i, long long n) {
+    if (i < 0 || i >= n) {
+        fprintf(stderr, "[u++ HATA] indeks %lld, dizi boyutu %lld'yi aşıyor\n", i, n);
+        fflush(stderr);
+        abort();
+    }
+    return i;
+}
 
 #include <errno.h>
 #if !defined(UPP_WIN) || !UPP_WIN
@@ -174,7 +204,7 @@ static long long upp_rastgele(long long mini, long long maxi) {
 
 static char* upp_dosya_oku(const char* yol) {
     FILE* f;
-    long size;
+    long long size;
     char* buf;
     size_t n;
     if (!yol) {
@@ -184,11 +214,19 @@ static char* upp_dosya_oku(const char* yol) {
     if (!f) {
         return NULL;
     }
-    if (fseek(f, 0, SEEK_END) != 0) {
+#if UPP_WIN
+    if (_fseeki64(f, 0, SEEK_END) != 0) {
         fclose(f);
         return NULL;
     }
-    size = ftell(f);
+    size = _ftelli64(f);
+#else
+    if (fseeko(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    size = (long long)ftello(f);
+#endif
     if (size < 0) {
         fclose(f);
         return NULL;
@@ -443,12 +481,19 @@ typedef struct {
     size_t* off;
     unsigned char sig0;
     unsigned char sig1;
+    unsigned ver;
 } UppUtf8Tablo;
 
-static UppUtf8Tablo _u8t;
+static UPP_TLS UppUtf8Tablo _u8t;
+static UPP_TLS char* _upp_geo_p = NULL;
+static UPP_TLS size_t _upp_geo_cap = 0;
+static UPP_TLS unsigned _upp_geo_ver = 0;
 
 static int _u8t_esles(const char* s, size_t n) {
     if (_u8t.s != s || _u8t.nbytes != n || _u8t.ncp < 0 || !_u8t.off) {
+        return 0;
+    }
+    if (s && s == _upp_geo_p && _u8t.ver != _upp_geo_ver) {
         return 0;
     }
     if (n == 0) {
@@ -523,6 +568,7 @@ static int _u8t_hazir(const char* s) {
     }
     _u8t.off = off;
     _u8t.ncp = k;
+    _u8t.ver = (s && s == _upp_geo_p) ? _upp_geo_ver : 0;
     return 1;
 }
 
@@ -691,13 +737,11 @@ static int upp_metin_esit(const char* a, const char* b) {
     return strcmp(a, b) == 0;
 }
 
-static char* _upp_geo_p = NULL;
-static size_t _upp_geo_cap = 0;
-
 static void _upp_geo_birak(const char* p) {
     if (p && p == _upp_geo_p) {
         _upp_geo_p = NULL;
         _upp_geo_cap = 0;
+        _upp_geo_ver++;
     }
 }
 
@@ -710,6 +754,7 @@ static void _u8t_birak_eger(const char* s) {
         _u8t.ncp = -1;
         _u8t.sig0 = 0;
         _u8t.sig1 = 0;
+        _u8t.ver = 0;
     }
 }
 
@@ -759,11 +804,12 @@ static void upp_metin_ekle(char** s, const char* x) {
         if (kopya) {
             free(kopya);
         }
-        return;
+        upp_panik("metin ekleme taşması");
     }
     need = na + nb + 1u;
     if (a && a == _upp_geo_p && _upp_geo_cap >= need) {
         memcpy(a + na, b, nb + 1u);
+        _upp_geo_ver++;
         if (kopya) {
             free(kopya);
         }
@@ -783,13 +829,14 @@ static void upp_metin_ekle(char** s, const char* x) {
             if (kopya) {
                 free(kopya);
             }
-            return;
+            upp_panik("metin bellek yetersiz");
         }
         _u8t_birak_eger(a);
         memcpy(p + na, b, nb + 1u);
         *s = p;
         _upp_geo_p = p;
         _upp_geo_cap = cap;
+        _upp_geo_ver++;
         if (kopya) {
             free(kopya);
         }
@@ -804,7 +851,7 @@ static void upp_metin_ekle(char** s, const char* x) {
         if (kopya) {
             free(kopya);
         }
-        return;
+        upp_panik("metin bellek yetersiz");
     }
     if (na && a) {
         memcpy(p, a, na);
@@ -816,6 +863,7 @@ static void upp_metin_ekle(char** s, const char* x) {
     *s = p;
     _upp_geo_p = p;
     _upp_geo_cap = cap;
+    _upp_geo_ver++;
     if (kopya) {
         free(kopya);
     }
@@ -1018,6 +1066,81 @@ typedef struct ArkaplanIs {
     long long handle;
 } ArkaplanIs;
 
+#define UPP_ARK_MAX 256
+static long long _upp_ark_h[UPP_ARK_MAX];
+static int _upp_ark_n = 0;
+static int _upp_ark_atexit_ok = 0;
+#if UPP_WIN
+static CRITICAL_SECTION _upp_ark_cs;
+static int _upp_ark_cs_ok = 0;
+static void upp_ark_kilit_hazir(void) {
+    if (!_upp_ark_cs_ok) {
+        InitializeCriticalSection(&_upp_ark_cs);
+        _upp_ark_cs_ok = 1;
+    }
+}
+static void upp_ark_kilitle(void) {
+    upp_ark_kilit_hazir();
+    EnterCriticalSection(&_upp_ark_cs);
+}
+static void upp_ark_birak(void) {
+    LeaveCriticalSection(&_upp_ark_cs);
+}
+#else
+static pthread_mutex_t _upp_ark_mu = PTHREAD_MUTEX_INITIALIZER;
+static void upp_ark_kilitle(void) { pthread_mutex_lock(&_upp_ark_mu); }
+static void upp_ark_birak(void) { pthread_mutex_unlock(&_upp_ark_mu); }
+#endif
+
+static void upp_arkaplan_atexit(void) {
+    int i;
+    upp_ark_kilitle();
+    for (i = 0; i < _upp_ark_n; i++) {
+        if (!_upp_ark_h[i]) {
+            continue;
+        }
+#if UPP_WIN
+        CloseHandle((HANDLE)(intptr_t)_upp_ark_h[i]);
+#else
+        pthread_detach((pthread_t)(uintptr_t)_upp_ark_h[i]);
+#endif
+        _upp_ark_h[i] = 0;
+    }
+    _upp_ark_n = 0;
+    upp_ark_birak();
+}
+
+static void upp_arkaplan_kaydet(long long h) {
+    if (!h) {
+        return;
+    }
+    upp_ark_kilitle();
+    if (!_upp_ark_atexit_ok) {
+        atexit(upp_arkaplan_atexit);
+        _upp_ark_atexit_ok = 1;
+    }
+    if (_upp_ark_n < UPP_ARK_MAX) {
+        _upp_ark_h[_upp_ark_n++] = h;
+    }
+    upp_ark_birak();
+}
+
+static void upp_arkaplan_cikar(long long h) {
+    int i;
+    if (!h) {
+        return;
+    }
+    upp_ark_kilitle();
+    for (i = 0; i < _upp_ark_n; i++) {
+        if (_upp_ark_h[i] == h) {
+            _upp_ark_h[i] = _upp_ark_h[_upp_ark_n - 1];
+            _upp_ark_n--;
+            break;
+        }
+    }
+    upp_ark_birak();
+}
+
 typedef struct JSONDeger {
     long long id;
 } JSONDeger;
@@ -1075,6 +1198,7 @@ static void upp_arkaplan_bekle(ArkaplanIs* j) {
     HANDLE h;
     if (!j || !j->handle) return;
     h = (HANDLE)(intptr_t)j->handle;
+    upp_arkaplan_cikar(j->handle);
     WaitForSingleObject(h, INFINITE);
     CloseHandle(h);
     j->handle = 0;
@@ -1084,6 +1208,7 @@ static void upp_arkaplan_bekle(ArkaplanIs* j) {
     pthread_t th;
     if (!j || !j->handle) return;
     th = (pthread_t)(uintptr_t)j->handle;
+    upp_arkaplan_cikar(j->handle);
     pthread_join(th, NULL);
     j->handle = 0;
 }
@@ -2296,7 +2421,14 @@ static int _upp_liste_hazir(UppKolListe* L, int tag) {
 }
 
 static int _upp_liste_buyut(_UppKolListeH* h) {
-    long long nc = h->cap ? h->cap * 2 : 8;
+    long long nc;
+    if (!h) {
+        return 0;
+    }
+    if (h->cap > 0 && h->cap > (LLONG_MAX / 2)) {
+        upp_panik("liste kapasite taşması");
+    }
+    nc = h->cap ? h->cap * 2 : 8;
     if (h->tag == UPP_KT_ONDALIK) {
         double* p = (double*)realloc(h->d, (size_t)nc * sizeof(double));
         if (!p) {
@@ -2323,17 +2455,17 @@ static int _upp_liste_buyut(_UppKolListeH* h) {
 static void upp_liste_ekle(UppKolListe* L, int tag, long long iv, double dv, const char* sv) {
     _UppKolListeH* h;
     if (!_upp_liste_hazir(L, tag)) {
-        return;
+        upp_panik("liste bellek yetersiz");
     }
     h = _upp_liste_hucre(L->id);
     if (!h) {
         return;
     }
     if (h->n >= h->cap && !_upp_liste_buyut(h)) {
-        return;
+        upp_panik("liste bellek yetersiz");
     }
     if (h->n >= h->cap) {
-        return;
+        upp_panik("liste bellek yetersiz");
     }
     if (tag == UPP_KT_ONDALIK) {
         h->d[h->n++] = dv;
@@ -2353,7 +2485,7 @@ static void upp_liste_yaz(UppKolListe* L, int tag, long long i, long long iv, do
     }
     h = _upp_liste_hucre(L->id);
     if (!h || h->tag != tag || i < 0 || i >= h->n) {
-        return;
+        upp_panik("liste indeks sınır dışı");
     }
     if (tag == UPP_KT_ONDALIK) {
         h->d[i] = dv;
@@ -2372,7 +2504,7 @@ static void upp_liste_yaz(UppKolListe* L, int tag, long long i, long long iv, do
 static long long upp_liste_al_i(UppKolListe L, long long i) {
     _UppKolListeH* h = _upp_liste_hucre(L.id);
     if (!h || i < 0 || i >= h->n) {
-        return 0;
+        upp_panik("liste indeks sınır dışı");
     }
     if (h->tag == UPP_KT_ONDALIK || h->tag == UPP_KT_METIN) {
         return 0;
@@ -2386,7 +2518,7 @@ static long long upp_liste_al_i(UppKolListe L, long long i) {
 static double upp_liste_al_d(UppKolListe L, long long i) {
     _UppKolListeH* h = _upp_liste_hucre(L.id);
     if (!h || h->tag != UPP_KT_ONDALIK || i < 0 || i >= h->n) {
-        return 0.0;
+        upp_panik("liste indeks sınır dışı");
     }
     return h->d[i];
 }
@@ -2394,7 +2526,7 @@ static double upp_liste_al_d(UppKolListe L, long long i) {
 static char* upp_liste_al_s(UppKolListe L, long long i) {
     _UppKolListeH* h = _upp_liste_hucre(L.id);
     if (!h || h->tag != UPP_KT_METIN || i < 0 || i >= h->n) {
-        return NULL;
+        upp_panik("liste indeks sınır dışı");
     }
     return h->s[i] ? _upp_kol_kopya(h->s[i]) : NULL;
 }

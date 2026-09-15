@@ -1,7 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { ciktiKok, calistirSatiri, findRepoRoot, hedefBayrak, ikiliUzanti, quote } from "./kok";
+import { ciktiStemRel } from "./ciktiYol";
+import { kayitSonrasiDevam } from "./kayit";
+import { ciktiKok, findRepoRoot, hedefBayrak, ikiliUzanti, quote } from "./kok";
 import type { Motor } from "./motor";
 
 export interface Derleme {
@@ -35,8 +37,8 @@ export function derlemeHazir(
     return undefined;
   }
   const kok = ciktiKok(repo);
-  fs.mkdirSync(kok, { recursive: true });
-  const stem = path.join(kok, path.basename(file, path.extname(file)));
+  const stem = ciktiStemRel(repo, file, kok);
+  fs.mkdirSync(path.dirname(stem), { recursive: true });
   const exePath = `${stem}${ikiliUzanti()}`;
   const hedef = hedefBayrak();
   const compileLine = [quote(motor.yol), quote(file), "--sadece-derle", "--cikti", quote(stem), ...hedef].join(
@@ -50,9 +52,10 @@ function gorevNesne(
   baslik: string,
   satir: string,
   cwd: string,
-  derleMi: boolean
+  derleMi: boolean,
+  kimlik?: string
 ): vscode.Task {
-  const def: vscode.TaskDefinition = { type: "upp", task: taskAd };
+  const def: vscode.TaskDefinition = { type: "upp", task: taskAd, kimlik: kimlik ?? taskAd };
   const task = new vscode.Task(
     def,
     vscode.TaskScope.Workspace,
@@ -84,15 +87,14 @@ class UppGorevSaglayici implements vscode.TaskProvider {
     if (!d) {
       return [];
     }
+    const derle = gorevNesne("derle", "u++: Derle", d.compileLine, d.cwd, true);
+    const calistir = gorevNesne("calistir", "u++: Çalıştır", quote(d.exePath), d.cwd, false);
+    const calistirBag = calistir as vscode.Task & { dependsOn?: vscode.Task; dependsOrder?: number };
+    calistirBag.dependsOn = derle;
+    calistirBag.dependsOrder = 1;
     return [
-      gorevNesne("derle", "u++: Derle", d.compileLine, d.cwd, true),
-      gorevNesne(
-        "calistir",
-        "u++: Çalıştır",
-        calistirSatiri(d.compileLine, d.exePath),
-        d.cwd,
-        false
-      ),
+      derle,
+      calistir,
       gorevNesne(
         "sadece-c",
         "u++: C üret",
@@ -108,8 +110,21 @@ class UppGorevSaglayici implements vscode.TaskProvider {
   }
 }
 
-async function gorevCalistir(ad: string, satir: string, cwd: string, derleMi: boolean): Promise<void> {
-  await vscode.tasks.executeTask(gorevNesne(ad, ad, satir, cwd, derleMi));
+async function gorevCalistirVeBekle(task: vscode.Task): Promise<number> {
+  const kimlik = String(task.definition.kimlik ?? task.name);
+  return new Promise((resolve, reject) => {
+    const sub = vscode.tasks.onDidEndTaskProcess((e) => {
+      if (String(e.execution.task.definition.kimlik ?? "") !== kimlik) {
+        return;
+      }
+      sub.dispose();
+      resolve(e.exitCode ?? 1);
+    });
+    void vscode.tasks.executeTask(task).then(undefined, (err) => {
+      sub.dispose();
+      reject(err);
+    });
+  });
 }
 
 async function aktifUpp(): Promise<vscode.TextDocument | undefined> {
@@ -119,32 +134,57 @@ async function aktifUpp(): Promise<vscode.TextDocument | undefined> {
     return undefined;
   }
   if (ed.document.isDirty) {
-    await ed.document.save();
+    const kaydedildi = await ed.document.save();
+    if (!kayitSonrasiDevam(kaydedildi)) {
+      void vscode.window.showWarningMessage("Dosya kaydedilmedi; derleme iptal.");
+      return undefined;
+    }
   }
   return ed.document;
 }
 
 export function registerDerleme(context: vscode.ExtensionContext, motorAl: () => Motor): void {
   const calis = async (hangisi: "derle" | "calistir" | "c") => {
-    const doc = await aktifUpp();
-    if (!doc) {
-      return;
-    }
-    const d = derlemeHazir(doc, motorAl());
-    if (!d) {
-      return;
-    }
-    if (hangisi === "derle") {
-      await gorevCalistir("u++: Derle", d.compileLine, d.cwd, true);
-    } else if (hangisi === "calistir") {
-      await gorevCalistir("u++: Çalıştır", calistirSatiri(d.compileLine, d.exePath), d.cwd, false);
-    } else {
-      await gorevCalistir(
-        "u++: C üret",
-        d.compileLine.replace("--sadece-derle", "--sadece-c"),
-        d.cwd,
-        false
-      );
+    try {
+      const doc = await aktifUpp();
+      if (!doc) {
+        return;
+      }
+      const d = derlemeHazir(doc, motorAl());
+      if (!d) {
+        return;
+      }
+      if (hangisi === "derle") {
+        const kimlik = `derle-${Date.now()}`;
+        await gorevCalistirVeBekle(gorevNesne("u++: Derle", "u++: Derle", d.compileLine, d.cwd, true, kimlik));
+      } else if (hangisi === "calistir") {
+        const derKimlik = `derle-${Date.now()}`;
+        const derKod = await gorevCalistirVeBekle(
+          gorevNesne("u++: Derle", "u++: Derle", d.compileLine, d.cwd, true, derKimlik)
+        );
+        if (derKod !== 0) {
+          return;
+        }
+        const calKimlik = `calistir-${Date.now()}`;
+        await gorevCalistirVeBekle(
+          gorevNesne("u++: Çalıştır", "u++: Çalıştır", quote(d.exePath), d.cwd, false, calKimlik)
+        );
+      } else {
+        const kimlik = `c-${Date.now()}`;
+        await gorevCalistirVeBekle(
+          gorevNesne(
+            "u++: C üret",
+            "u++: C üret",
+            d.compileLine.replace("--sadece-derle", "--sadece-c"),
+            d.cwd,
+            false,
+            kimlik
+          )
+        );
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      void vscode.window.showErrorMessage(`u++ çalıştırma hatası: ${msg}`);
     }
   };
 

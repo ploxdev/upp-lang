@@ -107,7 +107,10 @@ fonk tur_kopya(sayi t) -> sayi {
     eger (t == 0) {
         don tur_dugum(0, 1, "bos", 0, 0);
     }
-    don tur_dugum(dugum_satir(t), dugum_sutun(t), dugum_ad(t), dugum_ptrd(t), dugum_dims(t));
+    sayi n = tur_dugum(dugum_satir(t), dugum_sutun(t), dugum_ad(t), dugum_ptrd(t), dugum_dims(t));
+    dugum_yaz_sayi(n, dugum_sayi(t));
+    dugum_yaz_bayrak(n, dugum_bayrak(t));
+    don n;
 }
 
 fonk tur_aciklama(sayi t) -> metin {

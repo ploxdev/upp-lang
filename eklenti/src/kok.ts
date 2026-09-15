@@ -44,9 +44,6 @@ export function quote(s: string): string {
   return s;
 }
 
-export function calistirSatiri(compileLine: string, exePath: string): string {
-  if (process.platform === "win32") {
-    return `${compileLine}; if ($LASTEXITCODE -eq 0) { & ${quote(exePath)} }`;
-  }
-  return `${compileLine} && ${quote(exePath)}`;
+export function calistirSatiri(exePath: string): string {
+  return quote(exePath);
 }

@@ -1255,6 +1255,27 @@ fonk tip_ikil(sayi expr) -> sayi {
     don tip_sayi(satir, sutun);
 }
 
+fonk sabit_tamsayi_mi(sayi e) -> mantik {
+    eger (e == 0) { don yanlis; }
+    eger (dugum_tur(e) == DugumTur.D_SABIT && dugum_ptrd(e) == 0) { don dogru; }
+    eger (dugum_tur(e) == DugumTur.D_TEKIL) {
+        oto op = dugum_ad(e);
+        eger (metin_esit(op, "-") || metin_esit(op, "+")) { don sabit_tamsayi_mi(dugum_a(e)); }
+    }
+    don yanlis;
+}
+
+fonk sabit_tamsayi_deger(sayi e) -> sayi {
+    eger (e == 0) { don 0; }
+    eger (dugum_tur(e) == DugumTur.D_SABIT) { don dugum_sayi(e); }
+    eger (dugum_tur(e) == DugumTur.D_TEKIL) {
+        oto op = dugum_ad(e);
+        eger (metin_esit(op, "-")) { don 0 - sabit_tamsayi_deger(dugum_a(e)); }
+        eger (metin_esit(op, "+")) { don sabit_tamsayi_deger(dugum_a(e)); }
+    }
+    don 0;
+}
+
 fonk tip_ifade(sayi e) -> sayi {
     eger (e == 0) { don tip_bos(0, 1); }
     eger (hata_var()) { don tip_bos(dugum_satir(e), dugum_sutun(e)); }
@@ -1309,7 +1330,21 @@ fonk tip_ifade(sayi e) -> sayi {
     eger (t == DugumTur.D_UYE) { don tip_uye(e, yanlis); }
     eger (t == DugumTur.D_INDIS) {
         sayi inner = tip_ifade(dugum_a(e));
-        tip_ifade(dugum_b(e));
+        sayi idx = dugum_b(e);
+        tip_ifade(idx);
+        eger (dugum_dims(inner) > 0 && dugum_sayi(inner) > 0 && sabit_tamsayi_mi(idx)) {
+            sayi iv = sabit_tamsayi_deger(idx);
+            sayi n = dugum_sayi(inner);
+            eger (iv < 0 || iv >= n) {
+                hata_fmt_basla();
+                hata_fmt_yaz("indeks ");
+                hata_fmt_sayi(iv);
+                hata_fmt_yaz(", dizi boyutu ");
+                hata_fmt_sayi(n);
+                hata_fmt_yaz("'yi aşıyor");
+                hata_fmt_ver(dugum_satir(e), dugum_sutun(e));
+            }
+        }
         eger (liste_tur_mi(dugum_ad(inner)) && dugum_ptrd(inner) == 0) {
             don tur_dugum(dugum_satir(e), dugum_sutun(e), liste_elem_ad(dugum_ad(inner)), 0, 0);
         }

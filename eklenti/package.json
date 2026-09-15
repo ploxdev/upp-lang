@@ -192,7 +192,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "tsc -p tsconfig.test.json && node --test out-test/test/kesif.test.js out-test/test/surum.test.js out-test/test/tani.test.js out-test/test/sozluk.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test out-test/test/kesif.test.js out-test/test/surum.test.js out-test/test/tani.test.js out-test/test/sozluk.test.js out-test/test/nesil.test.js out-test/test/kayit.test.js out-test/test/ciktiYol.test.js",
     "vscode:prepublish": "npm run compile",
     "package": "npm run compile && vsce package --allow-missing-repository --skip-license"
   },

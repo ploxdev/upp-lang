@@ -5,6 +5,7 @@ import { DurumCubugu } from "./durum";
 import { findRepoRoot } from "./kok";
 import { indirUrl, motorKur, yolBelirt, type Motor } from "./motor";
 import { registerSozluk } from "./sozlukSaglayici";
+import { taniKaynakUppMi } from "./tani";
 import { TaniYoneticisi } from "./taniYoneticisi";
 
 let durum: DurumCubugu;
@@ -146,7 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       const n = vscode.languages
         .getDiagnostics(ed.document.uri)
-        .filter((d) => d.severity === vscode.DiagnosticSeverity.Error).length;
+        .filter((d) => d.severity === vscode.DiagnosticSeverity.Error && taniKaynakUppMi(d.source)).length;
       durum.hataYaz(n);
     })
   );

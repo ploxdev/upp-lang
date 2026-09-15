@@ -15,11 +15,12 @@ export class BicimSaglayici implements vscode.DocumentFormattingEditProvider {
     }
     const tmp = path.join(os.tmpdir(), `upp-bicim-${process.pid}-${Date.now()}.upp`);
     fs.writeFileSync(tmp, doc.getText(), "utf8");
+    const cwd = doc.uri.scheme === "file" ? path.dirname(doc.uri.fsPath) : os.tmpdir();
     return new Promise((resolve) => {
       execFile(
         motor.yol,
         [tmp, "--bicim"],
-        { timeout: 20000, windowsHide: true, encoding: "utf8" },
+        { cwd, timeout: 20000, windowsHide: true, encoding: "utf8" },
         (err) => {
           try {
             if (err) {

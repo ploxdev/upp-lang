@@ -18,6 +18,9 @@
     "src/sozluk.ts",
     "src/outline.ts",
     "src/tani.ts",
+    "src/nesil.ts",
+    "src/kayit.ts",
+    "src/ciktiYol.ts",
     "test/**/*.ts"
   ]
 }

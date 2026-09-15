@@ -1,0 +1,10 @@
+// Negatif: sabit dizi, sabit indeks sınır dışı.
+// @icerir: [u++ HATA]
+// @icerir: indeks
+// @icerir: aşıyor
+
+fonk ana() -> sayi {
+    sayi d[5];
+    d[99] = 1;
+    don 0;
+}
