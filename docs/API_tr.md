@@ -1,6 +1,6 @@
 # u++ Standart Kütüphane ve Kamu API Referansı (v3.0)
 
-Bu belge, **u++ v3.0** dilinin standart kütüphanesini (`upp.*`), yerleşik türlerini, bellek sahipliği kurallarını ve derleyici arayüzünü tanımlayan resmi Türkçe teknik referanstır.
+Bu belge, **u++ v3.0** dilinin standart kütüphanesini (`upp.*`), yerleşik türlerini, bellek sahipliği kurallarını ve native derleyici arayüzünü tanımlayan resmi Türkçe teknik referanstır.
 
 Sıfırdan dil eğitimi için [OGREN.md](../OGREN.md) kılavuzunu, derleyici iç mimarisi için [derleyici.md](../derleyici.md) belgesini inceleyebilirsiniz. İngilizce eşleniği: [API_en.md](API_en.md).
 
@@ -9,20 +9,22 @@ Sıfırdan dil eğitimi için [OGREN.md](../OGREN.md) kılavuzunu, derleyici iç
 ## İçindekiler
 
 1. [Genel Sözleşme ve Bellek Kuralları](#1-genel-sözleşme-ve-bellek-kuralları)
-2. [Konsol, Giriş ve Kullanıcı Etkileşimi](#2-konsol-giriş-ve-kullanıcı-etkileşimi)
-3. [Dönüşümler ve Yardımcı İşlevler](#3-dönüşümler-ve-yardımcı-işlevler)
-4. [Metin İşlemleri (`upp.metin`)](#4-metin-işlemleri-uppmetin)
-5. [Dosya Sistemi (`upp.dosya`)](#5-dosya-sistemi-uppdosya)
-6. [Yol ve Dizin İşlemleri (`upp.yol`)](#6-yol-ve-dizin-işlemleri-uppyol)
-7. [Sistem ve Süreç Yönetimi (`upp.sistem`)](#7-sistem-ve-süreç-yönetimi-uppsistem)
-8. [Matematik Kütüphanesi (`upp.matematik`)](#8-matematik-kütüphanesi-uppmatematik)
-9. [Veri Yapıları: `liste` ve `harita`](#9-veri-yapıları-liste-ve-harita)
-10. [JSON Kütüphanesi (`upp.json`)](#10-json-kütüphanesi-uppjson)
-11. [Eşzamanlılık ve Senkronizasyon: `arkaplan` ve `Kilit`](#11-eşzamanlılık-ve-senkronizasyon-arkaplan-ve-kilit)
-12. [Düşük Seviyeli Araçlar (`guvensiz` Alanı)](#12-düşük-seviyeli-araçlar-guvensiz-alanı)
-13. [LSP ve Stdio Çerçevesi (`upp.stdio`)](#13-lsp-ve-stdio-çerçevesi-uppstdio)
-14. [Derleyici Komut Satırı Arayüzü (CLI) ve JSON Tanı Şeması](#14-derleyici-komut-satırı-arayüzü-cli-ve-json-tanı-şeması)
-15. [C Tipi ve Sembol Eşleme Tablosu](#15-c-tipi-ve-sembol-eşleme-tablosu)
+2. [Veri Tipleri ve Tip Sistemi](#2-veri-tipleri-ve-tip-sistemi)
+3. [Konsol, Giriş ve Kullanıcı Etkileşimi](#3-konsol-giriş-ve-kullanıcı-etkileşimi)
+4. [Dönüşümler ve Yardımcı İşlevler](#4-dönüşümler-ve-yardımcı-işlevler)
+5. [Metin İşlemleri (`upp.metin`)](#5-metin-işlemleri-uppmetin)
+6. [Dosya Sistemi (`upp.dosya`)](#6-dosya-sistemi-uppdosya)
+7. [Yol ve Dizin İşlemleri (`upp.yol`)](#7-yol-ve-dizin-işlemleri-uppyol)
+8. [Sistem ve Süreç Yönetimi (`upp.sistem`)](#8-sistem-ve-süreç-yönetimi-uppsistem)
+9. [Platforma Özgü API'ler (`upp.windows` ve `upp.linux`)](#9-platforma-özgü-apiler-uppwindows-ve-upplinux)
+10. [Matematik Kütüphanesi (`upp.matematik`)](#10-matematik-kütüphanesi-uppmatematik)
+11. [Veri Yapıları: `liste` ve `harita`](#11-veri-yapıları-liste-ve-harita)
+12. [JSON Kütüphanesi (`upp.json`)](#12-json-kütüphanesi-uppjson)
+13. [Eşzamanlılık ve Senkronizasyon: `arkaplan` ve `Kilit`](#13-eşzamanlılık-ve-senkronizasyon-arkaplan-ve-kilit)
+14. [Düşük Seviyeli Araçlar (`guvensiz` Alanı)](#14-düşük-seviyeli-araçlar-guvensiz-alanı)
+15. [LSP ve Stdio Çerçevesi (`upp.stdio`)](#15-lsp-ve-stdio-çerçevesi-uppstdio)
+16. [Derleyici Komut Satırı Arayüzü (CLI)](#16-derleyici-komut-satırı-arayüzü-cli)
+17. [C Tipi ve Sembol Eşleme Tablosu](#17-c-tipi-ve-sembol-eşleme-tablosu)
 
 ---
 
@@ -30,10 +32,10 @@ Sıfırdan dil eğitimi için [OGREN.md](../OGREN.md) kılavuzunu, derleyici iç
 
 * **Metin Formatı:** Tüm metinler UTF-8 kodlamasındadır. `s[i]`, `upp.uzunluk(s)` ve `upp.metin.kod(s, i)` çağrıları ham C baytlarını değil, doğrudan Unicode **karakter kod noktasını (code point)** döndürür. Geçersiz indeksler `0` verir.
 * **Bellek Sahipliği (`upp.metin_bosalt`):**
-  - Dinamik olarak öbekte (`malloc`) oluşturulan metinlerin (`upp.giris()`, `upp.dosya_oku()`, `upp.sistem.calistir()` çıktısı, çalışma anındaki metin birleştirmeleri `+` ve dize interpolasyonları) işi bittiğinde `upp.metin_bosalt(s)` ile serbest bırakılması gerekir.
+  - Dinamik olarak öbekte (`malloc`) oluşturulan metinlerin (`upp.giris()`, `upp.dosya.oku()`, `upp.sistem.calistir()` çıktısı, çalışma anındaki metin birleştirmeleri `+` ve dize interpolasyonları) işi bittiğinde `upp.metin_bosalt(s)` ile serbest bırakılması gerekir.
   - Sabit dizeler (`"merhaba"`), derleme anında birleştirilen sabitler, `upp.arguman(i)` (tüm süreç boyu yaşar) ve sayısal dönüşler (`kod`, `ileri`) için boşaltma çağrısı **yapılmaz**.
 * **Güvenlik Sınırları:**
-  - Varsayılan u++ kodunda ham işaretçiler (`*`, `&`), doğrudan bellek adresleme (`bellek_ayir`, `bellek_bosalt`), satır içi C kodları (`c_kod { }`) ve harici süreç belleği erişimi (`upp.bellek.*`) yasaktır.
+  - Varsayılan u++ kodunda ham işaretçiler (`*`, `&`), doğrudan bellek adresleme (`bellek_ayir`, `bellek_bosalt`), satır içi C kodları (`c_kod { }`) ve çekirdek süreç belleği erişimi (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`) yasaktır.
   - Bu işlemlere sadece **`guvensiz { ... }`** blokları içerisinde izin verilir.
 * **Hata Yönetimi:**
   - Tam derleme ilk ölümcül hatada durur ve çıkış kodu verir.
@@ -41,9 +43,24 @@ Sıfırdan dil eğitimi için [OGREN.md](../OGREN.md) kılavuzunu, derleyici iç
 
 ---
 
-## 2. Konsol, Giriş ve Kullanıcı Etkileşimi
+## 2. Veri Tipleri ve Tip Sistemi
 
-### Fonksiyon İmzaları ve Açıklamaları
+| Tür Adı | C Karşılığı | Bellek Boyutu | Açıklama |
+|---|---|---|---|
+| `sayi` | `int64_t` | 8 bayt | İşaretli 64-bit tam sayı. Varsayılan sayı türüdür. |
+| `ondalik` | `double` | 8 bayt | Çift duyarlıklı (IEEE 754) kayan noktalı sayı. |
+| `bayt` | `uint8_t` | 1 bayt | İşaretsiz 8-bit tam sayı (0 ile 255 arası). Düşük seviyeli veri ve ikili akışlar içindir. |
+| `metin` | `char*` | 8 bayt | UTF-8 kodlanmış sıfır sonlandırmalı dinamik veya sabit dize. |
+| `mantik` | `bool` | 1 bayt | Mantıksal değer: `dogru` (`true`) veya `yanlis` (`false`). |
+| `bos` | `void` | 0 bayt | Değer döndürmeyen fonksiyonların dönüş tipi. |
+| `dizi[T, N]` | Düz C dizisi | `N * sizeof(T)` | Sabit boyutlu yığın dizisi (`sayi puanlar[10];`). |
+| `liste[T]` | `upp_liste_t*` | Dinamik | Dinamik boyutlu ve tür güvenli sıralı koleksiyon. |
+| `harita[K, V]` | `upp_harita_t*` | Dinamik | Anahtar-değer eşlemesi sunan tür güvenli sözlük yapısı. |
+| `sinif` | `struct` | Değişken | Kullanıcı tanımlı nesne yönelimli veri modeli. |
+
+---
+
+## 3. Konsol, Giriş ve Kullanıcı Etkileşimi
 
 | Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
 |---|---|---|---|
@@ -52,37 +69,16 @@ Sıfırdan dil eğitimi için [OGREN.md](../OGREN.md) kılavuzunu, derleyici iç
 | `upp.hata_yaz` | `metin s` | `bos` | Standart hata akışına (`stderr`) metin yazar. |
 | `upp.hata_satir_yaz` | `metin s` | `bos` | Standart hata akışına (`stderr`) satır sonu ile yazar. |
 | `upp.giris` | — | `metin` | Kullanıcıdan konsoldan bir satır okur. Dönen metin `metin_bosalt` gerektirir. |
-| `upp.mesaj` | `metin baslik, metin govde` | `bos` | Bilgi iletişim kutusu gösterir (Windows `MessageBox`; Linux'ta no-op). |
-| `upp.hata` | `metin baslik, metin govde` | `bos` | Hata iletişim kutusu gösterir (Windows `MessageBox` Hata simgeli). |
-| `upp.ses_cal` | `metin wav_yolu` | `bos` | WAV ses dosyasını çalar (Windows; Linux'ta no-op). |
-
-### Örnek Kullanım
-
-```text
-fonk ana() -> sayi {
-    upp.satir_yaz("Lutfen adinizi girin: ");
-    oto isim = upp.giris();
-
-    eger (upp.uzunluk(isim) == 0) {
-        upp.hata_satir_yaz("Hata: Isim alani bos birakilamaz!");
-    } yoksa {
-        upp.satir_yaz("Merhaba, {isim}!");
-    }
-
-    upp.metin_bosalt(isim);
-    don 0;
-}
-```
 
 ---
 
-## 3. Dönüşümler ve Yardımcı İşlevler
+## 4. Dönüşümler ve Yardımcı İşlevler
 
 | Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
 |---|---|---|---|
 | `upp.uzunluk` | `metin` veya `dizi[]` | `sayi` | Metin için UTF-8 karakter sayısı, dizi için eleman sayısı döner. |
 | `upp.metinden_sayiya` | `metin s` | `sayi` | Metni 64-bit tam sayıya çevirir (`atoll`). |
-| `upp.sayidan_metin` | `sayi n` | `metin` | Sayıyı metne çevirir (`metin_bosalt` gerekir). |
+| `upp.sayidan_metin` | `sayi n` / `bayt b` | `metin` | Sayı veya bayt değerini metne çevirir (`metin_bosalt` gerekir). |
 | `upp.ondalikdan_metin` | `ondalik d` | `metin` | Ondalıklı sayıyı metne çevirir (`metin_bosalt` gerekir). |
 | `upp.metinden_ondalik` | `metin s` | `ondalik` | Metni ondalıklı sayıya çevirir (`atof`). |
 | `upp.min` | `sayi a, sayi b` | `sayi` | İki sayıdan küçük olanı döner. |
@@ -91,163 +87,173 @@ fonk ana() -> sayi {
 | `upp.zaman` | — | `sayi` | Sürecin başlangıcından bu yana geçen milisaniye (monotonic). |
 | `upp.uyut` | `sayi milisaniye` | `bos` | Belirtilen milisaniye kadar akışı duraklatır. |
 | `upp.rastgele` | `sayi min, sayi max` | `sayi` | Verilen kapalı aralıkta (`[min, max]`) rastgele 64-bit sayı üretir. |
+| `upp.platform` | — | `metin` | Çalışma ortamını döner: `"windows"` veya `"linux"`. |
 | `upp.metin_bosalt` | `metin s` | `bos` | Öbekte ayrılmış dinamik dizeyi serbest bırakır. |
 
 ---
 
-## 4. Metin İşlemleri (`upp.metin`)
-
-Dize manipülasyonu için zengin yerleşik işlevler kümesidir.
-
-| Fonksiyon | Parametreler | Dönüş Türü | Bellek / Not |
-|---|---|---|---|
-| `upp.metin.kod` | `metin s, sayi i` | `sayi` | `i`. karakterin Unicode kod noktası. `s[i]` ile eşdeğerdir. |
-| `upp.metin.ileri` | `metin s, sayi i` | `sayi` | `i`. karakterin UTF-8 bayt uzunluğu (1 ile 4 arası). |
-| `upp.metin.kes` | `metin s, sayi basla, sayi uz` | `metin` | `basla` indeksinden `uz` karakter kadar kesit alır. (`metin_bosalt` ister). |
-| `upp.metin.icinde` | `metin kaynak, metin aranan` | `mantik` | `aranan` alt metni kaynakta geçiyor mu? |
-| `upp.metin.degistir` | `metin s, metin eski, metin yeni` | `metin` | Tüm eşleşmeleri değiştirip yeni metin döner (`metin_bosalt` ister). |
-| `upp.metin.kirp` | `metin s` | `metin` | Baştaki ve sondaki boşlukları temizler (`metin_bosalt` ister). |
-| `upp.metin.buyuk` | `metin s` | `metin` | Karakterleri büyük harfe çevirir (`metin_bosalt` ister). |
-| `upp.metin.kucuk` | `metin s` | `metin` | Karakterleri küçük harfe çevirir (`metin_bosalt` ister). |
-| `upp.metin.bol` | `metin s, metin ayirac` | `liste[metin]` | Metni ayıraca göre böler. Boş ayıraç karakter karakter böler. |
-| `upp.metin.birlestir` | `liste[metin] l, metin ayirac` | `metin` | Liste elemanlarını ayraçla birleştirir (`metin_bosalt` ister). |
-
-### Örnek Kullanım
-
-```text
-metin ham = "  elma,armut,muz  ";
-metin temiz = upp.metin.kirp(ham);
-liste[metin] meyveler = upp.metin.bol(temiz, ",");
-
-her (oto meyve in meyveler) {
-    upp.satir_yaz("Meyve: {meyve}");
-}
-
-metin birlesik = upp.metin.birlestir(meyveler, " - ");
-upp.satir_yaz("Sonuc: {birlesik}");
-
-upp.metin_bosalt(temiz);
-upp.metin_bosalt(birlesik);
-meyveler.bosalt();
-```
-
----
-
-## 5. Dosya Sistemi (`upp.dosya`)
+## 5. Metin İşlemleri (`upp.metin`)
 
 | Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
 |---|---|---|---|
-| `upp.dosya_oku` | `metin yol` | `metin` | Dosyanın tüm içeriğini okur. Bulunamazsa `yok` döner. (`metin_bosalt` ister). |
-| `upp.dosya_yaz` | `metin yol, metin icerik` | `mantik` | Dosyayı baştan oluşturur veya üzerine yazar. Başarı durumu döner. |
-| `upp.dosya_ekle` | `metin yol, metin icerik` | `mantik` | Dosyanın sonuna ekleme yapar (append). |
-| `upp.dosya_var_mi` | `metin yol` | `mantik` | Dosyanın varlığını denetler. |
-| `upp.dosya_sil` | `metin yol` | `mantik` | Dosyayı siler. |
-| `upp.dosya.listele` | `metin yol` | `liste[metin]` | Belirtilen dizin altındaki dosya ve klasör isimlerini listeler. |
-| `upp.ortam_al` | `metin degisken_adi` | `metin` | İşletim sistemi ortam değişkenini okur (yoksa `yok`). |
+| `upp.metin.kes` | `metin s, sayi bas, sayi son` | `metin` | Unicode karakter indekslerine göre dizeyi dilimler. |
+| `upp.metin.buyuk` | `metin s` | `metin` | Metni büyük harfe dönüştürür (Türkçe İ/I desteği). |
+| `upp.metin.kucuk` | `metin s` | `metin` | Metni küçük harfe dönüştürür (Türkçe ı/i desteği). |
+| `upp.metin.kirp` | `metin s` | `metin` | Baş ve sondaki boşluk karakterlerini temizler. |
+| `upp.metin.baslangic_mi` | `metin s, metin on` | `mantik` | Metin belirtilen ön ekle başlıyorsa `dogru`. |
+| `upp.metin.bitis_mi` | `metin s, metin son` | `mantik` | Metin belirtilen son ekle bitiyorsa `dogru`. |
+| `upp.metin.bul` | `metin s, metin aranan` | `sayi` | Alt dizenin ilk karakter indeksini döner; yoksa `-1`. |
+| `upp.metin.degistir` | `metin s, metin eski, metin yeni` | `metin` | Alt dizelerin tümünü yenisiyle değiştirir. |
+| `upp.metin.bol` | `metin s, metin ayirici` | `liste[metin]` | Metni ayırıcıya göre bölüp liste olarak döner. |
+| `upp.metin.kod` | `metin s, sayi i` | `sayi` | Karakter indeksindeki Unicode kod noktasını döner. |
+| `upp.metin.ileri` | `metin s, sayi cp_i` | `sayi` | Verilen kod noktası indeksinden bir sonraki kod noktası indeksini döner. |
+| `upp.metin.hex_coz` | `metin hex_str` | `metin` | Onaltılık (hex) dizeyi çözüp ikili/metin tamponuna çevirir. |
 
 ---
 
-## 6. Yol ve Dizin İşlemleri (`upp.yol`)
-
-Platform bağımsız dosya yolu manipülasyonu ve klasör yönetimi sağlar.
+## 6. Dosya Sistemi (`upp.dosya`)
 
 | Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
 |---|---|---|---|
-| `upp.yol.dizin` | `metin yol` | `metin` | Dosya yolunun üst dizinini döner (`metin_bosalt` ister). |
-| `upp.yol.birlestir` | `metin yol1, metin yol2` | `metin` | İki yolu işletim sistemi ayracına (`/` veya `\`) göre birleştirir. |
-| `upp.yol.gercek` | `metin yol` | `metin` | Göreli yolu mutlak kanonik yola çevirir (`realpath`). |
-| `upp.yol.calisma` | — | `metin` | Sürecin o anki çalışma dizinini (CWD) döner. |
-| `upp.yol.mutlak_mi` | `metin yol` | `mantik` | Yolun mutlak olup olmadığını denetler. |
-| `upp.yol.klasor_olustur` | `metin yol` | `mantik` | Yol üzerindeki tüm eksik dizinleri oluşturur (`mkdir -p`). |
+| `upp.dosya.oku` | `metin yol` | `metin` | Dosyanın tüm içeriğini metin olarak okur (`metin_bosalt` gerekir). |
+| `upp.dosya.yaz` | `metin yol, metin icerik` | `mantik` | Dosyaya yazar (varsa üzerine yazar). Başarılıysa `dogru`. |
+| `upp.dosya.ekle` | `metin yol, metin icerik` | `mantik` | Dosyanın sonuna ekleme yapar. |
+| `upp.dosya.var_mi` | `metin yol` | `mantik` | Dosyanın diskte bulunup bulunmadığını kontrol eder. |
+| `upp.dosya.sil` | `metin yol` | `mantik` | Dosyayı diskten siler. |
+| `upp.dosya.boyut` | `metin yol` | `sayi` | Dosyanın bayt cinsinden boyutunu döner (yoksa `-1`). |
 
 ---
 
-## 7. Sistem ve Süreç Yönetimi (`upp.sistem`)
+## 7. Yol ve Dizin İşlemleri (`upp.yol`)
 
-### Komut Satırı Argümanları
+| Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
+|---|---|---|---|
+| `upp.yol.birlestir` | `metin a, metin b` | `metin` | İki dosya yolunu platform ayracına göre güvenle birleştirir. |
+| `upp.yol.dizin` | `metin yol` | `metin` | Yolun ebeveyn dizin adını döner. |
+| `upp.yol.dosya_adi` | `metin yol` | `metin` | Yolun dosya adını (uzantısıyla birlikte) döner. |
+| `upp.yol.uzanti` | `metin yol` | `metin` | Dosya uzantısını (`.txt`, `.upp`) döner. |
+| `upp.yol.dizin_var_mi` | `metin yol` | `mantik` | Klasörün varlığını sorgular. |
+| `upp.yol.dizin_olustur` | `metin yol` | `mantik` | Dizin açar (başarılıysa `dogru`). |
+| `upp.yol.listele` | `metin dizin` | `liste[metin]` | Dizindeki dosya ve klasör isimlerini döner. |
 
-| Fonksiyon | Dönüş Türü | Açıklama |
-|---|---|---|
-| `upp.arguman_sayisi()` | `sayi` | Çalıştırılan programın aldığı argüman sayısı (`argc`). |
-| `upp.arguman(sayi i)` | `metin` | `i`. sıradaki argümanı döner (0 ikilinin kendi yoludur). Boşaltma **gerekmez**. |
+---
 
-### `SurecCikti` Sınıfı ve Sistem Çağrıları
+## 8. Sistem ve Süreç Yönetimi (`upp.sistem`)
 
 ```text
 sinif SurecCikti {
-    metin cikti; // stdout ve stderr birleşik çıktısı (malloc)
-    sayi kod;    // Sürecin çıkış kodu (0 = başarı)
+    sayi kod;
+    metin cikti;
+    mantik basarili;
 }
 ```
 
 | Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
 |---|---|---|---|
-| `upp.sistem.calistir` | `metin komut` | `SurecCikti` | Terminal komutunu çalıştırır. Çıktı `metin_bosalt` ister. |
-| `upp.sistem.komut_bul` | `metin komut_adi` | `metin` | Komutun `PATH` üzerindeki tam yolunu arar (`which`/`where`). |
-| `upp.sistem.exe_dizin` | — | `metin` | Çalışan ikili dosyanın bulunduğu klasörü döner. |
-
-> **Güvenlik Uyarısı:** `upp.sistem.calistir` kabuk üzerinden yürütülür (Windows `cmd.exe /C`, Linux `popen`). Dışarıdan veya kullanıcıdan alınan kontrolsüz girdileri doğrudan komut dizesine eklemeyiniz.
-
----
-
-## 8. Matematik Kütüphanesi (`upp.matematik`)
-
-Tüm trigonometrik fonksiyonlar **radyan** cinsinden çalışır.
-
-### Temel Fonksiyonlar
-* Trigonometri: `sin(r)`, `cos(r)`, `tan(r)`, `asin(v)`, `acos(v)`, `atan(v)`, `atan2(y, x)` (`ondalik -> ondalik`).
-* Üs ve Kök: `karekok(x)`, `us(taban, us)`.
-* Yuvarlama: `yuvarla(x)`, `taban(x)` (floor), `tavan(x)` (ceil).
-* Açı Dönüşümü: `radyan(derece)`, `derece(radyan)`.
-
-### Geometri ve Vektör Yapıları
-
-```text
-sinif Vektor3 { ondalik x; ondalik y; ondalik z; }
-sinif Yonelme { ondalik pitch; ondalik yaw; }
-sinif EkranNokta { ondalik x; ondalik y; mantik gorunur; }
-```
-
-| Fonksiyon | İmzası | Açıklama |
-|---|---|---|
-| `mesafe` | `(Vektor3 a, Vektor3 b) -> ondalik` | İki nokta arasındaki 3B Öklid mesafesini hesaplar. |
-| `mesafe_3d` | `(x1, y1, z1, x2, y2, z2) -> ondalik` | Ham koordinatlarla 3B mesafe hesaplar. |
-| `aci_hesapla` | `(x1, y1, z1, x2, y2, z2) -> Yonelme` | İki nokta arasındaki hedef açısını (`pitch` ve `yaw`) verir. |
-| `dunya_ekran` | `(...) -> EkranNokta` | 3B dünya koordinatını projeksiyon matrisiyle 2B ekrana yansıtır. |
+| `upp.sistem.calistir` | `metin komut` | `SurecCikti` | Sistem kabuğunda komut çalıştırır; çıkış kodu, çıktı ve başarı durumunu döner. |
+| `upp.sistem.ortam_al` | `metin anahtar` | `metin` | Ortam değişkeninin değerini döner (bulunamazsa `""`). |
+| `upp.sistem.ortam_yaz` | `metin anahtar, metin deger`| `mantik` | Ortam değişkenini belirler/yazar. Başarılıysa `dogru`. |
+| `upp.sistem.pid` | — | `sayi` | Çalışan sürecin işlem kimlik numarasını (PID) döner. |
+| `upp.sistem.cikis` | `sayi kod` | `bos` | Süreci verilen çıkış koduyla derhal sonlandırır. |
+| `upp.arguman_sayisi` | — | `sayi` | Komut satırından programa geçilen argüman adedi. |
+| `upp.arguman` | `sayi i` | `metin` | Belirtilen indeksteki komut satırı argümanı (`0` program yoludur). |
 
 ---
 
-## 9. Veri Yapıları: `liste` ve `harita`
+## 9. Platforma Özgü API'ler (`upp.windows` ve `upp.linux`)
 
-### Dinamik Liste: `liste[T]`
-Desteklenen eleman türleri (`T`): `sayi`, `ondalik`, `mantik`, `metin`.
+u++ v3.0 ile platforma özgü işlevler modüler ad alanlarına taşınmıştır.
+
+### Windows API (`upp.windows.*`)
+
+Yalnızca Windows ortamında çalışan sistem ve GUI araçlarıdır.
+
+#### Çekirdek Bellek Erişimi (`upp.windows.bellek.*`)
+> ⚠️ **Güvenlik Uyarısı:** `upp.windows.bellek.*` fonksiyonları çekirdek süreç belleğini manipüle ettiğinden **yalnızca `guvensiz { ... }` blokları içerisinde çağrılabilir.**
+
+* `baglan(metin surec_adi) -> sayi`: Hedef sürecin tanıtıcısını (handle) açar.
+* `kapat(sayi tutamak) -> bos`: Süreç tanıtıcısını kapatır.
+* `modul_bul(metin modul_adi) -> sayi`: Süreç içerisindeki modül veya DLL'in taban adresini bulur.
+* `sayioku(sayi adres) -> sayi`: 64-bit bellek alanını okur.
+* `sayiyaz(sayi adres, sayi deger) -> mantik`: 64-bit bellek alanına yazar.
+* `ondalikoku(sayi adres) -> ondalik`: Kayan noktalı bellek alanını okur.
+* `ondalikyaz(sayi adres, ondalik deger) -> mantik`: Kayan noktalı bellek alanına yazar.
+* `metinoku(sayi adres, sayi uzunluk) -> metin`: Ham bellekten dize okur.
+* `zincir_oku(sayi taban, liste[sayi] ofsetler) -> sayi`: İşaretçi zincirini takip ederek nihai adrese ulaşır.
+* `desen_tara(metin modul, metin desen, metin maske) -> sayi`: Bellekte bayt imzası (AOB pattern) arar.
+* `yama_yap(sayi adres, metin hex_baytlar) -> mantik`: Bellek adresine doğrudan makine kod baytları yamar.
+* `koruma_degistir(sayi adres, sayi boyut, metin bayrak) -> mantik`: Sayfa koruma izinlerini değiştirir.
+* `son_hata() -> sayi`: `GetLastError()` kodunu döner.
+* `okundu() -> sayi`: Son bellek işleminde başarıyla okunan/yazılan bayt miktarını döner.
+
+#### Kullanıcı Arayüzü ve Girdi (`upp.windows.*`)
+* `upp.windows.mesaj(metin baslik, metin govde) -> bos`: Standart Win32 bilgi iletişim kutusu açar.
+* `upp.windows.hata(metin baslik, metin govde) -> bos`: Win32 hata uyarı kutusu açar.
+* `upp.windows.ses_cal(metin wav_yolu) -> bos`: WAV ses dosyasını asenkron çalar.
+* `upp.windows.girdi`: `fare_tasi(x, y)`, `fare_tikla(tus)`, `tus_bas(kod)`, `tus_birak(kod)`, `tus_durumu(kod) -> mantik`.
+* `upp.windows.cizim`: `baslat(pencere)`, `cizgi(...)`, `kutu(...)`, `kutu_dolu(...)`, `metin(...)`, `temizle()`, `bitir()`.
+
+---
+
+### Linux API (`upp.linux.*`)
+
+Yalnızca Linux (POSIX) ortamında çalışan sistem ve süreç yönetimi işlevleridir.
+
+* `upp.linux.pid() -> sayi`: Mevcut sürecin PID değerini döner (`getpid`).
+* `upp.linux.sinyal_gonder(sayi pid, sayi sinyal) -> sayi`: Belirtilen sürece POSIX sinyali (`SIGTERM`, `SIGKILL` vb.) gönderir.
+* `upp.linux.proc_oku(sayi pid, metin dosya) -> metin`: Hedef sürecin `/proc/<pid>/<dosya>` bilgisini okur (`status`, `cmdline` vb.).
+* `upp.linux.sayi_oku(sayi pid, sayi adres) -> sayi`: `process_vm_readv` ile hedef süreç belleğinden sayı okur. *(Yalnızca `guvensiz` blokta çağrılabilir)*
+* `upp.linux.sayi_yaz(sayi pid, sayi adres, sayi deger) -> mantik`: `process_vm_writev` ile hedef süreç belleğine yazar. *(Yalnızca `guvensiz` blokta çağrılabilir)*
+
+---
+
+## 10. Matematik Kütüphanesi (`upp.matematik`)
+
+| Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
+|---|---|---|---|
+| `upp.matematik.karekok` | `ondalik x` | `ondalik` | Karekök hesabı (`sqrt`). |
+| `upp.matematik.us` | `ondalik taban, ondalik us` | `ondalik` | Üs alma (`pow`). |
+| `upp.matematik.sinus` | `ondalik radyan` | `ondalik` | Sinüs açısı (`sin`). |
+| `upp.matematik.kosinus` | `ondalik radyan` | `ondalik` | Kosinüs açısı (`cos`). |
+| `upp.matematik.tanjant` | `ondalik radyan` | `ondalik` | Tanjant açısı (`tan`). |
+| `upp.matematik.taban` | `ondalik x` | `sayi` | Aşağı yuvarlar (`floor`). |
+| `upp.matematik.tavan` | `ondalik x` | `sayi` | Yukarı yuvarlar (`ceil`). |
+| `upp.matematik.yuvarla` | `ondalik x` | `sayi` | En yakın tam sayıya yuvarlar (`round`). |
+| `upp.matematik.pi` | — | `ondalik` | Pi sayısı sabiti ($3.141592653589793$). |
+| `upp.matematik.e` | — | `ondalik` | Euler sayısı sabiti ($2.718281828459045$). |
+
+---
+
+## 11. Veri Yapıları: `liste` ve `harita`
+
+### `liste[T]` (Dinamik Dizi)
 
 | Metot | İmzası | Açıklama |
 |---|---|---|
 | `.ekle(eleman)` | `(T) -> bos` | Listenin sonuna yeni eleman ekler. |
-| `.al(indeks)` | `(sayi) -> T` | Belirtilen indeksteki elemanı döner. `metin` durumunda kopya verir. |
-| `.yaz(indeks, v)` | `(sayi, T) -> bos` | Belirtilen indeksteki elemanı günceller. `liste[i] = v` de geçerlidir. |
-| `.uzunluk()` | `() -> sayi` | Listedeki eleman sayısını verir. |
-| `.bosalt()` | `() -> bos` | Listenin kullandığı tüm hafızayı serbest bırakır. |
+| `.al(indeks)` | `(sayi) -> T` | Belirtilen indisteki elemanı döner. Hatalı indekste program durur. |
+| `.yaz(indeks, deger)` | `(sayi, T) -> bos` | Belirtilen indeksteki elemanın değerini günceller. |
+| `.sil(indeks)` | `(sayi) -> bos` | Belirtilen indeksteki elemanı listeden kaldırır ve diziyi kaydırır. |
+| `.temizle()` | `() -> bos` | Listenin tüm elemanlarını siler ve uzunluğu `0` yapar. |
+| `.uzunluk()` | `() -> sayi` | Listenin mevcut eleman sayısını döner. |
+| `.bosalt()` | `() -> bos` | Listenin tüm hafızasını serbest bırakır. |
 
-### Anahtar-Değer Haritası: `harita[K, V]`
-* Anahtar türleri (`K`): `metin`, `sayi`.
-* Değer türleri (`V`): `sayi`, `ondalik`, `mantik`, `metin`.
+### `harita[K, V]` (Sözlük / Hash Map)
 
 | Metot | İmzası | Açıklama |
 |---|---|---|
-| `.koy(anahtar, deger)` | `(K, V) -> bos` | Çifte anahtar ekler veya varsa değerini günceller. |
+| `.koy(anahtar, deger)` | `(K, V) -> bos` | Anahtar-değer çiftini ekler veya günceller. |
 | `.al(anahtar)` | `(K) -> V` | Anahtarın karşılığı olan değeri döner. |
-| `.var_mi(anahtar)` | `(K) -> mantik` | Anahtarın varlığını sorgular. |
+| `.var_mi(anahtar)` | `(K) -> mantik` | Anahtarın haritada mevcut olup olmadığını sorgular. |
+| `.sil(anahtar)` | `(K) -> bos` | Anahtarı ve ilişkili değerini haritadan kaldırır. |
+| `.temizle()` | `() -> bos` | Haritadaki tüm kayıtları siler. |
 | `.uzunluk()` | `() -> sayi` | Haritadaki kayıt sayısını döner. |
 | `.anahtarlar()` | `() -> liste[K]` | Eklenme sırasına göre tüm anahtarları liste olarak döner. |
 | `.bosalt()` | `() -> bos` | Harita hafızasını temizler. |
 
 ---
 
-## 10. JSON Kütüphanesi (`upp.json`)
-
-JSON ağaçları C seviyesinde bir havuzda yönetilir. u++ tarafında `JSONDeger` tutamacı (`sayi id`) üzerinden erişilir (`id == 0` geçersiz düğümdür).
+## 12. JSON Kütüphanesi (`upp.json`)
 
 | Fonksiyon | Parametreler | Dönüş Türü | Açıklama |
 |---|---|---|---|
@@ -265,23 +271,21 @@ JSON ağaçları C seviyesinde bir havuzda yönetilir. u++ tarafında `JSONDeger
 
 ---
 
-## 11. Eşzamanlılık ve Senkronizasyon: `arkaplan` ve `Kilit`
+## 13. Eşzamanlılık ve Senkronizasyon: `arkaplan` ve `Kilit`
 
 ### `arkaplan` ve `ArkaplanIs`
-Yeni bir işletim sistemi iş parçacığı (POSIX thread veya Windows thread) açar:
 
 ```text
 oto is = arkaplan {
     upp.satir_yaz("Arka planda calisiyor");
 };
-is.bekle(); // veya: upp.bekle(is);
+is.bekle(); // İş parçacığının tamamlanmasını bekler
 ```
 
-* **Yakalama:** Kapsamdan kullanılan `sayi` ve `metin` değerleri **kopyalanarak** iş parçacığına aktarılır.
+* **Yakalama:** Kapsamdan kullanılan `sayi`, `bayt` ve `metin` değerleri **kopyalanarak** iş parçacığına aktarılır.
 * **Kısıtlar:** Koleksiyonlar (`liste`, `harita`) ve `JSONDeger` tutamaçları veri yarışı riskine karşı iş parçacığı içine yakalanamaz.
 
 ### `Kilit` (Mutex)
-Ortak kaynaklara sıralı erişimi garanti altına alır. Tanımlandığı anda işletim sistemi mutex nesnesi bağlanır.
 
 | Metot | İmzası | Açıklama |
 |---|---|---|
@@ -290,93 +294,66 @@ Ortak kaynaklara sıralı erişimi garanti altına alır. Tanımlandığı anda 
 
 ---
 
-## 12. Düşük Seviyeli Araçlar (`guvensiz` Alanı)
+## 14. Düşük Seviyeli Araçlar (`guvensiz` Alanı)
 
-Bu araçlar sadece `guvensiz { ... }` blokları içerisinde kullanılabilir.
-
-### Süreç Belleği Erişimi (`upp.bellek`)
-* `surec_ac(surec_adi) -> sayi`: Hedef sürecin tanıtıcısını (handle) açar.
-* `surec_kapat(tutamak) -> bos`: Süreç tanıtıcısını kapatır.
-* `modul_temel_adresi(tutamak, modul) -> sayi`: Süreç içindeki DLL veya modülün temel adresini bulur.
-* `sayi_oku(tutamak, adres) -> sayi`: 64-bit bellek okur.
-* `sayi_yaz(tutamak, adres, deger) -> mantik`: 64-bit bellek yazar.
-* `ondalik_oku` / `ondalik_yaz`: Ondalıklı bellek işlemleri.
-* `metin_oku(tutamak, adres, uzunluk) -> metin`: Ham bellekten dize okur.
-* `zincir_oku(tutamak, temel, ofsetler[]) -> sayi`: Pointer zincirini takip ederek nihai adresi hesaplar.
-* `desen_tara(tutamak, modul, desen, maske) -> sayi`: Bellekte bayt deseni (AOB signature) arar.
-
-### Sentetik Girdi ve Overlay Çizim
-* `upp.girdi`: `fare_tasi(x, y)`, `fare_tikla(tus)`, `tus_bas(kod)`, `tus_birak(kod)`, `tus_durumu(kod) -> mantik`. (Windows; Linux'ta no-op).
-* `upp.cizim`: `baslat(surec_pencere)`, `cizgi(...)`, `kutu(...)`, `kutu_dolu(...)`, `metin(...)`, `temizle()`, `bitir()`.
+Yalnızca `guvensiz { ... }` bloğu içerisinde izin verilen işlemler:
+1. Ham işaretçi tanımlama ve yönlendirme: `sayi* p`, `&x`.
+2. Ham bellek tahsisi: `bellek_ayir(boyut)`, `bellek_bosalt(adres)`.
+3. Satır içi GNU C kodu enjeksiyonu: `c_kod { printf("Ham C kodu\n"); }`.
+4. Harici süreç belleği erişimi: `upp.windows.bellek.*` ve `upp.linux.sayi_oku / sayi_yaz`.
 
 ---
 
-## 13. LSP ve Stdio Çerçevesi (`upp.stdio`)
+## 15. LSP ve Stdio Çerçevesi (`upp.stdio`)
 
 JSON-RPC ve Language Server Protocol (LSP) protokolü için standart giriş/çıkış akışını ikili çerçeveleme moduna alır (`Content-Length: N\r\n\r\n`).
 
 * `upp.stdio.gelen_oku() -> metin`: LSP başlığını ve gövdesini okuyup JSON metnini döner (`metin_bosalt` gerekir).
-* `upp.stdio.yaz(json_metin) -> bos`: Verilen JSON metnini uygun `Content-Length` başlığı ile `stdout`'a gönderir.
+* `upp.stdio.yaz(metin json_metin) -> bos`: Verilen JSON metnini uygun `Content-Length` başlığı ile `stdout`'a gönderir.
 
 ---
 
-## 14. Derleyici Komut Satırı Arayüzü (CLI) ve JSON Tanı Şeması
+## 16. Derleyici Komut Satırı Arayüzü (CLI)
 
-Hem Python derleyicisi (`uppc.py`) hem de native derleyici (`uppc.exe`) tamamen aynı bayrakları kabul eder:
+u++ derleyicisi (`uppc` / `uppc.exe`), C çalışma zamanı kütüphanesini kendi içine gömülü olarak taşıyan tek ve bağımsız (standalone) bir çalıştırılabilir dosyadır.
 
 ```bash
-python uppc.py <kaynak.upp> [bayraklar]
+uppc <kaynak.upp> [bayraklar]
 ```
 
 ### Bayraklar
 
-| Bayrak | Açıklama |
-|---|---|
-| `--cikti <AD>` | Çıktı dosya adı tabanı. `<AD>.c` ve `<AD>.exe` / `<AD>.out` üretir. |
-| `--sadece-derle` | İkili dosyayı derler ancak otomatik olarak çalıştırmaz. |
-| `--sadece-c` | Yalnızca C kodunu üretir; GCC derleyicisini çağırmaz. |
-| `--linux` | Hedef ABI'yi Linux (POSIX) olarak belirler. |
-| `--windows` | Hedef ABI'yi Windows (Win32) olarak belirler. |
-| `--analiz` | Canlı düzenleyici tanısı. C üretmez ve GCC çağırmaz. 50 hataya kadar JSON döner. |
-| `--json-hata` | Tam derleme yolunu (C + GCC) dener; sonucu tek satır JSON olarak basar. |
-| `--bicim` | Kaynak dosyayı yerinde standart 4 boşluk girintili u++ biçimine sokar. |
-| `--bicim-kontrol` | Dosya biçimlendirilmemişse hata kodu `1` ile çıkar (CI ortamları için). |
-| `--ast` | Ayrıştırılan sözdizim ağacını (AST) ekrana döker. |
-
-### Düzenleyici JSON Tanı Şeması (`--analiz`)
-
-```json
-{
-  "ok": false,
-  "hatalar": [
-    {
-      "satir": 12,
-      "sutun": 8,
-      "tur": "hata",
-      "mesaj": "Tanimlanmamis degisken: 'skor'"
-    }
-  ]
-}
-```
-
-* `tur` değerleri: `"hata"` (sözdizimi veya tür hatası), `"guvenlik"` (bellek güvenliği ihlali), `"gcc"` (bağlayıcı veya C hatası).
+| Bayrak | Alternatif | Açıklama |
+|---|---|---|
+| `-o <AD>` | `--cikti <AD>` | Çıktı dosya adı tabanını belirler (`<AD>.c` ve `<AD>.exe` / `<AD>.out`). |
+| `-c` | `--sadece-c` | Yalnızca C kodunu üretir; GCC derleyicisini çağırmaz. |
+| `--sadece-derle` | — | İkili dosyayı derler ancak otomatik olarak çalıştırmaz. |
+| `--runtime <YOL>` | — | Gömülü çalışma zamanı yerine özel bir `upp_runtime.c` dosyası kullanır. |
+| `-v` | `--surum` | Derleyici sürüm bilgisini basar (`u++ v3.0 (beta)`). |
+| `-h` | `--yardim` | Kullanım ve seçenekler yardım mesajını gösterir. |
+| `--linux` | — | Hedef ABI'yi Linux (POSIX) olarak belirler. |
+| `--windows` | — | Hedef ABI'yi Windows (Win32) olarak belirler. |
+| `--analiz` | — | Canlı düzenleyici tanısı. C üretmez ve GCC çağırmaz. 50 hataya kadar JSON döner. |
+| `--json-hata` | — | Tam derleme yolunu (C + GCC) dener; sonucu tek satır JSON olarak basar. |
+| `--bicim` | — | Kaynak dosyayı yerinde standart 4 boşluk girintili u++ biçimine sokar. |
+| `--bicim-kontrol` | — | Dosya biçimlendirilmemişse hata kodu `1` ile çıkar (CI ortamları için). |
+| `--ast` | — | Ayrıştırılan sözdizim ağacını (AST) ekrana döker. |
 
 ---
 
-## 15. C Tipi ve Sembol Eşleme Tablosu
+## 17. C Tipi ve Sembol Eşleme Tablosu
 
-| u++ Tipi / İfadesi | C11 Karşılığı | Not |
-|---|---|---|
-| `sayi` | `long long` | 64-bit işaretli tam sayı |
-| `ondalik` | `double` | 64-bit IEEE 754 kayan noktalı |
-| `metin` | `char*` | UTF-8 dize |
-| `mantik` | `bool` / `int` | `1` veya `0` |
-| `bos` | `void` | |
-| `yok` | `NULL` | |
-| `liste[T]` | `UppKolListe` | Dinamik dizi yapısı |
-| `harita[K, V]` | `UppKolHarita` | Hash tablosu |
-| `SurecCikti` | `struct UppSurecCikti` | `{ char* cikti; long long kod; }` |
-| `Kilit` | `struct UppKilit` | İşletim sistemi mutex tanıtıcısı |
-| `s[i]` | `upp_metin_kod(s, i)` | Unicode kod noktası dönüşü |
-| `s += t` | `upp_metin_ekle(&s, t)` | Eski belleği serbest bırakıp yeniden boyutlandırır |
-| `upp.sistem.calistir` | `upp_sistem_calistir(...)` | `_popen` / `popen` |
+| u++ Tanımı | Üretilen C Karşılığı |
+|---|---|
+| `sayi` | `int64_t` |
+| `ondalik` | `double` |
+| `bayt` | `uint8_t` |
+| `metin` | `char*` |
+| `mantik` | `bool` |
+| `bos` | `void` |
+| `liste[T]` | `upp_liste_t*` |
+| `harita[K, V]` | `upp_harita_t*` |
+| `upp.yaz(...)` | `upp_yaz(...)` |
+| `upp.windows.bellek.sayioku(...)` | `upp_windows_bellek_sayioku(...)` |
+| `upp.linux.sayi_oku(...)` | `upp_linux_sayi_oku(...)` |
+| `upp.sistem.pid()` | `upp_sistem_pid()` |

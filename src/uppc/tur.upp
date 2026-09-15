@@ -1,5 +1,6 @@
 fonk tip_bos(sayi satir, sayi sutun) -> sayi { don tur_dugum(satir, sutun, "bos", 0, 0); }
 fonk tip_sayi(sayi satir, sayi sutun) -> sayi { don tur_dugum(satir, sutun, "sayi", 0, 0); }
+fonk tip_bayt(sayi satir, sayi sutun) -> sayi { don tur_dugum(satir, sutun, "bayt", 0, 0); }
 fonk tip_ondalik(sayi satir, sayi sutun) -> sayi { don tur_dugum(satir, sutun, "ondalik", 0, 0); }
 fonk tip_metin(sayi satir, sayi sutun) -> sayi { don tur_dugum(satir, sutun, "metin", 0, 0); }
 fonk tip_mantik(sayi satir, sayi sutun) -> sayi { don tur_dugum(satir, sutun, "mantik", 0, 0); }
@@ -31,7 +32,7 @@ fonk tip_metin_mi(sayi t) -> mantik {
     don t != 0 && metin_esit(dugum_ad(t), "metin") && dugum_ptrd(t) == 0;
 }
 fonk tip_tam_sayi_mi(sayi t) -> mantik {
-    don t != 0 && metin_esit(dugum_ad(t), "sayi") && dugum_ptrd(t) == 0 && dugum_dims(t) == 0;
+    don t != 0 && (metin_esit(dugum_ad(t), "sayi") || metin_esit(dugum_ad(t), "bayt")) && dugum_ptrd(t) == 0 && dugum_dims(t) == 0;
 }
 
 fonk arg_tam_sayi_olmali(sayi e) -> bos {
@@ -46,7 +47,7 @@ fonk tip_sayisal_mi(sayi t) -> mantik {
     eger (t == 0) { don yanlis; }
     eger (dugum_ptrd(t) != 0 || dugum_dims(t) != 0) { don yanlis; }
     oto n = dugum_ad(t);
-    don metin_esit(n, "sayi") || metin_esit(n, "ondalik") || metin_esit(n, "mantik");
+    don metin_esit(n, "sayi") || metin_esit(n, "bayt") || metin_esit(n, "ondalik") || metin_esit(n, "mantik");
 }
 fonk tip_sinif_deger_mi(sayi t) -> mantik {
     eger (t == 0 || dugum_ptrd(t) != 0 || dugum_dims(t) != 0) { don yanlis; }
@@ -77,9 +78,10 @@ fonk tip_atanir(sayi dst, sayi src) -> mantik {
         don metin_esit(sn, dugum_ad(dst)) || metin_esit(sn, "sayi") || metin_esit(sn, "mantik");
     }
     eger (tip_enum_mi(src) && metin_esit(dugum_ad(dst), "sayi") && dugum_dims(dst) == 0) { don dogru; }
-    eger (metin_esit(dugum_ad(dst), "ondalik") && (metin_esit(dugum_ad(src), "sayi") || metin_esit(dugum_ad(src), "mantik"))) { don dogru; }
-    eger (metin_esit(dugum_ad(dst), "sayi") && metin_esit(dugum_ad(src), "mantik")) { don dogru; }
-    eger (metin_esit(dugum_ad(dst), "mantik") && metin_esit(dugum_ad(src), "sayi")) { don dogru; }
+    eger (metin_esit(dugum_ad(dst), "ondalik") && (metin_esit(dugum_ad(src), "sayi") || metin_esit(dugum_ad(src), "bayt") || metin_esit(dugum_ad(src), "mantik"))) { don dogru; }
+    eger (metin_esit(dugum_ad(dst), "sayi") && (metin_esit(dugum_ad(src), "mantik") || metin_esit(dugum_ad(src), "bayt"))) { don dogru; }
+    eger (metin_esit(dugum_ad(dst), "mantik") && (metin_esit(dugum_ad(src), "sayi") || metin_esit(dugum_ad(src), "bayt"))) { don dogru; }
+    eger (metin_esit(dugum_ad(dst), "bayt") && (metin_esit(dugum_ad(src), "sayi") || metin_esit(dugum_ad(src), "mantik"))) { don dogru; }
     don yanlis;
 }
 
@@ -576,10 +578,7 @@ fonk tip_uye(sayi expr, mantik as_call) -> sayi {
         }
     }
     eger (metin_esit(on, "upp") || (metin_uzun(on) >= 4 && metin_esit(intern_dilim(on, 0, 4), "upp."))) {
-        eger (metin_esit(on, "upp")) {
-            don tur_dugum(dugum_satir(expr), dugum_sutun(expr), intern(kat("upp.", dugum_ad(expr))), 0, 0);
-        }
-        don tur_dugum(dugum_satir(expr), dugum_sutun(expr), "bos", 0, 0);
+        don tur_dugum(dugum_satir(expr), dugum_sutun(expr), intern(kat3(on, ".", dugum_ad(expr))), 0, 0);
     }
     eger (metin_uzun(on) >= 6 && metin_esit(intern_dilim(on, 0, 6), "modul.")) {
         oto alias = intern_dilim(on, 6, metin_uzun(on));
@@ -684,16 +683,16 @@ fonk upp_donus(metin name, sayi satir, sayi sutun) -> sayi {
     eger (metin_esit(name, "yaz") || metin_esit(name, "satir_yaz") || metin_esit(name, "mesaj") || metin_esit(name, "hata") || metin_esit(name, "uyut") || metin_esit(name, "metin_bosalt") || metin_esit(name, "bekle") || metin_esit(name, "hata_yaz") || metin_esit(name, "hata_satir_yaz")) {
         don tip_bos(satir, sutun);
     }
-    eger (metin_esit(name, "ses_cal") || metin_esit(name, "rastgele") || metin_esit(name, "dosya_yaz") || metin_esit(name, "uzunluk") || metin_esit(name, "min") || metin_esit(name, "max") || metin_esit(name, "mutlak") || metin_esit(name, "arguman_sayisi") || metin_esit(name, "zaman") || metin_esit(name, "metinden_sayiya") || metin_esit(name, "dosya_ekle")) {
+    eger (metin_esit(name, "ses_cal") || metin_esit(name, "rastgele") || metin_esit(name, "dosya_yaz") || metin_esit(name, "uzunluk") || metin_esit(name, "min") || metin_esit(name, "max") || metin_esit(name, "mutlak") || metin_esit(name, "arguman_sayisi") || metin_esit(name, "zaman") || metin_esit(name, "metinden_sayiya") || metin_esit(name, "dosya_ekle") || metin_esit(name, "dosya_boyut")) {
         don tip_sayi(satir, sutun);
     }
-    eger (metin_esit(name, "dosya_oku") || metin_esit(name, "giris") || metin_esit(name, "arguman") || metin_esit(name, "sayidan_metin") || metin_esit(name, "ondalikdan_metin") || metin_esit(name, "ortam_al")) {
+    eger (metin_esit(name, "dosya_oku") || metin_esit(name, "giris") || metin_esit(name, "arguman") || metin_esit(name, "sayidan_metin") || metin_esit(name, "ondalikdan_metin") || metin_esit(name, "ortam_al") || metin_esit(name, "platform")) {
         don tip_metin(satir, sutun);
     }
     eger (metin_esit(name, "metinden_ondalik")) {
         don tip_ondalik(satir, sutun);
     }
-    eger (metin_esit(name, "dosya_var_mi") || metin_esit(name, "dosya_sil")) {
+    eger (metin_esit(name, "dosya_var_mi") || metin_esit(name, "dosya_sil") || metin_esit(name, "ortam_yaz")) {
         don tur_dugum(satir, sutun, "mantik", 0, 0);
     }
     don 0;
@@ -780,6 +779,47 @@ fonk upp_ns_donus(metin ns, metin name, sayi n, sayi satir, sayi sutun) -> sayi 
             }
             don tip_metin(satir, sutun);
         }
+        eger (metin_esit(name, "pid")) {
+            eger (n != 0) {
+                hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz.");
+                don 0;
+            }
+            don tip_sayi(satir, sutun);
+        }
+        don 0;
+    }
+    eger (metin_esit(ns, "linux")) {
+        eger (metin_esit(name, "pid")) {
+            eger (n != 0) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_sayi(satir, sutun);
+        }
+        eger (metin_esit(name, "sinyal_gonder")) {
+            eger (n != 2) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_mantik(satir, sutun);
+        }
+        eger (metin_esit(name, "proc_oku")) {
+            eger (n != 2) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_metin(satir, sutun);
+        }
+        eger (metin_esit(name, "sayi_oku")) {
+            eger (n != 2) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_sayi(satir, sutun);
+        }
+        eger (metin_esit(name, "sayi_yaz")) {
+            eger (n != 3) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_mantik(satir, sutun);
+        }
+        don 0;
+    }
+    eger (metin_esit(ns, "windows")) {
+        eger (metin_esit(name, "mesaj") || metin_esit(name, "hata")) {
+            eger (n != 2) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_bos(satir, sutun);
+        }
+        eger (metin_esit(name, "ses_cal")) {
+            eger (n != 1) { hata_ver(satir, sutun, "Fonksiyon argüman sayısı uyumsuz."); don 0; }
+            don tip_sayi(satir, sutun);
+        }
         don 0;
     }
     eger (metin_esit(ns, "yol")) {
@@ -857,6 +897,20 @@ fonk tip_liste_cagri(sayi expr, metin on) -> sayi {
         }
         don tip_bos(dugum_satir(expr), dugum_sutun(expr));
     }
+    eger (metin_esit(name, "sil")) {
+        eger (liste_uzunluk(args) != 1) {
+            hata_ver(dugum_satir(expr), dugum_sutun(expr), "liste.sil 1 argüman bekler.");
+            don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+        }
+        tip_ifade(liste_al(args, 0));
+        don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+    }
+    eger (metin_esit(name, "temizle")) {
+        eger (liste_uzunluk(args) != 0) {
+            hata_ver(dugum_satir(expr), dugum_sutun(expr), "liste.temizle argüman almaz.");
+        }
+        don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+    }
     hata_ver(dugum_satir(expr), dugum_sutun(expr), "'liste' üzerinde bu metot yok.");
     don tip_bos(dugum_satir(expr), dugum_sutun(expr));
 }
@@ -908,6 +962,20 @@ fonk tip_harita_cagri(sayi expr, metin on) -> sayi {
                 hata_ver(dugum_satir(expr), dugum_sutun(expr), "harita.anahtarlar argüman almaz.");
             }
             don tur_dugum(dugum_satir(expr), dugum_sutun(expr), kat3("liste[", ktur, "]"), 0, 0);
+        }
+        eger (metin_esit(name, "sil")) {
+            eger (liste_uzunluk(args) != 1) {
+                hata_ver(dugum_satir(expr), dugum_sutun(expr), "harita.sil 1 argüman bekler.");
+                don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+            }
+            tip_ifade(liste_al(args, 0));
+            don tip_mantik(dugum_satir(expr), dugum_sutun(expr));
+        }
+        eger (metin_esit(name, "temizle")) {
+            eger (liste_uzunluk(args) != 0) {
+                hata_ver(dugum_satir(expr), dugum_sutun(expr), "harita.temizle argüman almaz.");
+            }
+            don tip_bos(dugum_satir(expr), dugum_sutun(expr));
         }
         hata_ver(dugum_satir(expr), dugum_sutun(expr), "'harita' üzerinde bu metot yok.");
     don tip_bos(dugum_satir(expr), dugum_sutun(expr));
@@ -1032,20 +1100,22 @@ fonk tip_cagri(sayi expr) -> sayi {
                 eger (metin_esit(name, "dunya_ekran")) { don tur_dugum(dugum_satir(expr), dugum_sutun(expr), "EkranNokta", 0, 0); }
                 don tip_ondalik(dugum_satir(expr), dugum_sutun(expr));
             }
-            eger (metin_esit(ns, "bellek")) {
-                eger (metin_esit(name, "sayioku") || metin_esit(name, "oku_ondalik") || metin_esit(name, "yama_yap") || metin_esit(name, "zincir_oku")) {
+            eger (metin_esit(ns, "windows.bellek") || metin_esit(ns, "bellek")) {
+                eger (metin_esit(name, "sayioku") || metin_esit(name, "oku_ondalik") || metin_esit(name, "yama_yap") || metin_esit(name, "zincir_oku") || metin_esit(name, "baglan") || metin_esit(name, "modul_bul") || metin_esit(name, "son_hata") || metin_esit(name, "okundu")) {
                     eger (liste_uzunluk(args) >= 1) { arg_tam_sayi_olmali(liste_al(args, 0)); }
-                } yoksa eger (metin_esit(name, "oku_metin") || metin_esit(name, "sayiyaz") || metin_esit(name, "koruma_degistir")) {
+                } yoksa eger (metin_esit(name, "oku_metin") || metin_esit(name, "sayiyaz") || metin_esit(name, "koruma_degistir") || metin_esit(name, "koruma_degistir_sayi")) {
                     eger (liste_uzunluk(args) >= 1) { arg_tam_sayi_olmali(liste_al(args, 0)); }
                     eger (liste_uzunluk(args) >= 2) { arg_tam_sayi_olmali(liste_al(args, 1)); }
                 } yoksa eger (metin_esit(name, "yaz_ondalik")) {
                     eger (liste_uzunluk(args) >= 1) { arg_tam_sayi_olmali(liste_al(args, 0)); }
                 }
+                eger (metin_esit(name, "oku_ondalik")) { don tip_ondalik(dugum_satir(expr), dugum_sutun(expr)); }
+                eger (metin_esit(name, "oku_metin")) { don tip_metin(dugum_satir(expr), dugum_sutun(expr)); }
                 don tip_sayi(dugum_satir(expr), dugum_sutun(expr));
             }
-            eger (metin_esit(ns, "cizim")) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
-            eger (metin_esit(ns, "girdi")) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
-            eger (metin_esit(ns, "json") || metin_esit(ns, "stdio") || metin_esit(ns, "sistem") || metin_esit(ns, "yol") || metin_esit(ns, "dosya")) {
+            eger (metin_esit(ns, "windows.cizim") || metin_esit(ns, "cizim")) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
+            eger (metin_esit(ns, "windows.girdi") || metin_esit(ns, "girdi")) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
+            eger (metin_esit(ns, "json") || metin_esit(ns, "stdio") || metin_esit(ns, "sistem") || metin_esit(ns, "yol") || metin_esit(ns, "dosya") || metin_esit(ns, "linux") || metin_esit(ns, "windows")) {
                 sayi rt = upp_ns_donus(ns, name, liste_uzunluk(args), dugum_satir(expr), dugum_sutun(expr));
                 eger (rt == 0) {
                     eger (!hata_var()) {
@@ -1637,7 +1707,7 @@ fonk tip_calistir(sayi program) -> bos {
     tip_yerlesik_sinif("Vektor3", "x", "ondalik", "y", "ondalik", "z", "ondalik");
     tip_yerlesik_sinif("ArkaplanIs", "handle", "sayi", "", "", "", "");
     tip_yerlesik_sinif("JSONDeger", "id", "sayi", "", "", "", "");
-    tip_yerlesik_sinif("SurecCikti", "cikti", "metin", "kod", "sayi", "", "");
+    tip_yerlesik_sinif("SurecCikti", "cikti", "metin", "kod", "sayi", "basarili", "mantik");
     tip_yerlesik_sinif("Kilit", "id", "sayi", "", "", "", "");
     sayi decls = dugum_liste(program);
     sayi i = 0;

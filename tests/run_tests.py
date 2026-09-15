@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""u++ dosya tabanlı test runner.
+"""u++ dosya tabanlı test runner (Native derleyici).
 
 Kategoriler (tests/ altında otomatik taranır):
   positive/  derle + çalıştır; stdout @stdout ile kıyaslanır
@@ -14,7 +14,7 @@ Kaynak yorumları:
 Kullanım:
   python tests/run_tests.py
   python tests/run_tests.py --kategori positive
-  python tests/run_tests.py --no-birim
+  python tests/run_tests.py --kategori safety
 """
 
 from __future__ import annotations
@@ -23,34 +23,18 @@ import argparse
 import os
 import subprocess
 import sys
-import tempfile
-import traceback
-import unittest
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.dirname(os.path.abspath(__file__))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
 
-from uppc import (  # noqa: E402
-    SafetyError,
-    UppError,
-    compile_source,
-    find_gcc,
-    host_hedef,
-    invoke_gcc,
-)
-
-
-KATEGORILER = ("positive", "negative", "safety")
+KATEGORILER = ("positive", "negative", "safety", "ozel")
 KATEGORI_BASLIK = {
     "positive": "Pozitif / E2E",
     "negative": "Negatif / derleyici hataları",
     "safety": "Güvenlik ihlalleri",
-    "parite": "Parite (Python ve native aynı stdout)",
-    "birim": "Birim (tests/test_uppc.py)",
+    "ozel": "Özel / Beta Özellikleri",
 }
 
 
@@ -182,41 +166,47 @@ def upp_dosyalari(klasor: str, uzantilar: Tuple[str, ...] = (".upp",)) -> List[s
     return out
 
 
-def derle_kaynak(yol: str, kaynak: str) -> Tuple[Optional[str], Optional[str]]:
-    """(c_kodu, hata_metni). Başarılıysa hata None."""
-    try:
-        c_kodu = compile_source(kaynak, yol, host_hedef())
-        return c_kodu, None
-    except (UppError, SafetyError) as err:
-        return None, str(err)
-    except Exception:
-        return None, traceback.format_exc()
+def native_uppc_yol() -> Optional[str]:
+    for klasor in ("derleyici", "derleme"):
+        for ad in ("uppc.exe", "uppc", "uppc.out"):
+            p = os.path.join(ROOT, klasor, ad)
+            if os.path.isfile(p):
+                return p
+    return None
 
 
-def calistir_pozitif(yol: str, kaynak: str, meta: Meta, cikti_dir: str, timeout: float) -> Sonuc:
+def calistir_pozitif(uppc: str, yol: str, kaynak: str, meta: Meta, cikti_dir: str, timeout: float) -> Sonuc:
     ad = os.path.relpath(yol, TESTS)
     if meta.stdout is None:
         return Sonuc("positive", ad, False, "beklenen stdout yok (// @stdout veya .stdout)")
-    gcc = find_gcc()
-    if gcc is None:
-        return Sonuc("positive", ad, False, "GCC bulunamadı (MinGW-w64 PATH)")
-    c_kodu, hata = derle_kaynak(yol, kaynak)
-    if hata:
-        return Sonuc("positive", ad, False, f"derleme beklenmedik hata:\n{hata}")
-    assert c_kodu is not None
     os.makedirs(cikti_dir, exist_ok=True)
     kok = os.path.splitext(os.path.basename(yol))[0]
-    c_yol = os.path.join(cikti_dir, kok + ".c")
-    exe_yol = os.path.join(cikti_dir, kok + (".exe" if sys.platform == "win32" else ".out"))
-    with open(c_yol, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(c_kodu)
+    stem = os.path.join(cikti_dir, kok)
     try:
-        gcc_son = invoke_gcc(c_yol, exe_yol, host_hedef())
-    except UppError as err:
+        der = subprocess.run(
+            [uppc, yol, "--sadece-derle", "--cikti", stem],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=max(timeout, 60.0),
+            encoding="utf-8",
+            errors="replace",
+        )
+    except subprocess.TimeoutExpired:
+        return Sonuc("positive", ad, False, f"derleme zaman aşımı ({timeout:.0f}s)")
+    except OSError as err:
         return Sonuc("positive", ad, False, str(err))
-    if gcc_son.returncode != 0:
-        msg = (gcc_son.stderr or gcc_son.stdout or "").strip()
-        return Sonuc("positive", ad, False, f"GCC başarısız:\n{msg}")
+
+    if der.returncode != 0:
+        msg = (der.stderr or der.stdout or "").strip()
+        return Sonuc("positive", ad, False, f"derleme başarısız:\n{msg}")
+
+    exe_yol = stem + (".exe" if sys.platform == "win32" else ".out")
+    if not os.path.isfile(exe_yol):
+        alt = stem if os.path.isfile(stem) else None
+        if alt is None:
+            return Sonuc("positive", ad, False, f"üretilen ikili yok: {exe_yol}")
+        exe_yol = alt
+
     try:
         cal = subprocess.run(
             [exe_yol],
@@ -227,18 +217,13 @@ def calistir_pozitif(yol: str, kaynak: str, meta: Meta, cikti_dir: str, timeout:
             errors="replace",
         )
     except subprocess.TimeoutExpired:
-        return Sonuc("positive", ad, False, f"zaman aşımı ({timeout:.0f}s)")
+        return Sonuc("positive", ad, False, f"çalıştırma zaman aşımı ({timeout:.0f}s)")
     except OSError as err:
         kod = getattr(err, "winerror", None)
         if kod == 4551 or "Uygulama Denetimi" in str(err) or "Application Control" in str(err):
-            return Sonuc(
-                "positive",
-                ad,
-                True,
-                f"exe atlandı (Uygulama Denetimi); C/GCC geçti",
-                atlandi=True,
-            )
+            return Sonuc("positive", ad, True, "exe atlandı (Uygulama Denetimi)", atlandi=True)
         return Sonuc("positive", ad, False, str(err))
+
     if cal.returncode != 0:
         return Sonuc(
             "positive",
@@ -258,49 +243,20 @@ def calistir_pozitif(yol: str, kaynak: str, meta: Meta, cikti_dir: str, timeout:
     return Sonuc("positive", ad, True)
 
 
-def native_uppc_yol() -> Optional[str]:
-    for ad in ("uppc.exe", "uppc", "uppc.out"):
-        p = os.path.join(ROOT, "derleme", ad)
-        if os.path.isfile(p):
-            return p
-    return None
-
-
-def calistir_parite(yol: str, kaynak: str, meta: Meta, native: str, cikti_dir: str, timeout: float) -> Sonuc:
+def calistir_hata(
+    uppc: str,
+    yol: str,
+    kaynak: str,
+    meta: Meta,
+    kategori: str,
+    varsayilan_icerir: str,
+    timeout: float = 30.0,
+) -> Sonuc:
     ad = os.path.relpath(yol, TESTS)
-    if meta.stdout is None:
-        return Sonuc("parite", ad, False, "beklenen stdout yok")
-    os.makedirs(cikti_dir, exist_ok=True)
-    kok = os.path.splitext(os.path.basename(yol))[0]
-    stem = os.path.join(cikti_dir, kok)
+    aranan = list(meta.icerir) if meta.icerir else [varsayilan_icerir]
     try:
         der = subprocess.run(
-            [native, yol, "--sadece-derle", "--cikti", stem],
-            cwd=ROOT,
-            capture_output=True,
-            timeout=max(timeout, 60.0),
-            encoding="utf-8",
-            errors="replace",
-        )
-    except subprocess.TimeoutExpired:
-        return Sonuc("parite", ad, False, f"native derleme zaman aşımı ({timeout:.0f}s)")
-    except OSError as err:
-        kod = getattr(err, "winerror", None)
-        if kod == 4551 or "Uygulama Denetimi" in str(err) or "Application Control" in str(err):
-            return Sonuc("parite", ad, True, "native atlandı (Uygulama Denetimi)", atlandi=True)
-        return Sonuc("parite", ad, False, str(err))
-    if der.returncode != 0:
-        msg = (der.stderr or der.stdout or "").strip()
-        return Sonuc("parite", ad, False, f"native derleme başarısız:\n{msg}")
-    exe_yol = stem + (".exe" if sys.platform == "win32" else ".out")
-    if not os.path.isfile(exe_yol):
-        alt = stem if os.path.isfile(stem) else None
-        if alt is None:
-            return Sonuc("parite", ad, False, f"native ikili yok: {exe_yol}")
-        exe_yol = alt
-    try:
-        cal = subprocess.run(
-            [exe_yol],
+            [uppc, yol, "--sadece-c"],
             cwd=ROOT,
             capture_output=True,
             timeout=timeout,
@@ -308,44 +264,14 @@ def calistir_parite(yol: str, kaynak: str, meta: Meta, native: str, cikti_dir: s
             errors="replace",
         )
     except subprocess.TimeoutExpired:
-        return Sonuc("parite", ad, False, f"zaman aşımı ({timeout:.0f}s)")
+        return Sonuc(kategori, ad, False, f"derleme zaman aşımı ({timeout:.0f}s)")
     except OSError as err:
-        kod = getattr(err, "winerror", None)
-        if kod == 4551 or "Uygulama Denetimi" in str(err) or "Application Control" in str(err):
-            return Sonuc("parite", ad, True, "exe atlandı (Uygulama Denetimi)", atlandi=True)
-        return Sonuc("parite", ad, False, str(err))
-    if cal.returncode != 0:
-        return Sonuc(
-            "parite",
-            ad,
-            False,
-            f"çıkış kodu {cal.returncode}\nstderr:\n{cal.stderr}",
-        )
-    bek = norm_cikti(meta.stdout)
-    bul = norm_cikti(cal.stdout)
-    if bek != bul:
-        return Sonuc(
-            "parite",
-            ad,
-            False,
-            f"stdout uyuşmadı\n  beklenen:\n{bek}\n  bulunan:\n{bul}",
-        )
-    return Sonuc("parite", ad, True)
+        return Sonuc(kategori, ad, False, str(err))
 
-
-def calistir_hata(
-    yol: str,
-    kaynak: str,
-    meta: Meta,
-    kategori: str,
-    varsayilan_icerir: str,
-) -> Sonuc:
-    ad = os.path.relpath(yol, TESTS)
-    aranan = list(meta.icerir) if meta.icerir else [varsayilan_icerir]
-    c_kodu, hata = derle_kaynak(yol, kaynak)
-    if c_kodu is not None and hata is None:
+    metin = (der.stderr or "") + "\n" + (der.stdout or "")
+    if der.returncode == 0:
         return Sonuc(kategori, ad, False, "derleme başarılı oldu; hata bekleniyordu")
-    metin = hata or ""
+
     eksik = [p for p in aranan if p not in metin]
     if eksik:
         return Sonuc(
@@ -357,57 +283,29 @@ def calistir_hata(
     return Sonuc(kategori, ad, True)
 
 
-def calistir_birim() -> Sonuc:
-    buf_out = os.path.join(tempfile.gettempdir(), "upp_birim_out.txt")
-    try:
-        loader = unittest.TestLoader()
-        suite = loader.discover(TESTS, pattern="test_*.py")
-        stream = open(buf_out, "w", encoding="utf-8")
-        try:
-            runner = unittest.TextTestRunner(stream=stream, verbosity=1)
-            sonuc = runner.run(suite)
-        finally:
-            stream.close()
-        with open(buf_out, encoding="utf-8") as handle:
-            log = handle.read()
-        n_ok = sonuc.testsRun - len(sonuc.failures) - len(sonuc.errors) - len(sonuc.skipped)
-        ozet = f"{n_ok}/{sonuc.testsRun} geçti"
-        if sonuc.wasSuccessful():
-            return Sonuc("birim", "tests/test_uppc.py", True, ozet)
-        ayr = ozet + "\n" + log[-4000:]
-        return Sonuc("birim", "tests/test_uppc.py", False, ayr)
-    except Exception as err:
-        return Sonuc("birim", "tests/test_uppc.py", False, str(err))
-    finally:
-        try:
-            os.remove(buf_out)
-        except OSError:
-            pass
-
-
-def dosya_calistir(yol: str, kategori: str, cikti_dir: str, timeout: float) -> Sonuc:
+def dosya_calistir(uppc: str, yol: str, kategori: str, cikti_dir: str, timeout: float) -> Sonuc:
     with open(yol, encoding="utf-8") as handle:
         kaynak = handle.read()
     if kaynak.startswith("\ufeff"):
         kaynak = kaynak[1:]
     meta = meta_oku(kaynak, yol)
-    if kategori == "positive":
-        return calistir_pozitif(yol, kaynak, meta, cikti_dir, timeout)
+    if kategori in ("positive", "ozel"):
+        return calistir_pozitif(uppc, yol, kaynak, meta, cikti_dir, timeout)
     if kategori == "negative":
-        return calistir_hata(yol, kaynak, meta, kategori, "[u++ HATA]")
+        return calistir_hata(uppc, yol, kaynak, meta, kategori, "[u++ HATA]", timeout)
     if kategori == "safety":
-        return calistir_hata(yol, kaynak, meta, kategori, "BELLEK GÜVENLİĞİ")
+        return calistir_hata(uppc, yol, kaynak, meta, kategori, "BELLEK GÜVENLİĞİ", timeout)
     return Sonuc(kategori, yol, False, f"bilinmeyen kategori: {kategori}")
 
 
 def raporla(sonuclar: List[Sonuc]) -> int:
     print()
-    print(kalin("u++ test raporu"))
+    print(kalin("u++ Native Test Raporu"))
     print(kalin("=" * 50))
     grup: dict = {}
     for s in sonuclar:
         grup.setdefault(s.kategori, []).append(s)
-    for kat in list(KATEGORILER) + ["parite", "birim"]:
+    for kat in list(KATEGORILER):
         if kat not in grup:
             continue
         print()
@@ -445,28 +343,32 @@ def main(argv: Optional[List[str]] = None) -> int:
                 stream.reconfigure(encoding="utf-8")
             except Exception:
                 pass
-    parser = argparse.ArgumentParser(description="u++ tests/ tarayıcısı ve runner")
+    parser = argparse.ArgumentParser(description="u++ tests/ native test runner")
     parser.add_argument(
         "--kategori",
-        choices=list(KATEGORILER) + ["birim", "parite", "hepsi"],
+        choices=["positive", "negative", "safety", "ozel", "hepsi"],
         default="hepsi",
         help="yalnız bu kategoriyi çalıştır (varsayılan: hepsi)",
     )
-    parser.add_argument("--no-birim", action="store_true", help="tests/test_uppc.py çalıştırma")
-    parser.add_argument("--timeout", type=float, default=20.0, help="pozitif exe zaman aşımı (s)")
+    parser.add_argument("--uppc", default="", help="Özel native uppc yolu")
+    parser.add_argument("--timeout", type=float, default=30.0, help="pozitif exe zaman aşımı (s)")
     args = parser.parse_args(argv)
 
+    uppc = args.uppc or native_uppc_yol()
+    if not uppc or not os.path.isfile(uppc):
+        print(kirmizi(f"[HATA] Native uppc derleyicisi bulunamadı: {uppc or 'derleyici/uppc.exe'}"))
+        print(soluk("Lütfen önce derleyiciyi derleyin."))
+        return 1
+
     cikti_dir = os.path.join(TESTS, "_cikti")
-    if args.kategori == "hepsi":
-        secilen = list(KATEGORILER)
-    elif args.kategori in ("birim", "parite"):
-        secilen = []
-    else:
-        secilen = [args.kategori]
+    secilen = ["positive", "negative", "safety", "ozel"] if args.kategori == "hepsi" else [args.kategori]
     sonuclar: List[Sonuc] = []
 
     for kat in secilen:
-        if kat == "birim":
+        if kat == "ozel":
+            beta_test = os.path.join(TESTS, "test_beta_ozellikleri.upp")
+            if os.path.isfile(beta_test):
+                sonuclar.append(dosya_calistir(uppc, beta_test, "ozel", cikti_dir, args.timeout))
             continue
         klasor = os.path.join(TESTS, kat)
         uzantilar: Tuple[str, ...] = (".upp", ".uph") if kat == "negative" else (".upp",)
@@ -475,30 +377,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             sonuclar.append(Sonuc(kat, f"{kat}/ (dosya yok)", False, "hiç .upp bulunamadı"))
             continue
         for yol in dosyalar:
-            sonuclar.append(dosya_calistir(yol, kat, cikti_dir, args.timeout))
+            sonuclar.append(dosya_calistir(uppc, yol, kat, cikti_dir, args.timeout))
 
-    if args.kategori in ("hepsi", "parite"):
-        native = native_uppc_yol()
-        if native is None:
-            sonuclar.append(
-                Sonuc("parite", "derleme/uppc", True, "native ikili yok; atlandı", atlandi=True)
-            )
-        else:
-            parite_dir = os.path.join(cikti_dir, "parite")
-            pozitifler = upp_dosyalari(os.path.join(TESTS, "positive"), (".upp",))
-            for yol in pozitifler:
-                with open(yol, encoding="utf-8") as handle:
-                    kaynak = handle.read()
-                meta = meta_oku(kaynak, yol)
-                sonuclar.append(calistir_parite(yol, kaynak, meta, native, parite_dir, args.timeout))
-
-    birim_iste = (args.kategori in ("hepsi", "birim")) and not args.no_birim
-    if birim_iste:
-        sonuclar.append(calistir_birim())
-
-    if not sonuclar:
-        print(kirmizi("Çalıştırılacak test yok."))
-        return 1
     return raporla(sonuclar)
 
 

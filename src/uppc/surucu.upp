@@ -304,6 +304,27 @@ fonk yol_uzanti_kes(metin s) -> metin {
     don s;
 }
 
+fonk dil_surum() -> metin {
+    don "3.0.1";
+}
+
+fonk dil_protokol() -> sayi {
+    don 1;
+}
+
+fonk surum_yazdir(mantik json) -> bos {
+    eger (json) {
+        upp.yaz("{\"dil\":\"u++\",\"surum\":\"");
+        upp.yaz(dil_surum());
+        upp.yaz("\",\"protokol\":");
+        upp.yaz(sayi_metin(dil_protokol()));
+        upp.satir_yaz("}");
+    } yoksa {
+        upp.yaz("u++ ");
+        upp.satir_yaz(dil_surum());
+    }
+}
+
 fonk ana() -> sayi {
     sayi argn = upp.arguman_sayisi();
     eger (argn >= 2 && metin_esit(upp.arguman(1), "--havuz-test")) {
@@ -320,10 +341,42 @@ fonk ana() -> sayi {
     mantik bicim_kontrol = yanlis;
     mantik hedef_linux = yanlis;
     mantik hedef_windows = yanlis;
+    mantik surum_iste = yanlis;
+    mantik surum_json = yanlis;
     sayi i = 1;
     iken (i < argn) {
         oto a = upp.arguman(i);
-        eger (metin_esit(a, "--sadece-c")) { sadece_c = dogru; }
+        eger (metin_esit(a, "--surum") || metin_esit(a, "-v")) {
+            surum_iste = dogru;
+        }
+        yoksa eger (metin_esit(a, "--json")) {
+            surum_json = dogru;
+        }
+        yoksa eger (metin_esit(a, "--yardim") || metin_esit(a, "-h")) {
+            upp.satir_yaz("Kullanım: uppc <dosya.upp> [seçenekler]");
+            upp.satir_yaz("");
+            upp.satir_yaz("Seçenekler:");
+            upp.satir_yaz("  --sadece-derle     Derle ve ikili üret, çalıştırma");
+            upp.satir_yaz("  -c, --sadece-c     Sadece C kodu üret (.c)");
+            upp.satir_yaz("  -o, --cikti <ad>   Çıktı dosya adı belirle");
+            upp.satir_yaz("  --runtime <yol>    Özel C çalışma zamanı dosyası");
+            upp.satir_yaz("  --analiz           LSP analiz modu (JSON hata)");
+            upp.satir_yaz("  --json-hata        Hataları JSON biçiminde ver");
+            upp.satir_yaz("  --ast              AST ağacını yazdır");
+            upp.satir_yaz("  --bicim            Dosyayı biçimlendir");
+            upp.satir_yaz("  --bicim-kontrol    Biçim kontrolü yap");
+            upp.satir_yaz("  --windows          Windows hedefi için derle");
+            upp.satir_yaz("  --linux            Linux hedefi için derle");
+            upp.satir_yaz("  -v, --surum        Sürüm: u++ 3.0.1");
+            upp.satir_yaz("  --json             --surum ile makine-okur JSON");
+            upp.satir_yaz("  -h, --yardim       Bu yardım mesajını göster");
+            don 0;
+        }
+        yoksa eger (metin_esit(a, "--runtime")) {
+            i = i + 1;
+            eger (i < argn) { os_runtime_ozel_yaz(upp.arguman(i)); }
+        }
+        yoksa eger (metin_esit(a, "--sadece-c") || metin_esit(a, "-c")) { sadece_c = dogru; }
         yoksa eger (metin_esit(a, "--sadece-derle")) { sadece_derle = dogru; }
         yoksa eger (metin_esit(a, "--ast")) { dump_ast = dogru; }
         yoksa eger (metin_esit(a, "--json-hata")) { json_hata = dogru; }
@@ -332,13 +385,17 @@ fonk ana() -> sayi {
         yoksa eger (metin_esit(a, "--bicim-kontrol")) { bicim_kontrol = dogru; }
         yoksa eger (metin_esit(a, "--linux")) { hedef_linux = dogru; }
         yoksa eger (metin_esit(a, "--windows")) { hedef_windows = dogru; }
-        yoksa eger (metin_esit(a, "--cikti")) {
+        yoksa eger (metin_esit(a, "--cikti") || metin_esit(a, "-o")) {
             i = i + 1;
             eger (i < argn) { cikti = upp.arguman(i); }
-        } yoksa eger (metin_cp(a, 0) != 45) {
+        } yoksa eger (metin_uzun(a) > 0 && metin_cp(a, 0) != 45) {
             kaynak_yol = a;
         }
         i = i + 1;
+    }
+    eger (surum_iste) {
+        surum_yazdir(surum_json);
+        don 0;
     }
     eger (bicim && bicim_kontrol) {
         upp.satir_yaz("[u++ HATA] --bicim ve --bicim-kontrol birlikte kullanılamaz.");

@@ -149,6 +149,7 @@ fonk anahtar_mi(metin s) -> mantik {
     eger (metin_esit(s, "dur")) { don dogru; }
     eger (metin_esit(s, "devam")) { don dogru; }
     eger (metin_esit(s, "sayi")) { don dogru; }
+    eger (metin_esit(s, "bayt")) { don dogru; }
     eger (metin_esit(s, "ondalik")) { don dogru; }
     eger (metin_esit(s, "metin")) { don dogru; }
     eger (metin_esit(s, "mantik")) { don dogru; }
@@ -179,6 +180,7 @@ fonk anahtar_mi(metin s) -> mantik {
 
 fonk tur_adi_mi(metin s) -> mantik {
     eger (metin_esit(s, "sayi")) { don dogru; }
+    eger (metin_esit(s, "bayt")) { don dogru; }
     eger (metin_esit(s, "ondalik")) { don dogru; }
     eger (metin_esit(s, "metin")) { don dogru; }
     eger (metin_esit(s, "mantik")) { don dogru; }
@@ -190,6 +192,7 @@ fonk tur_adi_mi(metin s) -> mantik {
 
 fonk koleksiyon_elem_mi(metin s) -> mantik {
     eger (metin_esit(s, "sayi")) { don dogru; }
+    eger (metin_esit(s, "bayt")) { don dogru; }
     eger (metin_esit(s, "ondalik")) { don dogru; }
     eger (metin_esit(s, "mantik")) { don dogru; }
     eger (metin_esit(s, "metin")) { don dogru; }
@@ -241,6 +244,7 @@ fonk koleksiyon_etiket(metin e) -> sayi {
     eger (metin_esit(e, "ondalik")) { don 1; }
     eger (metin_esit(e, "mantik")) { don 2; }
     eger (metin_esit(e, "metin")) { don 3; }
+    eger (metin_esit(e, "bayt")) { don 4; }
     don 0;
 }
 

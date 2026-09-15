@@ -16,6 +16,10 @@
 #define UPP_WIN 0
 #endif
 
+#include <stdint.h>
+#include <stdbool.h>
+typedef uint8_t bayt;
+
 #include <errno.h>
 #if !defined(UPP_WIN) || !UPP_WIN
 #include <unistd.h>
@@ -908,6 +912,23 @@ static char* upp_metin_kucuk(const char* s) {
     return p;
 }
 
+static char* upp_metin_hex_coz(const char* hex) {
+    size_t len = hex ? strlen(hex) : 0;
+    size_t i, j = 0;
+    char* buf;
+    if (len == 0) return upp_metin_kopya("");
+    buf = (char*)malloc(len / 2 + 1);
+    if (!buf) return upp_metin_kopya("");
+    for (i = 0; i + 1 < len; i += 2) {
+        char c1 = hex[i], c2 = hex[i + 1];
+        int v1 = (c1 >= '0' && c1 <= '9') ? (c1 - '0') : ((c1 >= 'a' && c1 <= 'f') ? (c1 - 'a' + 10) : ((c1 >= 'A' && c1 <= 'F') ? (c1 - 'A' + 10) : 0));
+        int v2 = (c2 >= '0' && c2 <= '9') ? (c2 - '0') : ((c2 >= 'a' && c2 <= 'f') ? (c2 - 'a' + 10) : ((c2 >= 'A' && c2 <= 'F') ? (c2 - 'A' + 10) : 0));
+        buf[j++] = (char)((v1 << 4) | v2);
+    }
+    buf[j] = 0;
+    return buf;
+}
+
 static long long upp_metin_icinde(const char* s, const char* ara) {
     const char* p;
     size_t n;
@@ -1004,6 +1025,7 @@ typedef struct JSONDeger {
 typedef struct SurecCikti {
     char* cikti;
     long long kod;
+    int basarili;
 } SurecCikti;
 
 typedef struct Kilit {
@@ -1022,6 +1044,7 @@ typedef struct UppKolHarita {
 #define UPP_KT_ONDALIK 1
 #define UPP_KT_MANTIK 2
 #define UPP_KT_METIN 3
+#define UPP_KT_BAYT 4
 #define UPP_KOLLEKSIYON_MAX 1000000LL
 
 typedef struct {
@@ -2316,6 +2339,8 @@ static void upp_liste_ekle(UppKolListe* L, int tag, long long iv, double dv, con
         h->d[h->n++] = dv;
     } else if (tag == UPP_KT_METIN) {
         h->s[h->n++] = _upp_kol_kopya(sv);
+    } else if (tag == UPP_KT_BAYT) {
+        h->i[h->n++] = (long long)((unsigned char)iv);
     } else {
         h->i[h->n++] = iv;
     }
@@ -2337,6 +2362,8 @@ static void upp_liste_yaz(UppKolListe* L, int tag, long long i, long long iv, do
             free(h->s[i]);
         }
         h->s[i] = _upp_kol_kopya(sv);
+    } else if (tag == UPP_KT_BAYT) {
+        h->i[i] = (long long)((unsigned char)iv);
     } else {
         h->i[i] = iv;
     }
@@ -2349,6 +2376,9 @@ static long long upp_liste_al_i(UppKolListe L, long long i) {
     }
     if (h->tag == UPP_KT_ONDALIK || h->tag == UPP_KT_METIN) {
         return 0;
+    }
+    if (h->tag == UPP_KT_BAYT) {
+        return (long long)((unsigned char)h->i[i]);
     }
     return h->i[i];
 }
@@ -2395,6 +2425,45 @@ static void upp_liste_bosalt(UppKolListe* L) {
     free(h->s);
     memset(h, 0, sizeof(_UppKolListeH));
     L->id = 0;
+}
+
+static void upp_liste_sil(UppKolListe* L, long long idx) {
+    _UppKolListeH* h;
+    long long j;
+    if (!L || L->id == 0) return;
+    h = _upp_liste_hucre(L->id);
+    if (!h || idx < 0 || idx >= h->n) return;
+    if (h->tag == UPP_KT_METIN) {
+        if (h->s[idx]) free(h->s[idx]);
+        for (j = idx; j < h->n - 1; j++) {
+            h->s[j] = h->s[j + 1];
+        }
+        h->s[h->n - 1] = NULL;
+    } else if (h->tag == UPP_KT_ONDALIK) {
+        for (j = idx; j < h->n - 1; j++) {
+            h->d[j] = h->d[j + 1];
+        }
+    } else {
+        for (j = idx; j < h->n - 1; j++) {
+            h->i[j] = h->i[j + 1];
+        }
+    }
+    h->n--;
+}
+
+static void upp_liste_temizle(UppKolListe* L) {
+    _UppKolListeH* h;
+    long long j;
+    if (!L || L->id == 0) return;
+    h = _upp_liste_hucre(L->id);
+    if (!h) return;
+    if (h->tag == UPP_KT_METIN && h->s) {
+        for (j = 0; j < h->n; j++) {
+            if (h->s[j]) free(h->s[j]);
+            h->s[j] = NULL;
+        }
+    }
+    h->n = 0;
 }
 
 static _UppKolHaritaH* _upp_harita_hucre(long long id) {
@@ -2637,6 +2706,55 @@ static void upp_harita_bosalt(UppKolHarita* H) {
     free(h->v_s);
     memset(h, 0, sizeof(_UppKolHaritaH));
     H->id = 0;
+}
+
+static long long upp_harita_sil(UppKolHarita* H, int ktag, long long ki, const char* ks) {
+    _UppKolHaritaH* h;
+    long long idx, j;
+    if (!H || H->id == 0) return 0;
+    h = _upp_harita_hucre(H->id);
+    if (!h || h->ktag != ktag) return 0;
+    idx = _upp_harita_bul(h, ki, ks);
+    if (idx < 0) return 0;
+    if (h->ktag == UPP_KT_METIN && h->k_s[idx]) {
+        free(h->k_s[idx]);
+    }
+    if (h->vtag == UPP_KT_METIN && h->v_s[idx]) {
+        free(h->v_s[idx]);
+    }
+    for (j = idx; j < h->n - 1; j++) {
+        if (h->ktag == UPP_KT_METIN) h->k_s[j] = h->k_s[j + 1];
+        else h->k_i[j] = h->k_i[j + 1];
+
+        if (h->vtag == UPP_KT_METIN) h->v_s[j] = h->v_s[j + 1];
+        else if (h->vtag == UPP_KT_ONDALIK) h->v_d[j] = h->v_d[j + 1];
+        else h->v_i[j] = h->v_i[j + 1];
+    }
+    if (h->ktag == UPP_KT_METIN) h->k_s[h->n - 1] = NULL;
+    if (h->vtag == UPP_KT_METIN) h->v_s[h->n - 1] = NULL;
+    h->n--;
+    return 1;
+}
+
+static void upp_harita_temizle(UppKolHarita* H) {
+    _UppKolHaritaH* h;
+    long long j;
+    if (!H || H->id == 0) return;
+    h = _upp_harita_hucre(H->id);
+    if (!h) return;
+    if (h->ktag == UPP_KT_METIN && h->k_s) {
+        for (j = 0; j < h->n; j++) {
+            if (h->k_s[j]) free(h->k_s[j]);
+            h->k_s[j] = NULL;
+        }
+    }
+    if (h->vtag == UPP_KT_METIN && h->v_s) {
+        for (j = 0; j < h->n; j++) {
+            if (h->v_s[j]) free(h->v_s[j]);
+            h->v_s[j] = NULL;
+        }
+    }
+    h->n = 0;
 }
 
 static long long upp_harita_anahtar_i(UppKolHarita H, long long i) {
@@ -3891,6 +4009,7 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
     SurecCikti r;
     r.cikti = NULL;
     r.kod = 1;
+    r.basarili = 0;
     if (!komut || !komut[0]) {
         return r;
     }
@@ -3959,6 +4078,7 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
     CloseHandle(pi.hThread);
     r.cikti = cikti;
     r.kod = (long long)exit_kod;
+    r.basarili = (exit_kod == 0);
     return r;
 }
 #else
@@ -3973,6 +4093,7 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
     SurecCikti r;
     r.cikti = NULL;
     r.kod = 1;
+    r.basarili = 0;
     if (!komut || !komut[0]) {
         return r;
     }
@@ -4016,6 +4137,7 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
         r.kod = (long long)st;
 #endif
     }
+    r.basarili = (r.kod == 0);
     return r;
 }
 #endif
@@ -4118,6 +4240,149 @@ static char* upp_sistem_exe_dizin(void) {
 #endif
 #endif
 }
+
+static const char* upp_platform(void) {
+#if UPP_WIN
+    return "windows";
+#else
+    return "linux";
+#endif
+}
+
+static long long upp_sistem_pid(void) {
+#if UPP_WIN
+    return (long long)GetCurrentProcessId();
+#else
+    return (long long)getpid();
+#endif
+}
+
+static long long upp_ortam_yaz(const char* ad, const char* deger) {
+    if (!ad || !ad[0]) return 0;
+#if UPP_WIN
+    return _putenv_s(ad, deger ? deger : "") == 0 ? 1 : 0;
+#else
+    if (!deger) return unsetenv(ad) == 0 ? 1 : 0;
+    return setenv(ad, deger, 1) == 0 ? 1 : 0;
+#endif
+}
+
+static long long upp_dosya_boyut(const char* yol) {
+    if (!yol) return -1;
+#if UPP_WIN
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    LARGE_INTEGER size;
+    if (!GetFileAttributesExA(yol, GetFileExInfoStandard, &fad)) return -1;
+    size.LowPart = fad.nFileSizeLow;
+    size.HighPart = fad.nFileSizeHigh;
+    return (long long)size.QuadPart;
+#else
+    struct stat st;
+    if (stat(yol, &st) != 0) return -1;
+    return (long long)st.st_size;
+#endif
+}
+
+/* Linux-specific APIs (upp.linux.*) */
+#if !UPP_WIN && !defined(_WIN32)
+static long long upp_linux_pid(void) {
+    return (long long)getpid();
+}
+static long long upp_linux_sinyal_gonder(long long pid, long long sig) {
+    return kill((pid_t)pid, (int)sig) == 0 ? 1 : 0;
+}
+static char* upp_linux_proc_oku(long long pid, const char* dosya) {
+    char path[256];
+    FILE* f;
+    char* buf;
+    size_t n = 0, cap = 4096;
+    char tmp[1024];
+    size_t rd;
+    if (!dosya) return NULL;
+    snprintf(path, sizeof(path), "/proc/%lld/%s", pid, dosya);
+    f = fopen(path, "r");
+    if (!f) return NULL;
+    buf = (char*)malloc(cap);
+    if (!buf) { fclose(f); return NULL; }
+    while ((rd = fread(tmp, 1, sizeof(tmp), f)) > 0) {
+        if (n + rd + 1 > cap) {
+            cap = (cap * 2 > n + rd + 1) ? cap * 2 : n + rd + 1;
+            char* nb = (char*)realloc(buf, cap);
+            if (!nb) { free(buf); fclose(f); return NULL; }
+            buf = nb;
+        }
+        memcpy(buf + n, tmp, rd);
+        n += rd;
+    }
+    buf[n] = 0;
+    fclose(f);
+    return buf;
+}
+static long long upp_linux_sayi_oku(long long pid, long long adres) {
+#if defined(__linux__) && defined(_GNU_SOURCE)
+    long long val = 0;
+    struct iovec local[1];
+    struct iovec remote[1];
+    local[0].iov_base = &val;
+    local[0].iov_len = sizeof(val);
+    remote[0].iov_base = (void*)(uintptr_t)adres;
+    remote[0].iov_len = sizeof(val);
+    if (process_vm_readv((pid_t)pid, local, 1, remote, 1, 0) == sizeof(val)) return val;
+    return 0;
+#else
+    (void)pid; (void)adres;
+    return 0;
+#endif
+}
+static long long upp_linux_sayi_yaz(long long pid, long long adres, long long deger) {
+#if defined(__linux__) && defined(_GNU_SOURCE)
+    struct iovec local[1];
+    struct iovec remote[1];
+    local[0].iov_base = &deger;
+    local[0].iov_len = sizeof(deger);
+    remote[0].iov_base = (void*)(uintptr_t)adres;
+    remote[0].iov_len = sizeof(deger);
+    return process_vm_writev((pid_t)pid, local, 1, remote, 1, 0) == sizeof(deger) ? 1 : 0;
+#else
+    (void)pid; (void)adres; (void)deger;
+    return 0;
+#endif
+}
+#else
+static long long upp_linux_pid(void) { return 0; }
+static long long upp_linux_sinyal_gonder(long long pid, long long sig) { (void)pid; (void)sig; return 0; }
+static char* upp_linux_proc_oku(long long pid, const char* dosya) { (void)pid; (void)dosya; return NULL; }
+static long long upp_linux_sayi_oku(long long pid, long long adres) { (void)pid; (void)adres; return 0; }
+static long long upp_linux_sayi_yaz(long long pid, long long adres, long long deger) { (void)pid; (void)adres; (void)deger; return 0; }
+#endif
+
+/* Windows-specific aliases (upp.windows.*) */
+#define upp_windows_bellek_baglan upp_bellek_baglan
+#define upp_windows_bellek_modul_bul upp_bellek_modul_bul
+#define upp_windows_bellek_sayioku upp_bellek_sayioku
+#define upp_windows_bellek_sayiyaz upp_bellek_sayiyaz
+#define upp_windows_bellek_oku_ondalik upp_bellek_oku_ondalik
+#define upp_windows_bellek_yaz_ondalik upp_bellek_yaz_ondalik
+#define upp_windows_bellek_oku_metin upp_bellek_oku_metin
+#define upp_windows_bellek_zincir_oku upp_bellek_zincir_oku
+#define upp_windows_bellek_yama_yap upp_bellek_yama_yap
+#define upp_windows_bellek_koruma_degistir upp_bellek_koruma_degistir
+#define upp_windows_bellek_koruma_degistir_sayi upp_bellek_koruma_degistir_sayi
+#define upp_windows_bellek_son_hata upp_bellek_son_hata
+#define upp_windows_bellek_okundu upp_bellek_okundu
+
+#define upp_windows_girdi_fare_tasi upp_girdi_fare_tasi
+#define upp_windows_girdi_fare_tikla upp_girdi_fare_tikla
+#define upp_windows_girdi_tus_bas upp_girdi_tus_bas
+
+#define upp_windows_cizim_baslat upp_cizim_baslat
+#define upp_windows_cizim_temizle upp_cizim_temizle
+#define upp_windows_cizim_kutu upp_cizim_kutu
+#define upp_windows_cizim_yazi upp_cizim_yazi
+
+#define upp_windows_mesaj upp_mesaj
+#define upp_windows_hata upp_hata
+#define upp_windows_ses_cal upp_ses_cal
 
 static int _upp_yol_sep(char c) {
     return c == '/' || c == '\\';

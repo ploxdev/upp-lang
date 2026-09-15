@@ -1,0 +1,7 @@
+// Güvenlik: upp.windows.bellek guvensiz blok dışında çağrılamaz.
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    sayi val = upp.windows.bellek.sayioku(100);
+    don 0;
+}

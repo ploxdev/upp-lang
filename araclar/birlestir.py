@@ -15,13 +15,20 @@ MODULLER = [
     "tur.upp",
     "guvenlik.upp",
     "codegen.upp",
+    "gomulu_runtime.upp",
     "surucu.upp",
 ]
 
 
 def main() -> int:
+    try:
+        from gomulu_runtime_uret import runtime_gom
+        runtime_gom()
+    except Exception as e:
+        print("[birlestir] gomulu runtime uretilemedi:", e)
+
     src_dir = os.path.join(ROOT, "src", "uppc")
-    out_dir = os.path.join(ROOT, "derleme")
+    out_dir = os.path.join(ROOT, "derleyici")
     os.makedirs(out_dir, exist_ok=True)
     out_upp = os.path.join(out_dir, "uppc_birlesik.upp")
     lines_out: list[str] = []

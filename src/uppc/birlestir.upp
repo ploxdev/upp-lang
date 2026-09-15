@@ -24,11 +24,12 @@ fonk ana() -> sayi {
     kopyala_satir("src/uppc/tur.upp", "tur.upp");
     kopyala_satir("src/uppc/guvenlik.upp", "guvenlik.upp");
     kopyala_satir("src/uppc/codegen.upp", "codegen.upp");
+    kopyala_satir("src/uppc/gomulu_runtime.upp", "gomulu_runtime.upp");
     kopyala_satir("src/uppc/surucu.upp", "surucu.upp");
-    eger (!os_dosya_yaz("derleme/uppc_birlesik.upp", tampon_al())) {
+    eger (!os_dosya_yaz("derleyici/uppc_birlesik.upp", tampon_al())) {
         upp.satir_yaz("[birlestir] yazılamadı");
         don 1;
     }
-    upp.satir_yaz("[birlestir] derleme/uppc_birlesik.upp");
+    upp.satir_yaz("[birlestir] derleyici/uppc_birlesik.upp");
     don 0;
 }

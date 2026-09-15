@@ -47,9 +47,15 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
         eger (dugum_tur(cal) == DugumTur.D_UYE) {
             sayi yol = upp_yol(cal);
             eger (yol != 0 && liste_uzunluk(yol) >= 2) {
-                sayi ikinci = liste_al(yol, 1);
-                eger (dugum_tur(ikinci) == DugumTur.D_UYE && metin_esit(dugum_ad(ikinci), "bellek") && !unsafe) {
-                    hata_guvenlik(dugum_satir(node), dugum_sutun(node), "'upp.bellek' süreç belleğine erişir ve yalnızca 'guvensiz' blokta çağrılabilir.");
+                sayi yi = 1;
+                iken (yi < liste_uzunluk(yol)) {
+                    sayi adim = liste_al(yol, yi);
+                    oto anm = dugum_ad(adim);
+                    eger ((metin_esit(anm, "bellek") || metin_esit(anm, "sayi_oku") || metin_esit(anm, "sayi_yaz")) && !unsafe) {
+                        hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Süreç belleği erişimi ('upp.windows.bellek' / 'upp.linux.sayi_oku/yaz') yalnızca 'guvensiz' blokta çağrılabilir.");
+                        dur;
+                    }
+                    yi = yi + 1;
                 }
             }
         }

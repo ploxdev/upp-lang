@@ -4,7 +4,7 @@
 
 fonk ana() -> sayi {
     guvensiz {
-        upp.bellek.sayioku(1.5);
+        upp.windows.bellek.sayioku(1.5);
     }
     don 0;
 }

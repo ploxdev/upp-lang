@@ -3,6 +3,7 @@ fonk uret_ctur(sayi t) -> metin {
     oto n = dugum_ad(t);
     metin s = n;
     eger (metin_esit(n, "sayi")) { s = "long long"; }
+    yoksa eger (metin_esit(n, "bayt")) { s = "uint8_t"; }
     yoksa eger (metin_esit(n, "ondalik")) { s = "double"; }
     yoksa eger (metin_esit(n, "metin")) { s = "char*"; }
     yoksa eger (metin_esit(n, "mantik")) { s = "bool"; }
@@ -314,6 +315,7 @@ fonk uret_metin_sabit(sayi e) -> metin {
 fonk uret_kol_pack(metin elem, metin cval) -> metin {
     eger (metin_esit(elem, "ondalik")) { don kat3("0LL, ", cval, ", NULL"); }
     eger (metin_esit(elem, "metin")) { don kat("0LL, 0.0, ", cval); }
+    eger (metin_esit(elem, "bayt")) { don kat3("(long long)(uint8_t)(", cval, "), 0.0, NULL"); }
     don kat3("(long long)(", cval, "), 0.0, NULL");
 }
 
@@ -321,6 +323,7 @@ fonk uret_liste_al(metin elem, metin recv, metin idx) -> metin {
     eger (metin_esit(elem, "ondalik")) { don kat4("upp_liste_al_d(", recv, ", ", kat(idx, ")")); }
     eger (metin_esit(elem, "metin")) { don kat4("upp_liste_al_s(", recv, ", ", kat(idx, ")")); }
     eger (metin_esit(elem, "mantik")) { don kat4("(bool)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
+    eger (metin_esit(elem, "bayt")) { don kat4("(uint8_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
     don kat4("upp_liste_al_i(", recv, ", ", kat(idx, ")"));
 }
 
@@ -351,6 +354,12 @@ fonk uret_liste_cagri(sayi expr, metin on) -> metin {
     }
     eger (metin_esit(name, "bosalt")) {
         don kat3("upp_liste_bosalt(&(", recv, "))");
+    }
+    eger (metin_esit(name, "sil")) {
+        don kat(kat3("upp_liste_sil(&(", recv, "), "), kat(uret_ifade(liste_al(args, 0)), ")"));
+    }
+    eger (metin_esit(name, "temizle")) {
+        don kat3("upp_liste_temizle(&(", recv, "))");
     }
     don "0";
 }
@@ -388,6 +397,12 @@ fonk uret_harita_cagri(sayi expr, metin on) -> metin {
     }
     eger (metin_esit(name, "anahtarlar")) {
         don kat4("upp_harita_anahtarlar(", recv, ", ", kat(sayi_metin(ktag), ")"));
+    }
+    eger (metin_esit(name, "sil")) {
+        don kat(kat5("(bool)upp_harita_sil(&(", recv, "), ", sayi_metin(ktag), ", "), kat(uret_harita_key(ktur, liste_al(args, 0)), ")"));
+    }
+    eger (metin_esit(name, "temizle")) {
+        don kat3("upp_harita_temizle(&(", recv, "))");
     }
     don "0";
 }
@@ -489,7 +504,10 @@ fonk uret_upp_cagri(metin name, sayi args, sayi satir, sayi sutun) -> metin {
     yoksa eger (metin_esit(name, "ondalikdan_metin")) { cn = "upp_ondalikdan_metin"; }
     yoksa eger (metin_esit(name, "metinden_ondalik")) { cn = "upp_metinden_ondalik"; }
     yoksa eger (metin_esit(name, "dosya_ekle")) { cn = "upp_dosya_ekle"; }
+    yoksa eger (metin_esit(name, "dosya_boyut")) { cn = "upp_dosya_boyut"; }
     yoksa eger (metin_esit(name, "ortam_al")) { cn = "upp_ortam_al"; }
+    yoksa eger (metin_esit(name, "ortam_yaz")) { cn = "upp_ortam_yaz"; }
+    yoksa eger (metin_esit(name, "platform")) { cn = "upp_platform"; }
     eger (metin_esit(name, "uzunluk") && liste_uzunluk(args) == 1) {
         sayi a0 = liste_al(args, 0);
         sayi at = tip_ifade(a0);
@@ -538,10 +556,10 @@ fonk uret_ns_cagri(metin ns, metin name, sayi args) -> metin {
         }
         don kat4(cn, "(", uret_args(args), ")");
     }
-    eger (metin_esit(ns, "bellek") && metin_esit(name, "zincir_oku")) {
-        don kat(kat3("upp_bellek_zincir_oku(", uret_ifade(liste_al(args, 0)), ", "), kat(uret_dizi_ptr_say(liste_al(args, 1), "long long"), ")"));
+    eger ((metin_esit(ns, "windows.bellek") || metin_esit(ns, "bellek")) && metin_esit(name, "zincir_oku")) {
+        don kat(kat3("upp_windows_bellek_zincir_oku(", uret_ifade(liste_al(args, 0)), ", "), kat(uret_dizi_ptr_say(liste_al(args, 1), "long long"), ")"));
     }
-    metin pref = kat3("upp_", ns, "_");
+    metin pref = kat3("upp_", nokta_altcizgi(ns), "_");
     eger (metin_esit(ns, "metin")) { pref = "upp_metin_"; }
     yoksa eger (metin_esit(ns, "girdi")) { pref = "upp_girdi_"; }
     yoksa eger (metin_esit(ns, "bellek")) { pref = "upp_bellek_"; }
@@ -1538,11 +1556,11 @@ fonk uret_program(sayi program) -> bos {
     }
     emit("");
     oto runtime = os_runtime_oku();
-    eger (metin_esit(runtime, "")) {
-        hata_ver(1, 1, "Çalışma zamanı dosyası bulunamadı: src/runtime/upp_runtime.c");
-        don;
+    eger (!metin_esit(runtime, "")) {
+        emit(runtime);
+    } yoksa {
+        os_runtime_gomulu_yay();
     }
-    emit(runtime);
     emit("");
     i = 0;
     iken (i < liste_uzunluk(decls)) {

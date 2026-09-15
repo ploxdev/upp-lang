@@ -60,55 +60,42 @@ Her iki komut da sürüm numarası veriyorsa hazırsınız!
 
 ---
 
-### İki Derleyici, Tek Dil: Python Bootstrap ve Native u++ Derleyicisi
+### Modern ve Bağımsız Tek Derleyici: Native u++ Derleyicisi (`uppc` / `uppc.exe`)
 
-u++ ekosisteminde **birbirinin tamamen aynısı olan iki farklı derleyici** bulunur:
+u++ dili (v3.0+), C çalışma zamanı kütüphanesini kendi içine gömen (**standalone binary**) ve bizzat u++ kaynak koduyla yazılmış kendi kendini derleyebilen (**self-hosted**) bağımsız bir yerel derleyiciye sahiptir.
 
 | Derleyici | Konum | Tanım ve Rolü |
 |---|---|---|
-| **Python Derleyicisi (`uppc.py`)** | Kök dizin | **Bootstrap (başlangıç) derleyicisidir.** Hiçbir ön kurulum gerektirmeden doğrudan Python ile çalışır; güvenilir bir referanstır. |
-| **Native Derleyici (`uppc.exe` / `uppc`)** | `derleme/` | **Bizzat u++ diliyle yazılmış (`src/uppc/`), kendi kendini derleyebilen (self-hosting) native derleyicidir.** Python'a ihtiyaç duymadan doğrudan makine hızında çalışır. |
-
-#### u++ ile Yazılmış Native Derleyiciyi Üretmek (Build)
-Native derleyicinin kaynak kodları `src/uppc/` klasöründedir. Onu ilk kez ikili hale getirmek için:
-
-1. Önce modülleri tek bir kaynak dosyada birleştiririz:
-   ```bash
-   python araclar/birlestir.py
-   ```
-   *(Bu işlem `derleme/uppc_birlesik.upp` dosyasını oluşturur).*
-
-2. Ardından Python derleyicisi ile bu dosyayı derleyip native `uppc.exe` (Linux'ta `uppc`) ikilisini üretiriz:
-   ```bash
-   python uppc.py derleme/uppc_birlesik.upp --sadece-derle --cikti derleme/uppc
-   ```
-
-Artık `derleme/` klasörünüzde tamamen u++ ile yazılmış native bir derleyiciniz var!
+| **Native Derleyici (`uppc.exe` / `uppc`)** | `derleyici/` | **Bizzat u++ diliyle yazılmış (`src/uppc/`), çalışma zamanını içinde gömülü taşıyan resmi native derleyicidir.** Python veya harici runtime `.c` dosyası aramadan bağımsız çalışır. |
 
 #### Native Derleyiciyi Kullanmak
-Native derleyici, Python derleyicisiyle **birebir aynı komutları ve bayrakları** kabul eder, ancak çok daha hızlı çalışır:
+Native derleyici son derece hızlı çalışır ve kullanıcı dostu komut satırı bayrakları sunar:
 
 ```bash
-# Windows üzerinde çalıştırma:
-derleme\uppc.exe program.upp
+# Windows üzerinde derleyip çalıştırma:
+derleyici\uppc.exe program.upp
 
 # Sadece derlemek (çalıştırmadan .exe üretmek):
-derleme\uppc.exe program.upp --sadece-derle --cikti program
+derleyici\uppc.exe program.upp -o program --sadece-derle
+
+# Sadece transpile edilmiş C kodunu üretmek:
+derleyici\uppc.exe program.upp -c -o program.c
 
 # Linux üzerinde çalıştırma:
-./derleme/uppc program.upp
+./derleyici/uppc program.upp
 ```
 
-#### Kendi Kendini Derleme (Self-Hosting) Testi
+#### Kendi Kendini Derleme (Self-Hosting)
 Bir programlama dilinin olgunluk seviyesi, kendi derleyicisini kendi derleyicisiyle hatasız inşa edebilmesiyle ölçülür. u++ bunu rahatlıkla başarır:
 ```bash
-# 1. Native derleyici (uppc.exe), kendi kaynak kodunu derleyip uppc1.exe üretir:
-derleme\uppc.exe derleme/uppc_birlesik.upp --sadece-derle --cikti derleme/uppc1
+# 1. Modülleri ve gömülü çalışma zamanını birleştir:
+py araclar/birlestir.py
 
-# 2. Üretilen yeni derleyici (uppc1.exe) de tekrar aynı kaynak kodu derleyip uppc2.exe üretir:
-derleme\uppc1.exe derleme/uppc_birlesik.upp --sadece-derle --cikti derleme/uppc2
+# 2. Native derleyici ile yeni sürümü derle:
+derleyici\uppc.exe derleyici/uppc_birlesik.upp -c -o derleyici/uppc_yeni.c
+gcc -std=gnu11 -O2 derleyici/uppc_yeni.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
 ```
-`uppc1.exe` ve `uppc2.exe` birebir aynı ikiliyi üretir. Geliştirme sürecinizde ister pratikliği için `uppc.py`'yi, ister yüksek performansı için `derleme/uppc.exe`'yi kullanabilirsiniz.
+Tüm geliştirme ve derleme süreci tamamen native `uppc` derleyicisi üzerinden yürütülür.
 
 ---
 
@@ -127,7 +114,7 @@ fonk ana() -> sayi {
 
 Bu programı çalıştırmak için terminalinizde şu komutu yürütün:
 ```bash
-python uppc.py merhaba.upp
+derleyici\uppc.exe merhaba.upp
 ```
 
 Tebrikler! Terminalinizde `Merhaba, u++ dunyasi!` yazısını gördünüz.
@@ -177,6 +164,7 @@ u++ dilinde her bilginin bir türü (tipi) vardır:
 |---|---|---|
 | `sayi` | 64-bit tam sayılar (negatif veya pozitif) | `10`, `-42`, `0`, `0xFF` (onaltılık) |
 | `ondalik` | Küsurlu / ondalıklı sayılar (çift duyarlıklı - double) | `3.14`, `-0.5`, `100.0` |
+| `bayt` | 8-bit işaretsiz tam sayı (0 - 255 arası) | `0`, `255`, `128` |
 | `metin` | Yazılar, karakter dizileri | `"Arda"`, `"u++ ile gelecege"` |
 | `mantik` | Mantıksal doğruluk (Boolean) | `dogru` veya `yanlis` |
 | `bos` | Değersizlik, hiçbir şey döndürmeme (`void`) | Genellikle fonksiyon dönüşlerinde kullanılır |
@@ -459,7 +447,14 @@ alisveris.ekle("Yumurta");
 upp.satir_yaz("Toplam alinacak: {alisveris.uzunluk()}"); // 3
 upp.satir_yaz("Ilk urun: {alisveris.al(0)}"); // Ekmek
 
-alisveris.bosalt(); // Liste hafızasını temizler
+// Eleman silme: 1. indeksteki ("Sut") elemanını siler ve listeyi kaydırır
+alisveris.sil(1);
+upp.satir_yaz("Silme sonrasi yeni 1. urun: {alisveris.al(1)}"); // Yumurta
+
+// Tüm elemanları temizleme (uzunluk 0 olur):
+alisveris.temizle();
+
+alisveris.bosalt(); // Liste hafızasını tamamen temizler
 ```
 
 ### 3. Haritalar / Sözlükler (`harita[K, V]`)
@@ -474,6 +469,12 @@ eger (yas_tablosu.var_mi("Ahmet")) {
     oto ahmet_yas = yas_tablosu.al("Ahmet");
     upp.satir_yaz("Ahmet'in yasi: {ahmet_yas}");
 }
+
+// Anahtar silme:
+yas_tablosu.sil("Ahmet");
+
+// Tüm haritayı sıfırlama:
+yas_tablosu.temizle();
 
 yas_tablosu.bosalt();
 ```
@@ -756,13 +757,18 @@ oto gecen_sure = upp.zaman() - baslangic;
 upp.satir_yaz("Gecen sure: {gecen_sure} ms");
 ```
 
-### Dış Komut Çalıştırma (`upp.sistem.calistir`)
-İşletim sistemi terminal komutlarını çalıştırıp sonucunu alabilirsiniz:
+### Dış Komut Çalıştırma ve Sistem Bilgisi (`upp.sistem` ve `upp.platform`)
+İşletim sistemi terminal komutlarını çalıştırıp sonucunu alabilir ve sistem bilgilerini sorgulayabilirsiniz:
 
 ```text
+// Platform ve süreç bilgisi:
+upp.satir_yaz("Isletim sistemi: {upp.platform()}"); // "windows" veya "linux"
+upp.satir_yaz("Surec ID: {upp.sayidan_metin(upp.sistem.pid())}");
+
+// Sistem komutu yürütme:
 SurecCikti sonuc = upp.sistem.calistir("echo Merhaba");
-eger (sonuc.cikti != yok) {
-    upp.satir_yaz("Komut ciktisi: {sonuc.cikti}");
+eger (sonuc.basarili) {
+    upp.satir_yaz("Komut basariyla calisti, cikti: {sonuc.cikti}");
     upp.metin_bosalt(sonuc.cikti);
 }
 ```
@@ -773,24 +779,27 @@ eger (sonuc.cikti != yok) {
 
 ### Bellek Sahipliği ve `upp.metin_bosalt`
 u++, C diline derlendiği için dinamik olarak işletim sisteminden ayrılan (heap) belleklerin işi bittiğinde sisteme geri verilmesi gerekir.
-* `upp.giris()`, `upp.dosya_oku()`, `upp.sistem.calistir` veya `+` ile oluşturulan dinamik metinler hafıza kaplar.
+* `upp.giris()`, `upp.dosya.oku()`, `upp.sistem.calistir` veya `+` ile oluşturulan dinamik metinler hafıza kaplar.
 * İşi bittiğinde `upp.metin_bosalt(degisken);` çağırmak, programınızın arka planda şişmesini (bellek sızıntısı - memory leak) önler.
 
 ### u++ Bellek Güvenliği Felsefesi
 C ve C++ dillerinde en çok karşılaşılan kabus, yanlış bellek adreslerine erişerek programın çökmesi (Segmentation Fault) veya güvenlik açığı oluşturmasıdır.
 
-u++ dilinde **varsayılan olarak işaretçiler (pointers `*`, `&`), doğrudan bellek ayırma ve harici C kodları tamamen yasaktır**. 
+u++ dilinde **varsayılan olarak işaretçiler (pointers `*`, `&`), doğrudan bellek ayırma, harici süreç belleği erişimleri (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`) ve satır içi C kodları tamamen yasaktır**.
 
 Eğer bu tür düşük seviyeli işler yapmanız gerekiyorsa, bunu bilinçli olarak **`guvensiz { ... }`** bloğu içinde yapmanız şarttır:
 
 ```text
-// Güvenli alan: Burada pointer kullanırsanız derleme hatası alırsınız!
+// Güvenli alan: Burada pointer veya upp.windows.bellek kullanırsanız derleme hatası alırsınız!
 
 guvensiz {
     // Burası düşük seviyeli sistem alanıdır
     sayi deger = 42;
     oto adres = &deger; // Adres alma işlemi serbesttir
     
+    // Windows çekirdek bellek erişimi (guvensiz zorunludur):
+    // sayi val = upp.windows.bellek.sayioku(0x12345678);
+
     // Satır içi C kodu yazabilirsiniz:
     c_kod {
         printf("C dunyasindan selamlar!\n");
@@ -805,13 +814,16 @@ Eğer `guvensiz` bloğunun içinde belirli bir kısmı tekrar güvenli kurallara
 ## 16. Geliştirici Araçları ve VS Code / Cursor Entegrasyonu
 
 ### Komut Satırı Bayrakları
-Hem `python uppc.py` hem de native `derleme/uppc.exe` tamamen aynı bayrakları destekler:
-* `python uppc.py program.upp` (veya `derleme\uppc.exe program.upp`): Derler ve hemen çalıştırır.
-* `--sadece-derle` : Çalıştırmaz, sadece `.exe` / `.out` dosyasını üretir.
-* `--cikti <AD>` : Üretilecek `.c` ve `.exe` dosyasının adını belirler (örn: `--cikti hesapla`).
-* `--sadece-c` : GCC'yi çağırmaz, sadece C11 kodunu üretip incelenmek üzere bırakır.
-* `--bicim` : Kaynak kodunuzun girintilerini ve biçimini otomatik düzeltir (Code Formatter).
-* `--analiz` : C derleyicisi çalıştırmadan anında sözdizimi ve tip hatalarını denetler (Editörler için JSON döner).
+Native derleyici (`uppc` / `uppc.exe`) şu bayrakları destekler:
+* `derleyici\uppc.exe program.upp`: Derler ve hemen çalıştırır.
+* `-o <AD>, --cikti <AD>`: Üretilecek `.c` ve `.exe` dosyasının adını belirler (örn: `-o hesapla`).
+* `-c, --sadece-c`: GCC'yi çağırmaz, sadece C11 kodunu üretip incelenmek üzere bırakır.
+* `--sadece-derle`: Çalıştırmaz, sadece `.exe` / `.out` ikili dosyasını üretir.
+* `--runtime <YOL>`: Gömülü çalışma zamanı yerine özel bir `upp_runtime.c` dosyası kullanır.
+* `-v, --surum`: Derleyici sürümünü basar (`u++ v3.0 (beta)`).
+* `-h, --yardim`: Kullanım kılavuzunu ekrana basar.
+* `--bicim`: Kaynak kodunuzun girintilerini ve biçimini standart 4 boşluğa dönüştürür (Code Formatter).
+* `--analiz`: C derleyicisi çalıştırmadan anında sözdizimi, tip ve güvenlik hatalarını denetler (Editörler için JSON döner).
 
 ### VS Code ve Cursor Eklentisi
 `eklenti/` klasöründeki resmi u++ eklentisini kurduğunuzda:
@@ -819,7 +831,7 @@ Hem `python uppc.py` hem de native `derleme/uppc.exe` tamamen aynı bayrakları 
 * Siz kodu yazarken anında altını çizen hata tespitleri (LSP),
 * Kod tamamlama ve üzerine gelince doküman görme (hover),
 * **F5** tuşu ile tek tuşla derleyip çalıştırma kolaylığı elde edersiniz.
-* **Derleyici Seçimi:** Eklenti ayarlarından (`upp.derleyici`) ister `python` ister `native` derleyiciyi seçebilirsiniz. Native seçildiğinde düzenleyici analizleri doğrudan `derleme/uppc.exe` hızıyla gerçekleştirilir.
+* Düzenleyici analizleri doğrudan `derleyici/uppc.exe --analiz` hızıyla anlık olarak gerçekleştirilir.
 
 ---
 
@@ -849,8 +861,8 @@ fonk ana() -> sayi {
 
         secim (secim) {
             durum "1":
-                eger (upp.dosya_var_mi(DOSYA_ADI)) {
-                    oto icerik = upp.dosya_oku(DOSYA_ADI);
+                eger (upp.dosya.var_mi(DOSYA_ADI)) {
+                    oto icerik = upp.dosya.oku(DOSYA_ADI);
                     upp.satir_yaz("\n--- NOTLARINIZ ---");
                     upp.satir_yaz(icerik);
                     upp.satir_yaz("------------------");
@@ -863,14 +875,14 @@ fonk ana() -> sayi {
             durum "2":
                 upp.yaz("Eklemek istediginiz notu yazin: ");
                 oto yeni_not = upp.giris();
-                upp.dosya_ekle(DOSYA_ADI, yeni_not + "\n");
+                upp.dosya.ekle(DOSYA_ADI, yeni_not + "\n");
                 upp.satir_yaz("Notunuz basariyla kaydedildi!");
                 upp.metin_bosalt(yeni_not);
                 dur;
 
             durum "3":
-                eger (upp.dosya_var_mi(DOSYA_ADI)) {
-                    upp.dosya_sil(DOSYA_ADI);
+                eger (upp.dosya.var_mi(DOSYA_ADI)) {
+                    upp.dosya.sil(DOSYA_ADI);
                     upp.satir_yaz("Tum notlar silindi.");
                 } yoksa {
                     upp.satir_yaz("Silinecek dosya bulunamadi.");
@@ -893,7 +905,7 @@ fonk ana() -> sayi {
 }
 ```
 
-Bu kodu `notluk.upp` dosyasına kaydedip `python uppc.py notluk.upp` komutuyla çalıştırabilirsiniz.
+Bu kodu `notluk.upp` dosyasına kaydedip `derleyici\uppc.exe notluk.upp` komutuyla çalıştırabilirsiniz.
 
 ---
 

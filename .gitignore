@@ -14,6 +14,7 @@ __pycache__/
 *.so
 *.dylib
 derleme/
+derleyici/
 tests/_cikti/
 cikti.c
 program.exe
@@ -28,6 +29,7 @@ _*.c
 # VS Code / Cursor eklentisi (Node / build / paketler)
 eklenti/node_modules/
 eklenti/out/
+eklenti/out-test/
 *.vsix
 .vscode-test/
 

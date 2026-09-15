@@ -1105,7 +1105,19 @@ fonk os_runtime_bul() -> metin {
     don "";
 }
 
+metin g_ozel_runtime_yol = "";
+
+fonk os_runtime_ozel_yaz(metin yol) -> bos {
+    g_ozel_runtime_yol = yol;
+}
+
 fonk os_runtime_oku() -> metin {
+    eger (!metin_esit(g_ozel_runtime_yol, "")) {
+        eger (upp.dosya_var_mi(g_ozel_runtime_yol)) {
+            oto s = upp.dosya_oku(g_ozel_runtime_yol);
+            eger (s != yok) { don intern(s); }
+        }
+    }
     metin p = os_runtime_bul();
     eger (metin_esit(p, "")) { don intern(""); }
     metin s = upp.dosya_oku(p);

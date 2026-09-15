@@ -1,0 +1,91 @@
+// Beta sürümü yeni özellikler testi
+// @stdout
+// === BETA TESTLERI BASLIYOR ===
+// bayt degeri: 255
+// bliste uzunluk: 3
+// bliste[1]: 20
+// bliste.sil(1) sonrasi uzunluk: 2
+// bliste yeni [1]: 30
+// bliste.temizle() sonrasi uzunluk: 0
+// harita uzunluk: 2
+// elma silindi mi: evet
+// yeni uzunluk: 1
+// temizle sonrasi uzunluk: 0
+// Platform: windows
+// PID: Gecerli
+// Ortam yazildi mi: evet
+// Ortam degeri: basarili
+// SurecCikti.basarili: dogru
+// === TUM TESTLER GECTI ===
+
+fonk test_bayt() -> bos {
+    bayt b = 255;
+    upp.yaz("bayt degeri: ");
+    upp.satir_yaz(upp.sayidan_metin(b));
+
+    liste[bayt] bliste;
+    bliste.ekle(10);
+    bliste.ekle(20);
+    bliste.ekle(30);
+    upp.yaz("bliste uzunluk: ");
+    upp.satir_yaz(upp.sayidan_metin(bliste.uzunluk()));
+    upp.yaz("bliste[1]: ");
+    upp.satir_yaz(upp.sayidan_metin(bliste.al(1)));
+
+    bliste.sil(1);
+    upp.yaz("bliste.sil(1) sonrasi uzunluk: ");
+    upp.satir_yaz(upp.sayidan_metin(bliste.uzunluk()));
+    upp.yaz("bliste yeni [1]: ");
+    upp.satir_yaz(upp.sayidan_metin(bliste.al(1)));
+
+    bliste.temizle();
+    upp.yaz("bliste.temizle() sonrasi uzunluk: ");
+    upp.satir_yaz(upp.sayidan_metin(bliste.uzunluk()));
+}
+
+fonk test_harita_sil() -> bos {
+    harita[metin, sayi] h;
+    h.koy("elma", 5);
+    h.koy("armut", 10);
+    upp.yaz("harita uzunluk: ");
+    upp.satir_yaz(upp.sayidan_metin(h.uzunluk()));
+
+    mantik silindi = h.sil("elma");
+    upp.yaz("elma silindi mi: ");
+    upp.satir_yaz(silindi ? "evet" : "hayir");
+    upp.yaz("yeni uzunluk: ");
+    upp.satir_yaz(upp.sayidan_metin(h.uzunluk()));
+
+    h.temizle();
+    upp.yaz("temizle sonrasi uzunluk: ");
+    upp.satir_yaz(upp.sayidan_metin(h.uzunluk()));
+}
+
+fonk test_sistem_ve_platform() -> bos {
+    metin plt = upp.platform();
+    upp.yaz("Platform: ");
+    upp.satir_yaz(plt);
+
+    sayi my_pid = upp.sistem.pid();
+    upp.yaz("PID: ");
+    upp.satir_yaz(my_pid > 0 ? "Gecerli" : "Gecersiz");
+
+    mantik ortam_ok = upp.ortam_yaz("UPP_BETA_TEST", "basarili");
+    upp.yaz("Ortam yazildi mi: ");
+    upp.satir_yaz(ortam_ok ? "evet" : "hayir");
+    upp.yaz("Ortam degeri: ");
+    upp.satir_yaz(upp.ortam_al("UPP_BETA_TEST"));
+
+    SurecCikti r = upp.sistem.calistir("echo test");
+    upp.yaz("SurecCikti.basarili: ");
+    upp.satir_yaz(r.basarili ? "dogru" : "yanlis");
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("=== BETA TESTLERI BASLIYOR ===");
+    test_bayt();
+    test_harita_sil();
+    test_sistem_ve_platform();
+    upp.satir_yaz("=== TUM TESTLER GECTI ===");
+    don 0;
+}
