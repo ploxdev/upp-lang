@@ -1497,10 +1497,10 @@ fonk uret_fonksiyon(sayi decl) -> bos {
     eger (metin_esit(dugum_ad(decl), "ana") && dugum_c(decl) == 0) {
         emit("upp_argv_ayarla(argc, argv);");
         emit("_upp_kuresel_hazir();");
-        eger (!linux_mi()) {
-            emit("SetConsoleOutputCP(CP_UTF8);");
-            emit("SetConsoleCP(CP_UTF8);");
-        }
+        emit("#if defined(_WIN32)");
+        emit("SetConsoleOutputCP(CP_UTF8);");
+        emit("SetConsoleCP(CP_UTF8);");
+        emit("#endif");
     }
     uret_cumle(dugum_b(decl));
     indent_ekle(-1);

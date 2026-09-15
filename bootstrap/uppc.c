@@ -16521,8 +16521,12 @@ char* yol_uzanti_kes(char* s) {
 int main(int argc, char **argv) {
     upp_argv_ayarla(argc, argv);
     _upp_kuresel_hazir();
+#if defined(_WIN32)
+#if defined(_WIN32)
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+#endif
+#endif
     long long argn = upp_arguman_sayisi();
     if (((argn >= 2LL) && metin_esit(upp_arguman(1LL), "--havuz-test")))
     {
