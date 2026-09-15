@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { ciktiKok, cozPythonYolu, findRepoRoot, nativeExe, quote, uppAyar, ikiliUzanti, hedefBayrak, calistirSatiri } from "./kok";
+import { ciktiKok, calistirSatiri, findRepoRoot, hedefBayrak, ikiliUzanti, quote } from "./kok";
+import type { Motor } from "./motor";
 
 export interface Derleme {
   cwd: string;
@@ -9,71 +10,112 @@ export interface Derleme {
   exePath: string;
 }
 
-export function derlemeHazir(doc: vscode.TextDocument): Derleme | undefined {
+export function derlemeHazir(
+  doc: vscode.TextDocument,
+  motor: Motor,
+  opts?: { sessiz?: boolean }
+): Derleme | undefined {
+  if (!motor.hazir) {
+    return undefined;
+  }
   const repo = findRepoRoot(path.dirname(doc.uri.fsPath));
   if (!repo) {
-    void vscode.window.showErrorMessage("u++ kökü bulunamadı (uppc.py). Repoyu açın.");
+    if (!opts?.sessiz) {
+      void vscode.window.showWarningMessage("u++ kökü bulunamadı. Repoyu açın.");
+    }
     return undefined;
   }
   const file = doc.uri.fsPath;
   if (path.extname(file).toLowerCase() === ".uph") {
-    void vscode.window.showErrorMessage(
-      "Başlık dosyası (.uph) derlenmez; bir .upp programından 'kullan' ile katın."
-    );
+    if (!opts?.sessiz) {
+      void vscode.window.showWarningMessage(
+        "Başlık dosyası (.uph) derlenmez; bir .upp programından 'kullan' ile katın."
+      );
+    }
     return undefined;
   }
-  const stem = path.join(ciktiKok(repo), path.basename(file, path.extname(file)));
+  const kok = ciktiKok(repo);
+  fs.mkdirSync(kok, { recursive: true });
+  const stem = path.join(kok, path.basename(file, path.extname(file)));
   const exePath = `${stem}${ikiliUzanti()}`;
-  const ayar = uppAyar();
-  const native = nativeExe(repo);
   const hedef = hedefBayrak();
-  let compileLine: string;
-  if (ayar.derleyici === "native" && fs.existsSync(native)) {
-    compileLine = [quote(native), quote(file), "--sadece-derle", "--cikti", quote(stem), ...hedef].join(" ");
-  } else {
-    if (ayar.derleyici === "native") {
-      void vscode.window.showWarningMessage(
-        `Native uppc yok (${native}); python uppc.py kullanılacak.`
-      );
-    }
-    const py = cozPythonYolu(ayar.pythonYolu);
-    if (!py) {
-      void vscode.window.showErrorMessage(
-        "Python bulunamadı. Ayar: upp.pythonYolu (ör. C:\\\\Python314\\\\python.exe)."
-      );
-      return undefined;
-    }
-    compileLine = [
-      quote(py),
-      quote(path.join(repo, "uppc.py")),
-      quote(file),
-      "--sadece-derle",
-      "--cikti",
-      quote(stem),
-      ...hedef,
-    ].join(" ");
-  }
+  const compileLine = [quote(motor.yol), quote(file), "--sadece-derle", "--cikti", quote(stem), ...hedef].join(
+    " "
+  );
   return { cwd: repo, compileLine, exePath };
 }
 
-export async function gorevCalistir(ad: string, satir: string, cwd: string): Promise<void> {
-  const def: vscode.TaskDefinition = { type: "upp", task: ad };
-  const exec = new vscode.ShellExecution(satir, { cwd });
-  const task = new vscode.Task(def, vscode.TaskScope.Workspace, ad, "u++", exec, [
-    "$upp-hata",
-    "$upp-guvenlik",
-  ]);
+function gorevNesne(
+  taskAd: string,
+  baslik: string,
+  satir: string,
+  cwd: string,
+  derleMi: boolean
+): vscode.Task {
+  const def: vscode.TaskDefinition = { type: "upp", task: taskAd };
+  const task = new vscode.Task(
+    def,
+    vscode.TaskScope.Workspace,
+    baslik,
+    "u++",
+    new vscode.ShellExecution(satir, { cwd }),
+    ["$upp-hata", "$upp-guvenlik"]
+  );
+  if (derleMi) {
+    task.group = vscode.TaskGroup.Build;
+  }
   task.presentationOptions = {
     reveal: vscode.TaskRevealKind.Always,
     panel: vscode.TaskPanelKind.Dedicated,
   };
-  await vscode.tasks.executeTask(task);
+  return task;
 }
 
-export async function aktifUpp(): Promise<vscode.TextDocument | undefined> {
+class UppGorevSaglayici implements vscode.TaskProvider {
+  constructor(private motorAl: () => Motor) {}
+
+  provideTasks(): vscode.Task[] {
+    const ed = vscode.window.activeTextEditor;
+    const motor = this.motorAl();
+    if (!ed || ed.document.languageId !== "upp" || !motor.hazir) {
+      return [];
+    }
+    const d = derlemeHazir(ed.document, motor, { sessiz: true });
+    if (!d) {
+      return [];
+    }
+    return [
+      gorevNesne("derle", "u++: Derle", d.compileLine, d.cwd, true),
+      gorevNesne(
+        "calistir",
+        "u++: Çalıştır",
+        calistirSatiri(d.compileLine, d.exePath),
+        d.cwd,
+        false
+      ),
+      gorevNesne(
+        "sadece-c",
+        "u++: C üret",
+        d.compileLine.replace("--sadece-derle", "--sadece-c"),
+        d.cwd,
+        false
+      ),
+    ];
+  }
+
+  resolveTask(task: vscode.Task): vscode.Task | undefined {
+    return task;
+  }
+}
+
+async function gorevCalistir(ad: string, satir: string, cwd: string, derleMi: boolean): Promise<void> {
+  await vscode.tasks.executeTask(gorevNesne(ad, ad, satir, cwd, derleMi));
+}
+
+async function aktifUpp(): Promise<vscode.TextDocument | undefined> {
   const ed = vscode.window.activeTextEditor;
   if (!ed || ed.document.languageId !== "upp") {
-    void vscode.window.showInformationMessage("Açık bir .upp veya .uph dosyası seçin.");
+    void vscode.window.showInformationMessage("Açık bir .upp dosyası seçin.");
     return undefined;
   }
   if (ed.document.isDirty) {
@@ -82,83 +124,34 @@ export async function aktifUpp(): Promise<vscode.TextDocument | undefined> {
   return ed.document;
 }
 
-export class UppTaskProvider implements vscode.TaskProvider {
-  provideTasks(): vscode.Task[] {
-    const ed = vscode.window.activeTextEditor;
-    if (!ed || ed.document.languageId !== "upp") {
-      return [];
+export function registerDerleme(context: vscode.ExtensionContext, motorAl: () => Motor): void {
+  const calis = async (hangisi: "derle" | "calistir" | "c") => {
+    const doc = await aktifUpp();
+    if (!doc) {
+      return;
     }
-    const d = derlemeHazir(ed.document);
+    const d = derlemeHazir(doc, motorAl());
     if (!d) {
-      return [];
+      return;
     }
-    const make = (ad: string, satir: string, grup?: vscode.TaskGroup): vscode.Task => {
-      const t = new vscode.Task(
-        { type: "upp", task: ad },
-        vscode.TaskScope.Workspace,
-        ad,
-        "u++",
-        new vscode.ShellExecution(satir, { cwd: d.cwd }),
-        ["$upp-hata", "$upp-guvenlik"]
+    if (hangisi === "derle") {
+      await gorevCalistir("u++: Derle", d.compileLine, d.cwd, true);
+    } else if (hangisi === "calistir") {
+      await gorevCalistir("u++: Çalıştır", calistirSatiri(d.compileLine, d.exePath), d.cwd, false);
+    } else {
+      await gorevCalistir(
+        "u++: C üret",
+        d.compileLine.replace("--sadece-derle", "--sadece-c"),
+        d.cwd,
+        false
       );
-      if (grup) {
-        t.group = grup;
-      }
-      t.presentationOptions = {
-        reveal: vscode.TaskRevealKind.Always,
-        panel: vscode.TaskPanelKind.Dedicated,
-      };
-      return t;
-    };
-    return [
-      make("Derle", d.compileLine, vscode.TaskGroup.Build),
-      make("Çalıştır", calistirSatiri(d.compileLine, d.exePath)),
-      make("Yalnızca C", d.compileLine.replace("--sadece-derle", "--sadece-c")),
-    ];
-  }
+    }
+  };
 
-  resolveTask(task: vscode.Task): vscode.Task {
-    return task;
-  }
-}
-
-export function registerDerleme(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("upp.derle", async () => {
-      const doc = await aktifUpp();
-      if (!doc) {
-        return;
-      }
-      const d = derlemeHazir(doc);
-      if (d) {
-        await gorevCalistir("u++: Derle", d.compileLine, d.cwd);
-      }
-    }),
-    vscode.commands.registerCommand("upp.calistir", async () => {
-      const doc = await aktifUpp();
-      if (!doc) {
-        return;
-      }
-      const d = derlemeHazir(doc);
-      if (d) {
-        const satir = calistirSatiri(d.compileLine, d.exePath);
-        await gorevCalistir("u++: Çalıştır", satir, d.cwd);
-      }
-    }),
-    vscode.commands.registerCommand("upp.sadeceC", async () => {
-      const doc = await aktifUpp();
-      if (!doc) {
-        return;
-      }
-      const d = derlemeHazir(doc);
-      if (d) {
-        await gorevCalistir(
-          "u++: C üret",
-          d.compileLine.replace("--sadece-derle", "--sadece-c"),
-          d.cwd
-        );
-      }
-    }),
-    vscode.tasks.registerTaskProvider("upp", new UppTaskProvider())
+    vscode.tasks.registerTaskProvider("upp", new UppGorevSaglayici(motorAl)),
+    vscode.commands.registerCommand("upp.derle", () => calis("derle")),
+    vscode.commands.registerCommand("upp.calistir", () => calis("calistir")),
+    vscode.commands.registerCommand("upp.sadeceC", () => calis("c"))
   );
 }

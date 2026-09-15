@@ -1,132 +1,143 @@
-# u++ — VS Code / Cursor IDE Eklentisi (Language Support & LSP)
+# u++ — VS Code ve Cursor Eklentisi
 
-<p align="center">
-  <strong>Türkçe sistem programlama dili u++ için resmi VS Code & Cursor IDE eklentisi.</strong>
-</p>
+u++ programlama dili için geliştirilmiş resmi VS Code ve Cursor editör eklentisidir.
 
-<p align="center">
-  <a href="../README.md"><img src="https://img.shields.io/badge/u%2B%2B-v3.0-blue.svg?style=flat-square" alt="u++ sürüm" /></a>
-  <a href="../README.md"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg?style=flat-square" alt="Platform" /></a>
-  <a href="../OGREN.md"><img src="https://img.shields.io/badge/dil-T%C3%BCrk%C3%A7e-red.svg?style=flat-square" alt="Dil" /></a>
-</p>
+Bu eklenti, harici bir Python kurulumuna, LSP betiklerine veya karmaşık arka plan süreçlerine ihtiyaç duymaz. Tamamen **iki katmanlı** ve hafif bir mimari üzerine kuruludur:
+- **Katman 1 (Temel Mod):** Sisteminizde `uppc` derleyicisi bulunmasa dahi sözdizimi renklendirmesi, kod parçacıkları (snippets) ve zengin TypeScript sözlüğü anında çalışır.
+- **Katman 2 (Gelişmiş Mod):** Yerel (native) `uppc` derleyicisi algılandığında canlı tanı (diagnostics), kod biçimlendirme ve derle/çalıştır özellikleri otomatik olarak devreye girer.
 
 ---
 
-Bu eklenti, **u++** dili (`.upp` ve `.uph`) için tam entegre modern bir geliştirme deneyimi sağlar. Arka planda çalışan Language Server Protocol (LSP) mimarisi sayesinde anlık hata yakalama, akıllı kod tamamlama, dokümantasyon ipuçları ve tek tuşla derleme/çalıştırma desteği sunar.
+## 🚀 Çalışma Modları
 
-## ✨ Öne Çıkan Özellikler
+### Katman 1 — Temel Mod (`uppc` Gerekmez)
+Sistemde derleyici olmasa bile hemen kod yazmaya başlayabilirsiniz:
+- `.upp` ve `.uph` dosyaları için TextMate tabanlı sözdizimi vurgulama,
+- Yaygın dil yapıları için hazır kod parçacıkları (snippets), otomatik girintileme ve parantez eşleme,
+- TypeScript tabanlı semantik sözlük: Anahtar sözcükler, `upp.*` kütüphanesi, `liste` ve `harita` metotları, hover (üzerine gelince bilgi) ve sembol anahatları (outline),
+- Durum çubuğunda sarı renkli `u++: Temel mod` göstergesi,
+- Derleyici henüz hazır değilse Derle / Çalıştır komutları devre dışı kalır ve kullanıcıyı rahatsız etmeyen nazik bir indirme / yol belirtme bildirimi sunulur.
 
-- **🎨 Zengin Sözdizimi Vurgulama:** `.upp` ve `.uph` dosyaları için Türkçe anahtar sözcükler, yerleşik `upp.*` modülleri ve C-interop blokları.
-- **⚡ Anlık LSP Tanısı (Diagnostics):** Kod yazılırken `Lexer → Parser → Tür Denetimi → Bellek Güvenliği` katmanlarında gerçek zamanlı hata denetimi (`--analiz` modu ile GCC beklemeden milisaniyeler içinde).
-- **💡 Akıllı Kod Tamamlama (IntelliSense):** Standart kütüphane (`upp.*`), koleksiyonlar (`liste`, `harita`), sınıf metotları ve dil şablonları (snippets).
-- **📖 Hover & Fonksiyon İmzaları:** Yerleşik standart kütüphane fonksiyonları ve kullanıcı tanımlı fonksiyonlar için parametre/dönüş türü ipuçları.
-- **🚀 Tek Tuşla Derleme ve Çalıştırma:**
-  - **`F5`**: Doğrudan aktif programı derler ve çalıştırır.
-  - **`Ctrl+Shift+B`**: Sadece ikili (executable) dosyayı derler.
-- **🛡️ Hızlı Düzeltmeler (Code Actions):** Bellek ihlallerinde kodu otomatik olarak `guvensiz { ... }` içine alma veya `fonk ana()` iskeleti ekleme önerileri.
-
----
-
-## 📋 Sistem Gereksinimleri
-
-| Bileşen | Minimum Sürüm | Açıklama |
-|---|---|---|
-| **VS Code / Cursor** | 1.80+ | Düzenleyici ortamı |
-| **Python** | 3.8+ | Dil sunucusu ve bootstrap derleyici için (harici pip paketi gerekmez) |
-| **Node.js & npm** | 18+ | Sadece eklentiyi yerel olarak paketlemek (`.vsix`) için |
-| **GCC (MinGW / build-essential)** | Güncel | C11 native binary bağlama için |
-
-> **Windows İpucu:** Windows Store Python kısayolu yerine doğrudan kurulan Python sürümünü kullanmanız önerilir. Gerekirse eklenti ayarlarından (`upp.pythonYolu`) doğrudan Python yolunu belirtebilirsiniz.
+### Katman 2 — Gelişmiş Mod (Native `uppc` ile)
+Eklenti yerel `uppc` derleyicisini algıladığında tüm yetenekler etkinleşir:
+- **Canlı Tanı (Diagnostics):** Kod yazılırken veya kaydedildiğinde arka planda `uppc --analiz` koşturulur ve derleyicinin JSON çıktısı anında editörde kırmızı hata çizgileri olarak gösterilir.
+- **Kod Biçimlendirme (Formatting):** `Belgeyi Biçimlendir` (`Shift+Alt+F`) komutuyla kaynak kod `uppc --bicim` üzerinden standart 4 boşluk girintili u++ biçimine sokulur.
+- **Derleme ve Çalıştırma:** Tek tuşla (`F5`) programınız yerel ikiliye derlenir ve terminalde yürütülür.
 
 ---
 
-## 📦 Kurulum
+## 🔍 Derleyici Keşif Sırası
 
-### Hazır Paketten (.vsix) Yükleme
+Eklenti, native derleyiciyi şu öncelik sırasına göre otomatik olarak arar:
 
-Proje kök dizininde hazır `.vsix` dosyası bulunuyorsa doğrudan kurabilirsiniz:
+1. **Özel Kullanıcı Ayarı:** `upp.uppcYolu` ayarında belirtilen yol,
+2. **Çalışma Alanı (Repo Kökü):**
+   - Windows: `<repo>/derleyici/uppc.exe`
+   - Linux: `<repo>/derleyici/uppc` veya `<repo>/derleyici/uppc.out`
+3. **Sistem Ortamı:** İşletim sisteminin `PATH` ortam değişkeninde kayıtlı dizinler.
 
-```powershell
-# Cursor için:
-cursor --install-extension eklenti/u-plus-plus-3.0.0.vsix
+### Sürüm ve Protokol Doğrulaması
+Eklenti, derleyici ile güvenli iletişim kurmak için JSON tabanlı sürüm sözleşmesini kullanır:
 
-# VS Code için:
-code --install-extension eklenti/u-plus-plus-3.0.0.vsix
+```bash
+uppc --surum --json
 ```
-*Veya VS Code/Cursor arayüzünde: **Extensions (Ctrl+Shift+X) → ... Menüsü → Install from VSIX...***
+
+Örnek çıktı:
+```json
+{"dil":"u++","surum":"3.0.1","protokol":1}
+```
+
+Eklenti `protokol: 1` (`--analiz` JSON hata şeması) uyumluluğunu doğrular. Uyumsuz bir sürüm saptanırsa editör güvenli şekilde Katman 1'de kalır ve durum çubuğunda uyarı verir.
 
 ---
 
-### Kaynaktan Derleyip Yükleme
+## ⌨️ Komutlar ve Kısayollar
+
+| Komut | Kısayol | Gereksinim | Açıklama |
+|---|---|---|---|
+| `u++: Çalıştır` | `F5` | `uppc` hazır | Programı derler ve terminalde anında çalıştırır. |
+| `u++: Derle` | `Ctrl+Shift+B` | `uppc` hazır | Yalnızca çalıştırılabilir ikiliyi üretir (`derleme/`). |
+| `u++: Yalnızca C üret` | — | `uppc` hazır | Yalnızca C11 ara kodunu üretir (`--sadece-c`). |
+| `Belgeyi Biçimlendir` | `Shift+Alt+F` | `uppc` hazır | Kaynak kodu standart u++ biçimine sokar (`--bicim`). |
+| `u++: Derleyiciyi tara` | — | Her zaman | Derleyiciyi yeniden tarar ve durumu günceller. |
+| `u++: Derleyici yolu belirt` | — | Her zaman | Özel bir `uppc` çalıştırılabilir dosya yolu seçmenizi sağlar. |
+
+---
+
+## 📦 Sistem Gereksinimleri
+
+| Bileşen | Asgari Sürüm | Rolü |
+|---|---|---|
+| **VS Code / Cursor** | 1.85+ | Eklentinin çalışacağı editör |
+| **Node.js** | 18+ | Eklenti geliştirme ve VSIX paketleme için |
+| **Native `uppc`** | v3.0+ | Tanı, biçimlendirme ve derleme özellikleri için |
+| **GCC (MinGW / build-essential)** | Güncel | C kodunu yerel makine ikilisine bağlamak için |
+
+---
+
+## 🛠️ Kurulum ve Geliştirme
+
+### Kaynak Koddan Paketleme ve Kurulum
 
 ```powershell
-# 1. Eklenti dizinine gidin
+# Eklenti dizinine geçin
 cd eklenti
 
-# 2. Bağımlılıkları kurun ve paketleyin
+# Bağımlılıkları yükleyin ve testleri çalıştırın
 npm install
+npm test
+
+# TypeScript kodlarını derleyin ve VSIX paketini oluşturun
 npm run compile
 npm run package
 
-# 3. Üretilen vsix paketini yükleyin
-code --install-extension u-plus-plus-3.0.0.vsix
+# Üretilen VSIX paketini editöre kurun
+code --install-extension u-plus-plus-3.0.1.vsix
 ```
+
+Hazır bir `.vsix` dosyanız varsa, VS Code / Cursor içerisinden **Uzantılar (Extensions) → ... menüsü → Install from VSIX...** seçeneğini kullanarak da doğrudan yükleyebilirsiniz.
 
 ---
 
-## 🛠️ Yapılandırma Seçenekleri
-
-VS Code / Cursor `settings.json` üzerinden özelleştirebileceğiniz ayarlar:
+## ⚙️ Eklenti Ayarları
 
 | Ayar | Varsayılan | Açıklama |
 |---|---|---|
-| `upp.pythonYolu` | `"python"` | Python çalıştırıcı yolu (`python.exe` adresi) |
-| `upp.derleyici` | `"python"` | Dil motoru seçimi: `"python"` (bootstrap) veya `"native"` (uppc.exe) |
-| `upp.uppcYolu` | `""` | Native derleyici yolu (boşsa `derleme/uppc.exe` kullanılır) |
-| `upp.ciktiKoku` | `"derleme"` | Üretilen `.c` ve `.exe` dosyalarının yazılacağı hedef klasör |
-| `upp.gccTanilari` | `false` | Kayıt anında tam GCC derleme tanılarını da JSON olarak al |
-| `upp.iz.sunucu` | `"off"` | Dil sunucusu log düzeyi (`"off"` / `"messages"` / `"verbose"`) |
+| `upp.uppcYolu` | `""` | Özel yerel derleyici yolu. Boş bırakılırsa önce repo içi `derleyici/` klasörüne, ardından `PATH`'e bakılır. |
+| `upp.ciktiKoku` | `"derleme"` | Derlenen program ikilileri ve ara C kodlarının kaydedileceği klasör (repo köküne göre göreli veya mutlak). |
 
 ---
 
-## ⌨️ Klavye Kısayolları & Komutlar
-
-Komut Paleti (`Ctrl+Shift+P`) üzerinden kullanılabilir komutlar:
-
-| Kısayol | Komut | Açıklama |
-|---|---|---|
-| **`F5`** | `u++: Çalıştır` | Programı derler ve terminalde çalıştırır |
-| **`Ctrl+Shift+B`** | `u++: Derle` | Yalnızca derleme yapar (`--sadece-derle`) |
-| — | `u++: Yalnızca C üret` | Sadece C11 transpile kodunu üretir (`--sadece-c`) |
-
----
-
-## 🏗️ Mimari ve Çalışma Mantığı
+## 🏗️ Mimari Şema
 
 ```text
-┌───────────────────────────────────────────────┐
-│       VS Code / Cursor (TypeScript Client)    │
-│            extension.ts · derleme.ts          │
-└───────────────────────┬───────────────────────┘
-                        │ Language Server Protocol (stdio)
-                        ▼
-┌───────────────────────────────────────────────┐
-│           Python LSP Sunucusu (LSP Server)    │
-│           upp_lsp.py · analiz.py (AST)        │
-└───────────────────────┬───────────────────────┘
-                        │ --analiz JSON IPC
-                        ▼
-┌───────────────────────────────────────────────┐
-│     u++ Derleyicisi (uppc.py veya uppc.exe)   │
-│   Lexer → Parser → Tip Denetimi → Güvenlik    │
-└───────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│ Katman 1: Temel Mod (Her zaman etkin)                  │
+│ TextMate Sözdizimi + Snippets + sozluk.ts (Hover/İmza) │
+└───────────────────────────┬────────────────────────────┘
+                            │ uppc --surum --json doğrulandı
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ Katman 2: Native Araçlar                               │
+│ - Canlı Tanı:   uppc <dosya> --analiz (JSON Hata Listesi) │
+│ - Biçimlendir:  uppc <dosya> --bicim                   │
+│ - Derleme:      uppc <dosya> --sadece-derle / --sadece-c│
+└────────────────────────────────────────────────────────┘
 ```
 
-1. **Hafif ve Hızlı Tanı:** Siz kod yazarken GCC tetiklenmez. Eklenti derleyicinin `--analiz` modunu çağırarak bellek güvenliği ve tip denetimlerini bellek üzerinde yapar, sonuçları JSON olarak editöre iletir.
-2. **Çift Motor Uyumu:** İster Python bootstrap derleyiciyi, isterseniz `derleme/uppc.exe` native derleyicisini LSP arkasında çalıştırabilirsiniz.
+> **Not:** `derleyici/` klasörü dilin derleyicisini (`uppc`), `derleme/` klasörü ise derlediğiniz kullanıcı programlarının çıktılarını barındırır.
 
 ---
 
-## Katkı ve Lisans
+## 🧪 Testler
 
-Bu eklenti, ana **u++** projesinin bir parçasıdır. Sorun bildirimleri ve katkılar için ana depo issue/PR mekanizmasını kullanabilirsiniz.
+Eklenti mantığı, derleyiciye bağımlı olmadan kapsamlı birim testleriyle doğrulanır:
+
+```powershell
+cd eklenti
+npm test          # Sözlük, keşif, sürüm ve tanı testleri
+npm run compile   # TypeScript tip denetimi
+```
+
+Testler hem Windows hem de Linux üzerinde uyumlu çalışacak şekilde tasarlanmıştır.

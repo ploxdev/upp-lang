@@ -1,8 +1,8 @@
 {
   "name": "u-plus-plus",
   "displayName": "u++",
-  "description": "u++ v3.0: sözdizimi, dosya ikonu, LSP tanılama / tamamlama / hover.",
-  "version": "3.0.0",
+  "description": "u++: sözdizimi, snippet, hover; native uppc ile tanı ve derleme.",
+  "version": "3.0.1",
   "publisher": "u-plus-plus",
   "icon": "icons/upp-icon.png",
   "engines": {
@@ -11,7 +11,8 @@
   "categories": [
     "Programming Languages",
     "Snippets",
-    "Linters"
+    "Linters",
+    "Formatters"
   ],
   "activationEvents": [
     "onLanguage:upp"
@@ -53,86 +54,91 @@
       {
         "command": "upp.derle",
         "title": "u++: Derle",
-        "icon": "$(tools)"
+        "icon": "$(tools)",
+        "enablement": "upp.uppcHazir"
       },
       {
         "command": "upp.calistir",
-        "title": "u++: Çalıştır"
+        "title": "u++: Çalıştır",
+        "enablement": "upp.uppcHazir"
       },
       {
         "command": "upp.sadeceC",
-        "title": "u++: Yalnızca C üret"
+        "title": "u++: Yalnızca C üret",
+        "enablement": "upp.uppcHazir"
+      },
+      {
+        "command": "upp.tara",
+        "title": "u++: Derleyiciyi tara"
+      },
+      {
+        "command": "upp.yolBelirt",
+        "title": "u++: Derleyici yolu belirt"
+      },
+      {
+        "command": "upp.durumMenu",
+        "title": "u++: Derleyici menüsü"
       }
     ],
     "keybindings": [
       {
         "command": "upp.calistir",
         "key": "f5",
-        "when": "editorTextFocus && editorLangId == upp && resourceScheme == file && !inDebugMode"
+        "when": "editorTextFocus && editorLangId == upp && resourceScheme == file && !inDebugMode && upp.uppcHazir"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "upp.derle",
-          "when": "resourceLangId == upp",
+          "when": "resourceLangId == upp && upp.uppcHazir",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
           "command": "upp.derle",
-          "when": "resourceLangId == upp",
+          "when": "resourceLangId == upp && upp.uppcHazir",
           "group": "u++@1"
         },
         {
           "command": "upp.calistir",
-          "when": "resourceLangId == upp",
+          "when": "resourceLangId == upp && upp.uppcHazir",
           "group": "u++@2"
         }
+      ],
+      "commandPalette": [
+        {
+          "command": "upp.derle",
+          "when": "upp.uppcHazir"
+        },
+        {
+          "command": "upp.calistir",
+          "when": "upp.uppcHazir"
+        },
+        {
+          "command": "upp.sadeceC",
+          "when": "upp.uppcHazir"
+        }
       ]
+    },
+    "configurationDefaults": {
+      "[upp]": {
+        "editor.defaultFormatter": "u-plus-plus.u-plus-plus"
+      }
     },
     "configuration": {
       "title": "u++",
       "properties": {
-        "upp.pythonYolu": {
-          "type": "string",
-          "default": "python",
-          "description": "Python yürütücüsü. Boş veya 'python' ise gerçek kurulum aranır (Windows Store kısayolu atlanır). Örnek: C:\\\\Python314\\\\python.exe"
-        },
-        "upp.derleyici": {
-          "type": "string",
-          "enum": [
-            "python",
-            "native"
-          ],
-          "default": "python",
-          "description": "Canlı tanı ve Derle/Çalıştır komutları: python (uppc.py) veya native (uppc --analiz / derle)."
-        },
         "upp.uppcYolu": {
           "type": "string",
           "default": "",
-          "description": "Native uppc yolu. Boşsa Windows'ta <repo>/derleme/uppc.exe, diğer sistemlerde derleme/uppc veya derleme/uppc.out denenir."
+          "description": "Native uppc yolu. Boşsa derleyici/uppc.exe (Windows) veya derleyici/uppc (Linux), sonra PATH."
         },
         "upp.ciktiKoku": {
           "type": "string",
           "default": "derleme",
-          "description": "Derleme çıktı klasörü (repo köküne göre)."
-        },
-        "upp.gccTanilari": {
-          "type": "boolean",
-          "default": false,
-          "description": "Kayıtta --json-hata ile GCC tanısı (yavaş; canlı tanı --analiz kullanır)."
-        },
-        "upp.iz.sunucu": {
-          "type": "string",
-          "enum": [
-            "off",
-            "messages",
-            "verbose"
-          ],
-          "default": "off",
-          "description": "LSP istemci izleme düzeyi."
+          "description": "Kullanıcı programı .c / .exe çıktı klasörü (repo köküne göre)."
         }
       }
     },
@@ -186,11 +192,9 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "tsc -p tsconfig.test.json && node --test out-test/test/kesif.test.js out-test/test/surum.test.js out-test/test/tani.test.js out-test/test/sozluk.test.js",
     "vscode:prepublish": "npm run compile",
     "package": "npm run compile && vsce package --allow-missing-repository --skip-license"
-  },
-  "dependencies": {
-    "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
