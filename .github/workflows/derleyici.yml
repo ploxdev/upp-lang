@@ -35,17 +35,19 @@ jobs:
           msystem: UCRT64
           update: false
           install: mingw-w64-ucrt-x86_64-gcc
-      - name: Bootstrap uppc
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+      - name: Bootstrap uppc (Linux)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p derleyici
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
-            ./derleyici/uppc.exe --surum
-          else
-            gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
-            ./derleyici/uppc --surum
-          fi
+          gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
+          ./derleyici/uppc --surum
+      - name: Bootstrap uppc (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          mkdir -p derleyici
+          gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+          ./derleyici/uppc.exe --surum
       - name: Testler
         env:
           PYTHONUTF8: "1"
