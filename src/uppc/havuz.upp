@@ -88,8 +88,8 @@ fonk metin_kopya_yeni(metin s) -> metin {
 }
 
 fonk intern_sifirla() -> bos {
-    intern_map.temizle();
-    intern_metin.temizle();
+    intern_map.bosalt();
+    intern_metin.bosalt();
     intern_n = 0;
 }
 

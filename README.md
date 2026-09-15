@@ -220,15 +220,25 @@ fonk ana() -> sayi {
 
 ## ⚙️ Native Self-Hosted Derleyici
 
-u++, tamamen kendi kaynak koduyla derlenebilen bağımsız bir native derleyiciye sahiptir:
+Temiz bir klon **bootstrap C** ile ayağa kalkar (Python derleyici yok):
 
 ```bash
-# 1. Gömülü çalışma zamanını güncelle ve modülleri birleştir:
-py araclar/birlestir.py
+# Windows (MinGW)
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
 
-# 2. Mevcut native derleyici ile yeni C kodunu transpile et ve GCC ile derle:
-./derleyici/uppc.exe derleyici/uppc_birlesik.upp -c -o derleyici/uppc_yeni.c
-gcc -std=gnu11 -O2 derleyici/uppc_yeni.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+# Linux
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
+```
+
+veya `py araclar/bootstrap.py derle`.
+
+Kaynakları birleştirip yeniden transpile (mevcut `uppc` gerekir):
+
+```bash
+py araclar/birlestir.py
+./derleyici/uppc derleyici/uppc_birlesik.upp --sadece-c --cikti derleyici/uppc_yeni.c
+py araclar/bootstrap.py hazirla
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
 ```
 
 ---
@@ -250,13 +260,14 @@ Kurulum detayları için [eklenti/README.md](eklenti/README.md) dosyasını ince
 u++, native derleyici üzerinden çalışan kapsamlı bir test paketiyle sürekli doğrulanır:
 
 ```bash
-# Tüm testleri yerel derleyiciyle koştur:
+# Bootstrap derleyicisini derle, sonra tüm testler:
+py araclar/bootstrap.py derle
 python tests/run_tests.py
 
-# Kategoriye göre test koşumu:
-python tests/run_tests.py --kategori positive   # Başarılı E2E senaryoları
-python tests/run_tests.py --kategori safety     # Bellek güvenliği ihlal testleri
-python tests/run_tests.py --kategori negative   # Derleme hatası yakalama testleri
+python tests/run_tests.py --kategori positive
+python tests/run_tests.py --kategori safety
+python tests/run_tests.py --kategori negative
+python tests/run_tests.py --kategori runtime
 ```
 
 ---
@@ -265,7 +276,8 @@ python tests/run_tests.py --kategori negative   # Derleme hatası yakalama testl
 
 ```text
 upp-lang/
-├── derleyici/              # Native derleyici (uppc.exe) ve birleşik kaynak
+├── bootstrap/              # Aşama-0 C (gcc ile native uppc)
+├── derleyici/              # Yerel inşa çıktısı (gitignore)
 ├── derleme/                # Kullanıcı programlarının .c / .exe çıktıları
 ├── OGREN.md                # Sıfırdan başlayanlar için kapsamlı programlama kitabı
 ├── derleyici.md            # Native derleyici mimari dokümantasyonu
@@ -276,10 +288,10 @@ upp-lang/
 │   ├── runtime/            # C çalışma zamanı kütüphanesi (upp_runtime.c)
 │   └── uppc/               # Native derleyici kaynak kodları (saf u++)
 │       └── gomulu_runtime.upp # Derleyiciye gömülü C çalışma zamanı
-├── eklenti/                # VS Code & Cursor IDE eklentisi (TypeScript + Python LSP)
-├── araclar/                # Derleyici derleme ve birleştirme yardımcı araçları
+├── eklenti/                # VS Code & Cursor IDE eklentisi
+├── araclar/                # Birleştirme ve bootstrap yardımcıları
 ├── ornekler/               # Dil yeteneklerini sergileyen örnek kodlar (.upp, .uph)
-└── tests/                  # Entegrasyon, güvenlik ve negatif test paketi
+└── tests/                  # Entegrasyon, güvenlik, runtime ve negatif test paketi
 ```
 
 ---

@@ -2665,7 +2665,14 @@ static int _upp_harita_hazir(UppKolHarita* H, int ktag, int vtag) {
 }
 
 static int _upp_harita_buyut(_UppKolHaritaH* h) {
-    long long nc = h->cap ? h->cap * 2 : 8;
+    long long nc;
+    if (!h) {
+        return 0;
+    }
+    if (h->cap > 0 && h->cap > (LLONG_MAX / 2)) {
+        upp_panik("harita kapasite taşması");
+    }
+    nc = h->cap ? h->cap * 2 : 8;
     if (h->ktag == UPP_KT_METIN) {
         char** p = (char**)realloc(h->k_s, (size_t)nc * sizeof(char*));
         if (!p) {

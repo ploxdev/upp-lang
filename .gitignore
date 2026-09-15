@@ -4,8 +4,16 @@ __pycache__/
 *$py.class
 *.pyd
 
+# Python ve önbellekler
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
 # Derleyici çıktıları ve ara dosyalar
 *.c
+!src/runtime/upp_runtime.c
+!bootstrap/uppc.c
 *.o
 *.obj
 *.exe

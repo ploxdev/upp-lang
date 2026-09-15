@@ -113,18 +113,21 @@ u++, Türkçe sözdizimine ve karakter setine (ç, ğ, ı, ö, ş, ü) tam deste
 
 ## 🔁 Derleme ve Self-Hosting
 
-Native derleyiciyi yeniden inşa etmek için:
+Temiz klon (aşama-0, Python yok):
+
+```bash
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+# Linux: gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
+```
+
+Kaynakları yeniden transpile etmek için mevcut `uppc` gerekir:
 
 ```powershell
-# 1. Aşama: Gömülü runtime'ı üret ve modülleri tek bir u++ kaynağında birleştir
 py araclar/birlestir.py
-
-# 2. Aşama: Mevcut derleyici ile yeni C kodunu oluştur ve GCC ile ikiliyi üret
 .\derleyici\uppc.exe derleyici/uppc_birlesik.upp --sadece-c --cikti derleyici/uppc_yeni.c
-gcc -std=gnu11 -O2 derleyici/uppc_yeni.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
-
-# 3. Aşama: Doğrulama ve Testleri Çalıştır
+py araclar/bootstrap.py hazirla
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
 py tests/run_tests.py
 ```
 
-Tüm testler ve geliştirme süreci artık tamamen native `uppc` derleyicisi üzerinden yürütülmektedir.
+`havuz_impl.h` SoA native derleyicide yoktur; düğüm/intern havuzu `src/uppc/havuz.upp`, koleksiyon büyütme `src/runtime/upp_runtime.c` içindedir.

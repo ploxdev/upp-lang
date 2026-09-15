@@ -7,25 +7,27 @@
 - **Dizi Sınır Denetimi:** Sabit dizi erişimlerinde sınır aşımları artık derleme anında tespit edilir. Değişken indeksli erişimler ise çalışma anında `upp_dizi_idx` ile denetlenir; belirsiz davranışlar engellenerek güvenli biçimde panik üretilir.
 - **İş Parçacığı Güvenliği:** UTF-8 çözümleme ve metin birleştirme önbellekleri iş parçacığına özel (`thread-local`) hale getirildi. Yoğun `arkaplan` kullanımındaki veri yarışı (data race) riskleri ortadan kaldırıldı.
 - **Kaynak Yönetimi:** İfade içinde oluşturulan `ArkaplanIs` iş parçacığı tutamaçları takibe alındı. `bekle()` çağrıldığında kayıt serbest bırakılır, süreç sonlandığında ise açıkta kalan tüm tutamaçlar otomatik temizlenir.
-- **Dinamik Liste Güvenliği:** `liste` yapısında sınır dışı erişim, yetersiz bellek, metin taşması ve `_upp_liste_buyut` kapasite aşımları doğrudan `upp_panik` çağrısıyla kontrollü şekilde sonlandırılır.
-- **Büyük Dosya Desteği:** `upp.dosya_oku` fonksiyonu 64 bit dosya boyutlarını destekleyecek şekilde güncellendi (`_ftelli64` / `ftello`).
-- **Analiz Belleği:** Canlı düzenleyici analizinde (`--analiz`) her oturum başında dize havuzu (`intern`) `havuz_sifirla` ile sıfırlanarak bellek sızıntıları önlendi.
-- **Güvenlik İhlali Tespiti:** Güvenli modda doğrudan bildirimlerin yanı sıra, çağrılar veya tür dönüşümleri üzerinden sızan tüm işaretçi kullanımları da bellek güvenliği ihlali kapsamına alındı.
+- **Dinamik Liste / Harita:** `liste` ve `harita` büyütmede `nc *= 2` taşması panik üretir (`_upp_liste_buyut`, `_upp_harita_buyut`). Sınır dışı erişim ve yetersiz bellek `upp_panik` ile biter. Eski `havuz_impl.h` (Python bootstrap) SoA geçişinde yok; bu korumalar C çalışma zamanındadır.
+- **Intern sıfırlama:** `--analiz` oturumunda `havuz_sifirla` intern haritasını ve dizge listesini `bosalt()` ile serbest bırakır.
+- **c_kod önişlemci:** `c_on_islemci` gömülü C'yi satır satır `upp.metin.kes` ile tarar; 4095 baytlık kesme (eski `havuz_impl.h`) yoktur.
+- **Büyük Dosya Desteği:** `upp.dosya_oku` 64 bit (`_ftelli64` / `ftello`).
+- **Güvenlik İhlali Tespiti:** Güvenli modda işaretçi bildirimi (çağrı sızıntısı dahil) bellek güvenliği ihlalidir.
 
 ### Editör Eklentisi (VS Code / Cursor)
 
-- **Tanı Senkronizasyonu:** Eski `--analiz` çıktıları "Sorunlar" (Problems) panelinde birikmez; panel her zaman güncel dosya durumunu yansıtır.
-- **Güvenli F5 Akışı:** Hata ayıklama ve çalıştırma akışı birbirinden bağımsız iki aşamaya ayrıldı; derleme başarıyla tamamlanmadan ikili dosya yürütülmez. Kararsız çalışan `$LASTEXITCODE` komut zinciri kaldırıldı.
-- **Kayıt Güvenliği:** Dosya diske kaydedilemediği durumlarda (`save() === false`) derleme işlemi otomatik olarak iptal edilir.
-- **Çakışma Önleme:** Farklı dizinlerdeki (örneğin `src/` ve `test/`) aynı ada sahip dosyaların çıktıları, `derleme/` klasöründe artık birbirinin üzerine yazılmaz.
-- **Durum Çubuğu Filtresi:** Durum çubuğundaki hata sayacı yalnızca `u++` ve `u++ güvenlik` kaynaklı bildirimleri dikkate alır.
-- **Eksik Hata Koruması:** Derleyicinin `ok: false` döndüğü ancak hata ayrıntısı iletmediği durumlar için sentetik tanı mekanizması eklendi.
-- **Biçimlendirme Konumu:** Kod biçimlendirici (`Format Document`), çalışma dizini olarak doğrudan açık olan belgenin klasörünü temel alır.
-- **Hata Bildirimleri:** Süreç yürütme hataları editör arayüzünde `showErrorMessage` bildirim penceresiyle gösterilir.
-- **Oturum Temizliği:** Dil sunucusu kapatıldığında yalnızca u++ ile ilişkili belgelerin tanı kayıtları temizlenir.
+- **Tanı Senkronizasyonu:** Eski `--analiz` çıktıları Problems paneline yazılmaz.
+- **Güvenli F5 Akışı:** Derle ve çalıştır ayrı görevler; `$LASTEXITCODE` birleşik satırı yok.
+- **Kayıt Güvenliği:** `save() === false` derlemeyi iptal eder.
+- **Çakışma Önleme:** `src/main.upp` ile `test/main.upp` çıktıları `derleme/` altında ayrı gövde alır.
+- **Durum Çubuğu Filtresi:** Yalnızca `u++` / `u++ güvenlik`.
+- **Eksik Hata Koruması:** `ok: false` ve `hatalar` yoksa sentetik tanı.
+- **Biçimlendirme Konumu:** `cwd` açık belgenin klasörü.
+- **Hata Bildirimleri:** `showErrorMessage`.
+- **Oturum Temizliği:** Motor düşünce yalnızca açık u++ belgelerinin tanısı temizlenir.
 
-### Test ve Sürekli Entegrasyon (CI)
+### Bootstrap ve CI
 
-- **Çalışma Zamanı Testleri:** `tests/runtime/` test paketi eklendi; kaynak dosyalar derlenip çalıştırılarak sıfır harici çıkış kodları ve `stderr` çıktıları otomatik doğrulanır.
-- **Yerel Derleyici Esnekliği:** Yerel derleyici ikilileri (`derleyici/uppc*`) bulunamadığında ilgili test adımları sessizce atlanır.
-- **İş Parçacığı Denetimi (TSAN):** Linux ortamında `UPP_SANITIZE` bayrağı ile ThreadSanitizer etkinleştirilerek çalışma zamanı ve yoğun `arkaplan` testleri güvenceye alındı.
+- **Aşama-0 C:** `bootstrap/uppc.c` repoda. Temiz checkout: `gcc bootstrap/uppc.c` → `derleyici/uppc`. Python bootstrap yok.
+- **Native test CI:** Bootstrap'ı gcc ile derler, sonra `python tests/run_tests.py` çalıştırır. İkili yok diye yeşil atlama yoktur.
+- **TSAN:** Linux'ta aynı bootstrap ikilisiyle `UPP_SANITIZE=-fsanitize=thread` altında runtime ve yoğun arkaplan.
+- **Çalışma Zamanı Testleri:** `tests/runtime/` derle + sıfır olmayan çıkış + stderr.

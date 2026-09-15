@@ -17,6 +17,7 @@ Kullanım:
   python tests/run_tests.py
   python tests/run_tests.py --kategori positive
   python tests/run_tests.py --kategori safety
+  python tests/run_tests.py --kategori runtime
 """
 
 from __future__ import annotations

@@ -86,16 +86,15 @@ derleyici\uppc.exe program.upp -c -o program.c
 ```
 
 #### Kendi Kendini Derleme (Self-Hosting)
-Bir programlama dilinin olgunluk seviyesi, kendi derleyicisini kendi derleyicisiyle hatasız inşa edebilmesiyle ölçülür. u++ bunu rahatlıkla başarır:
-```bash
-# 1. Modülleri ve gömülü çalışma zamanını birleştir:
-py araclar/birlestir.py
+Temiz klonda önce aşama-0 C derlenir, sonra dil kendi kaynaklarıyla yenilenir:
 
-# 2. Native derleyici ile yeni sürümü derle:
-derleyici\uppc.exe derleyici/uppc_birlesik.upp -c -o derleyici/uppc_yeni.c
-gcc -std=gnu11 -O2 derleyici/uppc_yeni.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+```bash
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+py araclar/birlestir.py
+derleyici\uppc.exe derleyici/uppc_birlesik.upp --sadece-c --cikti derleyici/uppc_yeni.c
+py araclar/bootstrap.py hazirla
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
 ```
-Tüm geliştirme ve derleme süreci tamamen native `uppc` derleyicisi üzerinden yürütülür.
 
 ---
 
