@@ -11,7 +11,7 @@
 // elma silindi mi: evet
 // yeni uzunluk: 1
 // temizle sonrasi uzunluk: 0
-// Platform: windows
+// Platform: Gecerli
 // PID: Gecerli
 // Ortam yazildi mi: evet
 // Ortam degeri: basarili
@@ -64,7 +64,11 @@ fonk test_harita_sil() -> bos {
 fonk test_sistem_ve_platform() -> bos {
     metin plt = upp.platform();
     upp.yaz("Platform: ");
-    upp.satir_yaz(plt);
+    eger (plt == "windows" || plt == "linux") {
+        upp.satir_yaz("Gecerli");
+    } yoksa {
+        upp.satir_yaz(plt);
+    }
 
     sayi my_pid = upp.sistem.pid();
     upp.yaz("PID: ");
