@@ -51,12 +51,23 @@ static long long upp_dizi_idx(long long i, long long n) {
 }
 
 #include <errno.h>
-#if !defined(UPP_WIN) || !UPP_WIN
+#include <string.h>
+#include <math.h>
+#if UPP_WIN
+#include <windows.h>
+#include <mmsystem.h>
+#include <tlhelp32.h>
+#include <io.h>
+#include <sys/stat.h>
+#else
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <limits.h>
+#include <pthread.h>
+#include <time.h>
+#include <fcntl.h>
 #if defined(__has_include)
 #  if __has_include(<sys/wait.h>)
 #    include <sys/wait.h>
@@ -512,11 +523,18 @@ static int _u8t_esles(const char* s, size_t n) {
 }
 
 static int _u8t_hazir(const char* s) {
-    size_t n = s ? strlen(s) : 0;
+    size_t n;
     size_t cap;
     size_t i;
     long long k;
     size_t* off;
+    /* Aynı işaretçi: strlen yok. Aksi halde her lex adımı 541 KB kaynakta O(n²). */
+    if (s && _u8t.s == s && _u8t.ncp >= 0 && _u8t.off) {
+        if (!(s == _upp_geo_p && _u8t.ver != _upp_geo_ver)) {
+            return 1;
+        }
+    }
+    n = s ? strlen(s) : 0;
     if (_u8t_esles(s, n)) {
         return 1;
     }
@@ -1191,6 +1209,9 @@ typedef struct {
     long long* v_i;
     double* v_d;
     char** v_s;
+    long long* hash;
+    long long hash_cap;
+    long long hash_tomb;
 } _UppKolHaritaH;
 
 #if UPP_WIN
@@ -2664,6 +2685,150 @@ static int _upp_harita_hazir(UppKolHarita* H, int ktag, int vtag) {
     }
 }
 
+#define UPP_H_EMPTY (-1LL)
+#define UPP_H_TOMB  (-2LL)
+
+static unsigned _upp_fnv(const char* s) {
+    unsigned h = 2166136261u;
+    const unsigned char* p = (const unsigned char*)(s ? s : "");
+    while (*p) {
+        h ^= *p++;
+        h *= 16777619u;
+    }
+    return h ? h : 1u;
+}
+
+static unsigned _upp_mix_i(long long k) {
+    unsigned long long x = (unsigned long long)k * 0x9E3779B97F4A7C15ull;
+    x ^= x >> 32;
+    return (unsigned)x ? (unsigned)x : 1u;
+}
+
+static unsigned _upp_hkey(_UppKolHaritaH* h, long long ki, const char* ks) {
+    if (h->ktag == UPP_KT_METIN) {
+        return _upp_fnv(ks);
+    }
+    return _upp_mix_i(ki);
+}
+
+static int _upp_hesit(_UppKolHaritaH* h, long long i, long long ki, const char* ks) {
+    if (h->ktag == UPP_KT_METIN) {
+        const char* a = h->k_s[i] ? h->k_s[i] : "";
+        const char* b = ks ? ks : "";
+        return strcmp(a, b) == 0;
+    }
+    return h->k_i[i] == ki;
+}
+
+static long long _upp_hprobe(_UppKolHaritaH* h, unsigned hv, long long step) {
+    long long cap = h->hash_cap;
+    if (cap <= 0) {
+        return 0;
+    }
+    if ((cap & (cap - 1)) == 0) {
+        return (long long)((hv + (unsigned)step) & (unsigned)(cap - 1));
+    }
+    return (long long)((hv + (unsigned)step) % (unsigned)cap);
+}
+
+static int _upp_harita_rehash(_UppKolHaritaH* h, long long cap) {
+    long long* nh;
+    long long i;
+    long long n = 8;
+    if (!h) {
+        return 0;
+    }
+    if (cap < 8) {
+        cap = 8;
+    }
+    while (n < cap) {
+        if (n > (LLONG_MAX / 2)) {
+            n = cap;
+            break;
+        }
+        n *= 2;
+    }
+    cap = n;
+    nh = (long long*)malloc((size_t)cap * sizeof(long long));
+    if (!nh) {
+        return 0;
+    }
+    for (i = 0; i < cap; i++) {
+        nh[i] = UPP_H_EMPTY;
+    }
+    free(h->hash);
+    h->hash = nh;
+    h->hash_cap = cap;
+    h->hash_tomb = 0;
+    for (i = 0; i < h->n; i++) {
+        unsigned hv = _upp_hkey(h, h->ktag == UPP_KT_METIN ? 0 : h->k_i[i],
+                               h->ktag == UPP_KT_METIN ? h->k_s[i] : NULL);
+        long long step = 0;
+        for (;;) {
+            long long p = _upp_hprobe(h, hv, step);
+            if (h->hash[p] == UPP_H_EMPTY) {
+                h->hash[p] = i;
+                break;
+            }
+            step++;
+            if (step >= cap) {
+                free(nh);
+                h->hash = NULL;
+                h->hash_cap = 0;
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+static void _upp_harita_hash_put(_UppKolHaritaH* h, long long idx) {
+    unsigned hv;
+    long long step = 0;
+    long long tomb = -1;
+    long long cap;
+    if (!h || !h->hash || h->hash_cap < 8) {
+        return;
+    }
+    cap = h->hash_cap;
+    hv = _upp_hkey(h, h->ktag == UPP_KT_METIN ? 0 : h->k_i[idx],
+                   h->ktag == UPP_KT_METIN ? h->k_s[idx] : NULL);
+    for (;;) {
+        long long p = _upp_hprobe(h, hv, step);
+        long long sl = h->hash[p];
+        if (sl == UPP_H_EMPTY) {
+            if (tomb >= 0) {
+                h->hash[tomb] = idx;
+                if (h->hash_tomb > 0) {
+                    h->hash_tomb--;
+                }
+            } else {
+                h->hash[p] = idx;
+            }
+            return;
+        }
+        if (sl == UPP_H_TOMB && tomb < 0) {
+            tomb = p;
+        }
+        step++;
+        if (step >= cap) {
+            return;
+        }
+    }
+}
+
+static void _upp_harita_indeks_kaydet(_UppKolHaritaH* h, long long idx) {
+    if (!h) {
+        return;
+    }
+    if (!h->hash || h->hash_cap < 8 || (h->n + h->hash_tomb) * 2LL >= h->hash_cap) {
+        long long nc = h->hash_cap ? h->hash_cap * 2 : 8;
+        _upp_harita_rehash(h, nc);
+        return;
+    }
+    _upp_harita_hash_put(h, idx);
+}
+
 static int _upp_harita_buyut(_UppKolHaritaH* h) {
     long long nc;
     if (!h) {
@@ -2710,16 +2875,31 @@ static int _upp_harita_buyut(_UppKolHaritaH* h) {
 }
 
 static long long _upp_harita_bul(_UppKolHaritaH* h, long long ki, const char* ks) {
-    long long i;
-    for (i = 0; i < h->n; i++) {
-        if (h->ktag == UPP_KT_METIN) {
-            const char* a = h->k_s[i] ? h->k_s[i] : "";
-            const char* b = ks ? ks : "";
-            if (strcmp(a, b) == 0) {
+    unsigned hv;
+    long long step;
+    long long cap;
+    if (!h || h->n <= 0) {
+        return -1;
+    }
+    if (!h->hash || h->hash_cap < 8) {
+        long long i;
+        for (i = 0; i < h->n; i++) {
+            if (_upp_hesit(h, i, ki, ks)) {
                 return i;
             }
-        } else if (h->k_i[i] == ki) {
-            return i;
+        }
+        return -1;
+    }
+    cap = h->hash_cap;
+    hv = _upp_hkey(h, ki, ks);
+    for (step = 0; step < cap; step++) {
+        long long p = _upp_hprobe(h, hv, step);
+        long long sl = h->hash[p];
+        if (sl == UPP_H_EMPTY) {
+            return -1;
+        }
+        if (sl != UPP_H_TOMB && sl >= 0 && sl < h->n && _upp_hesit(h, sl, ki, ks)) {
+            return sl;
         }
     }
     return -1;
@@ -2772,6 +2952,7 @@ static void upp_harita_koy(UppKolHarita* H, int ktag, int vtag, long long ki, co
         h->v_i[h->n] = vi;
     }
     h->n++;
+    _upp_harita_indeks_kaydet(h, h->n - 1);
 }
 
 static long long upp_harita_al_i(UppKolHarita H, int ktag, long long ki, const char* ks) {
@@ -2843,6 +3024,7 @@ static void upp_harita_bosalt(UppKolHarita* H) {
     free(h->v_i);
     free(h->v_d);
     free(h->v_s);
+    free(h->hash);
     memset(h, 0, sizeof(_UppKolHaritaH));
     H->id = 0;
 }
@@ -2872,6 +3054,9 @@ static long long upp_harita_sil(UppKolHarita* H, int ktag, long long ki, const c
     if (h->ktag == UPP_KT_METIN) h->k_s[h->n - 1] = NULL;
     if (h->vtag == UPP_KT_METIN) h->v_s[h->n - 1] = NULL;
     h->n--;
+    if (h->hash && h->hash_cap >= 8) {
+        _upp_harita_rehash(h, h->hash_cap);
+    }
     return 1;
 }
 
@@ -2894,6 +3079,12 @@ static void upp_harita_temizle(UppKolHarita* H) {
         }
     }
     h->n = 0;
+    h->hash_tomb = 0;
+    if (h->hash && h->hash_cap > 0) {
+        for (j = 0; j < h->hash_cap; j++) {
+            h->hash[j] = UPP_H_EMPTY;
+        }
+    }
 }
 
 static long long upp_harita_anahtar_i(UppKolHarita H, long long i) {

@@ -1164,14 +1164,14 @@ fonk os_runtime_oku() -> metin {
     eger (!metin_esit(g_ozel_runtime_yol, "")) {
         eger (upp.dosya_var_mi(g_ozel_runtime_yol)) {
             oto s = upp.dosya_oku(g_ozel_runtime_yol);
-            eger (s != yok) { don intern(s); }
+            eger (s != yok) { don s; }
         }
     }
     metin p = os_runtime_bul();
     eger (metin_esit(p, "")) { don intern(""); }
     metin s = upp.dosya_oku(p);
     eger (s == yok) { don intern(""); }
-    don intern(s);
+    don s;
 }
 
 fonk os_gcc_aday_dene(metin p) -> metin {

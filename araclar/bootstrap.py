@@ -11,9 +11,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KAYNAK_C = os.path.join(ROOT, "derleyici", "uppc_yeni.c")
 BOOTSTRAP_C = os.path.join(ROOT, "bootstrap", "uppc.c")
 
-BASLIK = r"""/* u++ aşama-0 bootstrap C.
- * Temiz checkout: gcc bootstrap/uppc.c → derleyici/uppc[.exe]
- * Kaynak gerçeklik: src/uppc/*.upp — bu dosya son başarılı transpile kopyasıdır.
+BASLIK = r"""/* u++ bootstrap derleyici — kalıcı C.
+ * gcc bootstrap/uppc.c → derleyici/uppc[.exe]
+ * Çalışma zamanı src/runtime/upp_runtime.c (tek çeviri birimi, gömülü kopya yok).
+ * Derleyici gövdesi src/uppc/*.upp karşılığıdır.
  */
 #if defined(_WIN32)
 #define UPP_HEDEF_WINDOWS 1
@@ -31,28 +32,8 @@ BASLIK = r"""/* u++ aşama-0 bootstrap C.
 #define _POSIX_C_SOURCE 200809L
 #endif
 #endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <limits.h>
-#include <stdint.h>
-#include <math.h>
-#if defined(_WIN32)
-#include <windows.h>
-#include <mmsystem.h>
-#include <tlhelp32.h>
-#include <io.h>
-#include <sys/stat.h>
-#else
-#include <pthread.h>
-#include <unistd.h>
-#include <time.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#endif
+
+#include "../src/runtime/upp_runtime.c"
 
 """
 
@@ -63,10 +44,13 @@ def hazirla() -> int:
         print("[bootstrap] bootstrap/uppc.c zaten repoda; gcc ile derleyin.")
         return 1
     ham = open(KAYNAK_C, encoding="utf-8", errors="replace").read()
-    isaret = "/* ====================================================================="
+    isaret = "/* ---- u++ seçenekler (enum) ---- */"
     i = ham.find(isaret)
     if i < 0:
-        print("[bootstrap] runtime işareti bulunamadı")
+        isaret = "typedef enum JetonTur"
+        i = ham.find(isaret)
+    if i < 0:
+        print("[bootstrap] derleyici gövdesi (JetonTur) bulunamadı")
         return 1
     os.makedirs(os.path.dirname(BOOTSTRAP_C), exist_ok=True)
     with open(BOOTSTRAP_C, "w", encoding="utf-8", newline="\n") as f:
