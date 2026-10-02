@@ -1,0 +1,21 @@
+// Pozitif: &metin görünümü; bayt uzunluğu (Ağaç = 6)
+// @stdout
+// Ağaç
+// Ağaç
+// 6
+// 4
+
+fonk yaz_v(&metin v) -> bos {
+    upp.satir_yaz(v);
+}
+
+fonk ana() -> sayi {
+    metin s = "Ağaç";
+    &metin v = s;
+    yaz_v(s);
+    yaz_v(v);
+    upp.satir_yaz("{v.uzunluk}");
+    sayi n = upp.uzunluk(v);
+    upp.satir_yaz("{n}");
+    don 0;
+}

@@ -67,6 +67,14 @@ liste[sayi] k_seviye;
 sayi k_n = 0;
 sayi k_seviye_cur = 0;
 
+liste[metin] drop_ad;
+liste[sayi] drop_cer;
+sayi drop_n = 0;
+sayi drop_cer_cur = 0;
+liste[sayi] drop_dongu;
+sayi drop_dongu_n = 0;
+sayi g_hoist_izin = 1;
+
 harita[metin,sayi] t_sinif;
 harita[metin,sayi] t_fn;
 harita[metin,sayi] t_enum;
@@ -1014,6 +1022,85 @@ fonk kapsam_yerel_var(metin ad) -> mantik {
         i = i - 1;
     }
     don yanlis;
+}
+
+fonk drop_sifirla() -> bos {
+    drop_n = 0;
+    drop_cer_cur = 0;
+    drop_dongu_n = 0;
+    g_hoist_izin = 1;
+}
+
+fonk drop_cerceve_ac() -> bos {
+    drop_cer_cur = drop_cer_cur + 1;
+}
+
+fonk drop_cer_cur_al() -> sayi {
+    don drop_cer_cur;
+}
+
+fonk drop_n_al() -> sayi {
+    don drop_n;
+}
+
+fonk drop_ad_al(sayi i) -> metin {
+    eger (i < 0 || i >= drop_n) { don ""; }
+    don drop_ad.al(i);
+}
+
+fonk drop_cer_al(sayi i) -> sayi {
+    eger (i < 0 || i >= drop_n) { don 0; }
+    don drop_cer.al(i);
+}
+
+fonk drop_kaydet(metin ad) -> bos {
+    eger (ad == yok || metin_esit(ad, "")) { don; }
+    eger (drop_cer_cur <= 0) { don; }
+    eger (drop_n == drop_ad.uzunluk()) {
+        drop_ad.ekle(intern(ad));
+        drop_cer.ekle(drop_cer_cur);
+    } yoksa {
+        drop_ad.yaz(drop_n, intern(ad));
+        drop_cer.yaz(drop_n, drop_cer_cur);
+    }
+    drop_n = drop_n + 1;
+}
+
+fonk drop_cerceve_pop() -> bos {
+    iken (drop_n > 0 && drop_cer.al(drop_n - 1) == drop_cer_cur) {
+        drop_n = drop_n - 1;
+    }
+    eger (drop_cer_cur > 0) {
+        drop_cer_cur = drop_cer_cur - 1;
+    }
+}
+
+fonk drop_dongu_it(sayi cer) -> bos {
+    eger (drop_dongu_n == drop_dongu.uzunluk()) {
+        drop_dongu.ekle(cer);
+    } yoksa {
+        drop_dongu.yaz(drop_dongu_n, cer);
+    }
+    drop_dongu_n = drop_dongu_n + 1;
+}
+
+fonk drop_dongu_cek() -> bos {
+    eger (drop_dongu_n > 0) {
+        drop_dongu_n = drop_dongu_n - 1;
+    }
+}
+
+fonk drop_dongu_al() -> sayi {
+    eger (drop_dongu_n <= 0) { don 0; }
+    don drop_dongu.al(drop_dongu_n - 1);
+}
+
+fonk hoist_izin_al() -> sayi {
+    don g_hoist_izin;
+}
+
+fonk hoist_izin_yaz(sayi v) -> bos {
+    g_hoist_izin = v;
 }
 
 fonk tablo_sifirla() -> bos {

@@ -1,0 +1,22 @@
+// Pozitif: arr[a..b] ve &dilim[sayi]
+// @stdout
+// 20
+// 3
+// 20
+
+fonk ana() -> sayi {
+    sayi arr[5];
+    arr[0] = 10;
+    arr[1] = 20;
+    arr[2] = 30;
+    arr[3] = 40;
+    arr[4] = 50;
+    &dilim[sayi] d = arr[1..4];
+    sayi x = d[0];
+    upp.satir_yaz("{x}");
+    upp.satir_yaz("{d.uzunluk}");
+    &dilim[sayi] t = arr;
+    sayi y = t[1];
+    upp.satir_yaz("{y}");
+    don 0;
+}

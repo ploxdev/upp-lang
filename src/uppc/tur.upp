@@ -67,6 +67,22 @@ fonk tip_atanir(sayi dst, sayi src) -> mantik {
     eger (tip_yok_mi(src)) {
         don tip_metin_mi(dst) || dugum_ptrd(dst) > 0;
     }
+    eger (tip_ref_metin_mi(dst)) {
+        don tip_ref_metin_mi(src) || tip_metin_mi(src);
+    }
+    eger (tip_ref_dilim_mi(dst)) {
+        oto delem = dilim_ref_elem_ad(dugum_ad(dst));
+        eger (tip_ref_dilim_mi(src)) {
+            don metin_esit(delem, dilim_ref_elem_ad(dugum_ad(src)));
+        }
+        eger (dugum_dims(src) > 0 && dugum_ptrd(src) == 0 && metin_esit(dugum_ad(src), delem)) {
+            don dogru;
+        }
+        eger (liste_tur_mi(dugum_ad(src)) && dugum_ptrd(src) == 0) {
+            don metin_esit(liste_elem_ad(dugum_ad(src)), delem) && (metin_esit(delem, "sayi") || metin_esit(delem, "ondalik"));
+        }
+        don yanlis;
+    }
     eger (dugum_ptrd(dst) > 0 && dugum_ptrd(src) > 0) {
         don metin_esit(dugum_ad(src), dugum_ad(dst)) || metin_esit(dugum_ad(src), "bos") || metin_esit(dugum_ad(dst), "bos");
     }
@@ -82,6 +98,73 @@ fonk tip_atanir(sayi dst, sayi src) -> mantik {
     eger (metin_esit(dugum_ad(dst), "sayi") && (metin_esit(dugum_ad(src), "mantik") || metin_esit(dugum_ad(src), "bayt"))) { don dogru; }
     eger (metin_esit(dugum_ad(dst), "mantik") && (metin_esit(dugum_ad(src), "sayi") || metin_esit(dugum_ad(src), "bayt"))) { don dogru; }
     eger (metin_esit(dugum_ad(dst), "bayt") && (metin_esit(dugum_ad(src), "sayi") || metin_esit(dugum_ad(src), "mantik"))) { don dogru; }
+    don yanlis;
+}
+
+fonk ifade_kisa_devre_mi(sayi e) -> mantik {
+    sayi t = 0;
+    eger (e == 0) { don yanlis; }
+    t = dugum_tur(e);
+    eger (t == DugumTur.D_UCLU) { don dogru; }
+    eger (t == DugumTur.D_IKIL) {
+        oto op = dugum_ad(e);
+        eger (metin_esit(op, "&&") || metin_esit(op, "||")) { don dogru; }
+        don ifade_kisa_devre_mi(dugum_a(e)) || ifade_kisa_devre_mi(dugum_b(e));
+    }
+    eger (t == DugumTur.D_TEKIL) { don ifade_kisa_devre_mi(dugum_a(e)); }
+    eger (t == DugumTur.D_CAGRI) {
+        sayi L = dugum_liste(e);
+        sayi i = 0;
+        eger (ifade_kisa_devre_mi(dugum_a(e))) { don dogru; }
+        iken (i < liste_uzunluk(L)) {
+            eger (ifade_kisa_devre_mi(liste_al(L, i))) { don dogru; }
+            i = i + 1;
+        }
+        don yanlis;
+    }
+    don ifade_kisa_devre_mi(dugum_a(e)) || ifade_kisa_devre_mi(dugum_b(e)) || ifade_kisa_devre_mi(dugum_c(e));
+}
+
+fonk ifade_rvalue_metin_mi(sayi e) -> mantik {
+    sayi t = 0;
+    sayi ty = 0;
+    eger (e == 0) { don yanlis; }
+    t = dugum_tur(e);
+    eger (t == DugumTur.D_KIMLIK) { don yanlis; }
+    eger (t == DugumTur.D_UYE) { don yanlis; }
+    eger (t == DugumTur.D_SABIT) { don yanlis; }
+    eger (t == DugumTur.D_IKIL) {
+        eger (metin_esit(dugum_ad(e), "+") && tip_metin_mi(tip_ifade(dugum_a(e))) && tip_metin_mi(tip_ifade(dugum_b(e)))) {
+            don dogru;
+        }
+        don yanlis;
+    }
+    eger (t == DugumTur.D_INDIS) {
+        ty = tip_ifade(dugum_a(e));
+        don dugum_c(e) == 0 && liste_tur_mi(dugum_ad(ty)) && metin_esit(liste_elem_ad(dugum_ad(ty)), "metin");
+    }
+    eger (t == DugumTur.D_CAGRI || t == DugumTur.D_UCLU) {
+        ty = tip_ifade(e);
+        don tip_metin_mi(ty);
+    }
+    don yanlis;
+}
+
+fonk ifade_metin_uretken_mi(sayi e) -> mantik {
+    sayi t = 0;
+    sayi L = 0;
+    sayi i = 0;
+    eger (e == 0) { don yanlis; }
+    eger (ifade_rvalue_metin_mi(e)) { don dogru; }
+    t = dugum_tur(e);
+    eger (ifade_metin_uretken_mi(dugum_a(e))) { don dogru; }
+    eger (ifade_metin_uretken_mi(dugum_b(e))) { don dogru; }
+    eger (ifade_metin_uretken_mi(dugum_c(e))) { don dogru; }
+    L = dugum_liste(e);
+    iken (i < liste_uzunluk(L)) {
+        eger (ifade_metin_uretken_mi(liste_al(L, i))) { don dogru; }
+        i = i + 1;
+    }
     don yanlis;
 }
 
@@ -549,6 +632,27 @@ fonk tip_uye(sayi expr, mantik as_call) -> sayi {
     sayi obj_t = tip_ifade(dugum_a(expr));
     eger (hata_var() || obj_t == 0) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
     oto on = dugum_ad(obj_t);
+    eger (tip_ref_metin_mi(obj_t) || tip_ref_dilim_mi(obj_t)) {
+        eger (as_call) {
+            hata_ver(dugum_satir(expr), dugum_sutun(expr), "Görünüm alanı çağrılamaz.");
+            don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+        }
+        eger (metin_esit(dugum_ad(expr), "uzunluk")) {
+            don tip_sayi(dugum_satir(expr), dugum_sutun(expr));
+        }
+        eger (metin_esit(dugum_ad(expr), "veri")) {
+            eger (tip_ref_metin_mi(obj_t)) {
+                don tip_metin(dugum_satir(expr), dugum_sutun(expr));
+            }
+            hata_ver(dugum_satir(expr), dugum_sutun(expr), "'veri' yalnızca '&metin' görünümünde vardır; dilim için indeks kullanın.");
+            don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+        }
+        hata_fmt_basla();
+        hata_fmt_yaz("Görünümde üye yok: ");
+        hata_fmt_yaz(dugum_ad(expr));
+        hata_fmt_ver(dugum_satir(expr), dugum_sutun(expr));
+        don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+    }
     eger (metin_uzun(on) >= 8) {
         oto pref = intern_dilim(on, 0, 8);
         eger (metin_esit(pref, "secenek.")) {
@@ -1062,8 +1166,8 @@ fonk tip_cagri(sayi expr) -> sayi {
                 eger (dugum_dims(at) > 0 && !sayilabilir_dizi_mi(a0)) {
                     hata_ver(dugum_satir(a0), dugum_sutun(a0), "'upp.uzunluk' gerçek dizi veya '[...]' bekler; işaretçi verilemez.");
                 }
-                eger (dugum_dims(at) == 0 && !tip_metin_mi(at) && !tip_yok_mi(at) && !liste_tur_mi(dugum_ad(at)) && !harita_tur_mi(dugum_ad(at))) {
-                    hata_ver(dugum_satir(expr), dugum_sutun(expr), "'upp.uzunluk' metin, dizi, liste veya harita bekler.");
+                eger (dugum_dims(at) == 0 && !tip_metin_mi(at) && !tip_ref_metin_mi(at) && !tip_ref_dilim_mi(at) && !tip_yok_mi(at) && !liste_tur_mi(dugum_ad(at)) && !harita_tur_mi(dugum_ad(at))) {
+                    hata_ver(dugum_satir(expr), dugum_sutun(expr), "'upp.uzunluk' metin, dizi, liste, harita veya görünüm bekler.");
                 }
             }
             don rt;
@@ -1331,7 +1435,30 @@ fonk tip_ifade(sayi e) -> sayi {
     eger (t == DugumTur.D_INDIS) {
         sayi inner = tip_ifade(dugum_a(e));
         sayi idx = dugum_b(e);
+        sayi son = dugum_c(e);
         tip_ifade(idx);
+        eger (son != 0) {
+            tip_ifade(son);
+            arg_tam_sayi_olmali(idx);
+            arg_tam_sayi_olmali(son);
+            eger (hata_var()) { don inner; }
+            eger (dugum_dims(inner) > 0 && dugum_ptrd(inner) == 0) {
+                don tur_dugum(dugum_satir(e), dugum_sutun(e), intern(kat3("&dilim[", dugum_ad(inner), "]")), 0, 0);
+            }
+            eger (liste_tur_mi(dugum_ad(inner)) && dugum_ptrd(inner) == 0) {
+                oto elem = liste_elem_ad(dugum_ad(inner));
+                eger (!metin_esit(elem, "sayi") && !metin_esit(elem, "ondalik")) {
+                    hata_ver(dugum_satir(e), dugum_sutun(e), "liste dilimi v1'de yalnızca liste[sayi] veya liste[ondalik] kabul eder.");
+                    don inner;
+                }
+                don tur_dugum(dugum_satir(e), dugum_sutun(e), intern(kat3("&dilim[", elem, "]")), 0, 0);
+            }
+            eger (tip_ref_dilim_mi(inner)) {
+                don inner;
+            }
+            hata_ver(dugum_satir(e), dugum_sutun(e), "Dilim yalnızca dizi, liste[sayi/ondalik] veya '&dilim[T]' üzerinde kullanılır.");
+            don inner;
+        }
         eger (dugum_dims(inner) > 0 && dugum_sayi(inner) > 0 && sabit_tamsayi_mi(idx)) {
             sayi iv = sabit_tamsayi_deger(idx);
             sayi n = dugum_sayi(inner);
@@ -1347,6 +1474,9 @@ fonk tip_ifade(sayi e) -> sayi {
         }
         eger (liste_tur_mi(dugum_ad(inner)) && dugum_ptrd(inner) == 0) {
             don tur_dugum(dugum_satir(e), dugum_sutun(e), liste_elem_ad(dugum_ad(inner)), 0, 0);
+        }
+        eger (tip_ref_dilim_mi(inner)) {
+            don tur_dugum(dugum_satir(e), dugum_sutun(e), dilim_ref_elem_ad(dugum_ad(inner)), 0, 0);
         }
         eger (dugum_dims(inner) > 0) {
             don tur_dugum(dugum_satir(inner), dugum_sutun(inner), dugum_ad(inner), dugum_ptrd(inner), dugum_dims(inner) - 1);
@@ -1685,6 +1815,12 @@ fonk tip_yuru(sayi stmt) -> bos {
     }
 }
 
+fonk gorunum_donus_yasak(sayi t, sayi satir, sayi sutun) -> bos {
+    eger (tip_gorunum_mi(t)) {
+        hata_ver(satir, sutun, "Görünüm türü ('&metin' / '&dilim[T]') döndürülemez; ömür sarkması oluşur.");
+    }
+}
+
 fonk tip_fn_doldur(sayi fn) -> bos {
     sayi P = dugum_liste(fn);
     sayi i = 0;
@@ -1698,6 +1834,7 @@ fonk tip_fn_doldur(sayi fn) -> bos {
         }
         i = i + 1;
     }
+    gorunum_donus_yasak(dugum_a(fn), dugum_satir(fn), dugum_sutun(fn));
 }
 
 fonk tip_fn_govde(sayi fn) -> bos {
@@ -1798,6 +1935,15 @@ fonk tip_calistir(sayi program) -> bos {
                     j = j + 1;
                 }
             }
+            sayi SF = dugum_liste(d);
+            sayi si = 0;
+            iken (si < liste_uzunluk(SF)) {
+                sayi sf = liste_al(SF, si);
+                eger (tip_gorunum_mi(dugum_a(sf))) {
+                    hata_ver(dugum_satir(sf), dugum_sutun(sf), "Sınıf alanında görünüm türü yok.");
+                }
+                si = si + 1;
+            }
         } yoksa eger (t == DugumTur.D_FONK) {
             oto fkey = dugum_c_ad(d);
             oto falias = dugum_alias_ad(d);
@@ -1843,6 +1989,9 @@ fonk tip_calistir(sayi program) -> bos {
             }
             eger (dugum_ptrd(dugum_a(d)) > 0) {
                 hata_ver(dugum_satir(d), dugum_sutun(d), "Üst düzeyde işaretçi değişken yok.");
+            }
+            eger (tip_gorunum_mi(dugum_a(d))) {
+                hata_ver(dugum_satir(d), dugum_sutun(d), "Üst düzeyde görünüm değişken yok.");
             }
             eger (dugum_b(d) != 0 || (dugum_bayrak(d) & 8) != 0 || dugum_dims(dugum_a(d)) > 0) {
                 hata_ver(dugum_satir(d), dugum_sutun(d), "Üst düzeyde dizi yok; 'liste[T]' kullanın.");

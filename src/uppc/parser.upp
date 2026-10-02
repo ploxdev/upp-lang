@@ -169,6 +169,15 @@ fonk metin_coz(metin raw) -> metin {
 }
 
 fonk tur_baslangici_mi() -> mantik {
+    eger (bak_tur() == JetonTur.J_VE_ISARET) {
+        eger (bak_tur_at(1) == JetonTur.J_ANAHTAR && metin_esit(bak_deger_at(1), "metin")) {
+            don bak_tur_at(2) == JetonTur.J_KIMLIK;
+        }
+        eger (bak_tur_at(1) == JetonTur.J_ANAHTAR && metin_esit(bak_deger_at(1), "dilim")) {
+            don bak_tur_at(5) == JetonTur.J_KIMLIK;
+        }
+        don yanlis;
+    }
     eger (bak_tur() == JetonTur.J_ANAHTAR && tur_adi_mi(bak_deger())) {
         don dogru;
     }
@@ -208,6 +217,30 @@ fonk ayristir_tur() -> sayi {
     }
     sayi satir = bak_satir();
     sayi sutun = bak_sutun();
+    eger (esles_tur(JetonTur.J_VE_ISARET)) {
+        eger (bak_tur() == JetonTur.J_ANAHTAR && metin_esit(bak_deger(), "metin")) {
+            j_ilerle();
+            don tur_dugum(satir, sutun, intern("&metin"), 0, 0);
+        }
+        eger (bak_tur() == JetonTur.J_ANAHTAR && metin_esit(bak_deger(), "dilim")) {
+            oto elem = "";
+            j_ilerle();
+            beklenen_tur(JetonTur.J_KOSE_AC, "[");
+            elem = ayristir_koleksiyon_elem();
+            beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
+            eger (metin_esit(elem, "metin")) {
+                hata_ver(satir, sutun, "'&dilim[metin]' v1'de yok; sayısal T veya '&metin' kullanın.");
+                don 0;
+            }
+            eger (!metin_esit(elem, "sayi") && !metin_esit(elem, "bayt") && !metin_esit(elem, "ondalik") && !metin_esit(elem, "mantik")) {
+                hata_ver(satir, sutun, "'&dilim[T]' yalnızca sayi/bayt/ondalik/mantik kabul eder.");
+                don 0;
+            }
+            don tur_dugum(satir, sutun, intern(kat3("&dilim[", elem, "]")), 0, 0);
+        }
+        hata_ver(satir, sutun, "'&' tür konumunda yalnızca '&metin' veya '&dilim[T]' olabilir.");
+        don 0;
+    }
     metin ad = "";
     eger (bak_tur() == JetonTur.J_ANAHTAR && tur_adi_mi(bak_deger())) {
         ad = bak_deger();
@@ -221,10 +254,14 @@ fonk ayristir_tur() -> sayi {
         }
     } yoksa {
         hata_fmt_basla();
-        hata_fmt_yaz("Tür bekleniyordu ('sayi', 'ondalik', 'metin', 'mantik', 'bos', 'liste[T]', 'harita[K,V]' veya sınıf adı), '");
+        hata_fmt_yaz("Tür bekleniyordu ('sayi', 'ondalik', 'metin', 'mantik', 'bos', 'liste[T]', 'harita[K,V]', '&metin', '&dilim[T]' veya sınıf adı), '");
         hata_fmt_yaz(bak_deger());
         hata_fmt_yaz("' bulundu.");
         hata_fmt_ver(satir, sutun);
+        don 0;
+    }
+    eger (metin_esit(ad, "dilim")) {
+        hata_ver(satir, sutun, "'dilim' yalnızca '&dilim[T]' olarak kullanılır.");
         don 0;
     }
     eger (metin_esit(ad, "liste")) {
@@ -388,11 +425,25 @@ fonk ayristir_sonek() -> sayi {
             expr = n;
         } yoksa eger (esles_tur(JetonTur.J_KOSE_AC)) {
             sayi idx = ayristir_ifade();
-            beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
-            sayi n = dugum_yeni(DugumTur.D_INDIS, dugum_satir(expr), dugum_sutun(expr));
-            dugum_yaz_a(n, expr);
-            dugum_yaz_b(n, idx);
-            expr = n;
+            eger (bak_tur() == JetonTur.J_NOKTA && bak_tur_at(1) == JetonTur.J_NOKTA) {
+                j_ilerle();
+                j_ilerle();
+                sayi son = ayristir_ifade();
+                beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
+                sayi n = dugum_yeni(DugumTur.D_INDIS, dugum_satir(expr), dugum_sutun(expr));
+                dugum_yaz_a(n, expr);
+                dugum_yaz_b(n, idx);
+                dugum_yaz_c(n, son);
+                expr = n;
+            } yoksa {
+                beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
+                sayi n = dugum_yeni(DugumTur.D_INDIS, dugum_satir(expr), dugum_sutun(expr));
+                dugum_yaz_a(n, expr);
+                dugum_yaz_b(n, idx);
+                expr = n;
+            }
+        } yoksa eger (bak_tur() == JetonTur.J_NOKTA && bak_tur_at(1) == JetonTur.J_NOKTA) {
+            dur;
         } yoksa eger (esles_tur(JetonTur.J_NOKTA)) {
             sayi nm = beklenen_kimlik(dogru);
             sayi n = dugum_yeni(DugumTur.D_UYE, dugum_satir(expr), dugum_sutun(expr));

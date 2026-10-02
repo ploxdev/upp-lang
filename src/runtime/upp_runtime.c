@@ -291,11 +291,13 @@ static long long upp_arguman_sayisi(void) {
     return (long long)_upp_argc;
 }
 
+static char* upp_metin_kopya(const char* s);
+
 static char* upp_arguman(long long i) {
     if (i < 0 || i >= (long long)_upp_argc || !_upp_argv) {
         return NULL;
     }
-    return _upp_argv[(int)i];
+    return upp_metin_kopya(_upp_argv[(int)i]);
 }
 
 #if UPP_WIN
@@ -776,10 +778,99 @@ static void _u8t_birak_eger(const char* s) {
     }
 }
 
-static void upp_metin_bosalt(char* s) {
+static void upp_metin_release(char* s) {
+    if (!s) {
+        return;
+    }
     _upp_geo_birak(s);
     _u8t_birak_eger(s);
     free(s);
+}
+
+/* Eski API: derleyici kapsam sonunda drop enjekte eder.
+ * Kullanıcı çağrısı codegen'de upp_metin_ata(&s, NULL) olur. */
+static void upp_metin_bosalt(char* s) {
+    upp_metin_release(s);
+}
+
+static void upp_metin_ata(char** dst, const char* src) {
+    char* yeni;
+    if (!dst) {
+        return;
+    }
+    if (*dst == src) {
+        return;
+    }
+    yeni = src ? upp_metin_kopya(src) : NULL;
+    upp_metin_release(*dst);
+    *dst = yeni;
+}
+
+static void upp_metin_tasi(char** dst, char** src) {
+    if (!dst) {
+        return;
+    }
+    if (!src) {
+        upp_metin_release(*dst);
+        *dst = NULL;
+        return;
+    }
+    if (dst == src) {
+        return;
+    }
+    if (*dst == *src) {
+        *src = NULL;
+        return;
+    }
+    upp_metin_release(*dst);
+    *dst = *src;
+    *src = NULL;
+}
+
+typedef struct {
+    const char* veri;
+    long long uzunluk; /* UTF-8 bayt sayısı, kod noktası değil */
+} upp_ref_metin;
+
+typedef struct {
+    const long long* veri;
+    long long uzunluk;
+} upp_ref_dilim_sayi;
+
+typedef struct {
+    const uint8_t* veri;
+    long long uzunluk;
+} upp_ref_dilim_bayt;
+
+typedef struct {
+    const double* veri;
+    long long uzunluk;
+} upp_ref_dilim_ondalik;
+
+typedef struct {
+    const bool* veri;
+    long long uzunluk;
+} upp_ref_dilim_mantik;
+
+static upp_ref_metin upp_metin_gorunum(const char* p) {
+    upp_ref_metin v;
+    v.veri = p ? p : "";
+    v.uzunluk = p ? (long long)strlen(p) : 0;
+    return v;
+}
+
+static void upp_ref_metin_yaz(FILE* f, upp_ref_metin v, int nl) {
+    const char* p = v.veri ? v.veri : "";
+    long long n = v.uzunluk;
+    if (n < 0) {
+        n = 0;
+    }
+    if (n > 0) {
+        fwrite(p, 1, (size_t)n, f ? f : stdout);
+    }
+    if (nl) {
+        fputc('\n', f ? f : stdout);
+    }
 }
 
 static char* upp_metin_kopya(const char* s) {
@@ -2557,6 +2648,80 @@ static long long upp_liste_uzunluk(UppKolListe L) {
     return h ? h->n : 0;
 }
 
+static void upp_dilim_sinir(long long a, long long b, long long n) {
+    if (a < 0 || b < a || b > n) {
+        fprintf(stderr, "[u++ HATA] dilim [%lld..%lld], uzunluk %lld sınır dışı\n", a, b, n);
+        fflush(stderr);
+        abort();
+    }
+}
+
+static upp_ref_dilim_sayi upp_dilim_sayi(const long long* p, long long n, long long a, long long b) {
+    upp_ref_dilim_sayi r;
+    upp_dilim_sinir(a, b, n);
+    r.veri = p ? (p + a) : NULL;
+    r.uzunluk = b - a;
+    return r;
+}
+
+static upp_ref_dilim_bayt upp_dilim_bayt(const uint8_t* p, long long n, long long a, long long b) {
+    upp_ref_dilim_bayt r;
+    upp_dilim_sinir(a, b, n);
+    r.veri = p ? (p + a) : NULL;
+    r.uzunluk = b - a;
+    return r;
+}
+
+static upp_ref_dilim_ondalik upp_dilim_ondalik(const double* p, long long n, long long a, long long b) {
+    upp_ref_dilim_ondalik r;
+    upp_dilim_sinir(a, b, n);
+    r.veri = p ? (p + a) : NULL;
+    r.uzunluk = b - a;
+    return r;
+}
+
+static upp_ref_dilim_mantik upp_dilim_mantik(const bool* p, long long n, long long a, long long b) {
+    upp_ref_dilim_mantik r;
+    upp_dilim_sinir(a, b, n);
+    r.veri = p ? (p + a) : NULL;
+    r.uzunluk = b - a;
+    return r;
+}
+
+static upp_ref_dilim_sayi upp_liste_dilim_sayi(UppKolListe L, long long a, long long b) {
+    _UppKolListeH* h = _upp_liste_hucre(L.id);
+    if (!h || h->tag != UPP_KT_SAYI) {
+        upp_panik("liste dilim türü uyumsuz");
+    }
+    return upp_dilim_sayi(h->i, h->n, a, b);
+}
+
+static upp_ref_dilim_ondalik upp_liste_dilim_ondalik(UppKolListe L, long long a, long long b) {
+    _UppKolListeH* h = _upp_liste_hucre(L.id);
+    if (!h || h->tag != UPP_KT_ONDALIK) {
+        upp_panik("liste dilim türü uyumsuz");
+    }
+    return upp_dilim_ondalik(h->d, h->n, a, b);
+}
+
+static upp_ref_dilim_sayi upp_liste_gorunum_sayi(UppKolListe L) {
+    _UppKolListeH* h = _upp_liste_hucre(L.id);
+    long long n = h ? h->n : 0;
+    if (!h || h->tag != UPP_KT_SAYI) {
+        upp_panik("liste görünüm türü uyumsuz");
+    }
+    return upp_dilim_sayi(h->i, n, 0, n);
+}
+
+static upp_ref_dilim_ondalik upp_liste_gorunum_ondalik(UppKolListe L) {
+    _UppKolListeH* h = _upp_liste_hucre(L.id);
+    long long n = h ? h->n : 0;
+    if (!h || h->tag != UPP_KT_ONDALIK) {
+        upp_panik("liste görünüm türü uyumsuz");
+    }
+    return upp_dilim_ondalik(h->d, n, 0, n);
+}
+
 static void upp_liste_bosalt(UppKolListe* L) {
     _UppKolListeH* h;
     long long i;
@@ -3972,31 +4137,23 @@ static char* upp_json_olustur(JSONDeger v) {
 
 static char* upp_json_tur(JSONDeger v) {
     UppJsonHucre* h = _upp_json_hucre(v.id);
-    if (!h) {
-        return (char*)"yok";
+    const char* ad = "yok";
+    if (h) {
+        if (h->tur == UPP_JT_MANTIK) {
+            ad = "mantik";
+        } else if (h->tur == UPP_JT_SAYI) {
+            ad = "sayi";
+        } else if (h->tur == UPP_JT_ONDALIK) {
+            ad = "ondalik";
+        } else if (h->tur == UPP_JT_METIN) {
+            ad = "metin";
+        } else if (h->tur == UPP_JT_DIZI) {
+            ad = "dizi";
+        } else if (h->tur == UPP_JT_NESNE) {
+            ad = "nesne";
+        }
     }
-    if (h->tur == UPP_JT_NULL) {
-        return (char*)"yok";
-    }
-    if (h->tur == UPP_JT_MANTIK) {
-        return (char*)"mantik";
-    }
-    if (h->tur == UPP_JT_SAYI) {
-        return (char*)"sayi";
-    }
-    if (h->tur == UPP_JT_ONDALIK) {
-        return (char*)"ondalik";
-    }
-    if (h->tur == UPP_JT_METIN) {
-        return (char*)"metin";
-    }
-    if (h->tur == UPP_JT_DIZI) {
-        return (char*)"dizi";
-    }
-    if (h->tur == UPP_JT_NESNE) {
-        return (char*)"nesne";
-    }
-    return (char*)"yok";
+    return upp_metin_kopya(ad);
 }
 
 static bool upp_json_var_mi(JSONDeger v) {
@@ -4571,11 +4728,11 @@ static char* upp_sistem_exe_dizin(void) {
 #endif
 }
 
-static const char* upp_platform(void) {
+static char* upp_platform(void) {
 #if UPP_WIN
-    return "windows";
+    return upp_metin_kopya("windows");
 #else
-    return "linux";
+    return upp_metin_kopya("linux");
 #endif
 }
 

@@ -159,6 +159,7 @@ fonk anahtar_mi(metin s) -> mantik {
     eger (metin_esit(s, "bos")) { don dogru; }
     eger (metin_esit(s, "liste")) { don dogru; }
     eger (metin_esit(s, "harita")) { don dogru; }
+    eger (metin_esit(s, "dilim")) { don dogru; }
     eger (metin_esit(s, "dogru")) { don dogru; }
     eger (metin_esit(s, "yanlis")) { don dogru; }
     eger (metin_esit(s, "yok")) { don dogru; }
@@ -190,6 +191,7 @@ fonk tur_adi_mi(metin s) -> mantik {
     eger (metin_esit(s, "bos")) { don dogru; }
     eger (metin_esit(s, "liste")) { don dogru; }
     eger (metin_esit(s, "harita")) { don dogru; }
+    eger (metin_esit(s, "dilim")) { don dogru; }
     don yanlis;
 }
 
@@ -249,6 +251,32 @@ fonk koleksiyon_etiket(metin e) -> sayi {
     eger (metin_esit(e, "metin")) { don 3; }
     eger (metin_esit(e, "bayt")) { don 4; }
     don 0;
+}
+
+fonk tip_ref_metin_mi(sayi t) -> mantik {
+    don t != 0 && metin_esit(dugum_ad(t), "&metin") && dugum_ptrd(t) == 0 && dugum_dims(t) == 0;
+}
+
+fonk tip_ref_dilim_mi(sayi t) -> mantik {
+    sayi L = 0;
+    metin n = "";
+    eger (t == 0 || dugum_ptrd(t) != 0 || dugum_dims(t) != 0) { don yanlis; }
+    n = dugum_ad(t);
+    L = metin_uzun(n);
+    eger (L < 10) { don yanlis; }
+    eger (!metin_esit(intern_dilim(n, 0, 7), "&dilim[")) { don yanlis; }
+    eger (metin_cp(n, L - 1) != 93) { don yanlis; }
+    don dogru;
+}
+
+fonk tip_gorunum_mi(sayi t) -> mantik {
+    don tip_ref_metin_mi(t) || tip_ref_dilim_mi(t);
+}
+
+fonk dilim_ref_elem_ad(metin n) -> metin {
+    sayi L = metin_uzun(n);
+    eger (L < 10) { don ""; }
+    don intern_dilim(n, 7, L - 1);
 }
 
 fonk interp_ad_mi(metin name) -> mantik {

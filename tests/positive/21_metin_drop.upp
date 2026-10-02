@@ -1,0 +1,32 @@
+// Pozitif: otomatik metin drop, don move, kendine atama, tasi
+// @stdout
+// merhaba dunya
+// ic
+
+fonk birlestir() -> metin {
+    metin a = "merhaba";
+    metin b = "dunya";
+    don a + " " + b;
+}
+
+fonk ic_don() -> metin {
+    metin dis = "dis";
+    dongu (sayi i = 0; i < 3; i += 1) {
+        metin ic = "ic";
+        eger (i == 1) {
+            don ic;
+        }
+    }
+    don dis;
+}
+
+fonk ana() -> sayi {
+    metin s = "a";
+    s = s;
+    s = "b";
+    s = birlestir();
+    upp.satir_yaz(s);
+    s = ic_don();
+    upp.satir_yaz(s);
+    don 0;
+}

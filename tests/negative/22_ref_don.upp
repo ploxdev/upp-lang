@@ -1,0 +1,11 @@
+// Negatif: görünüm döndürülemez
+// @icerir: Görünüm
+
+fonk kac() -> &metin {
+    metin s = "x";
+    don s;
+}
+
+fonk ana() -> sayi {
+    don 0;
+}
