@@ -1,0 +1,15 @@
+// Çekirdek: upp.giris seri porttan satır okur (UTF-8)
+// @girdi: Ayşe
+// @stdout
+// Adınız? Ayşe
+// Merhaba Ayşe!
+
+fonk ana() -> sayi {
+    upp.yaz("Adınız? ");
+    metin ad = upp.giris();
+    upp.satir_yaz("Merhaba {ad}!");
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, 0);
+    }
+    don 0;
+}

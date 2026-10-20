@@ -38,7 +38,23 @@ test("hover upp.metin.kod", () => {
   const { kelime, yol } = kelimeAl("    sayi x = upp.metin.kod", 28);
   assert.equal(kelime, "kod");
   assert.deepEqual(yol, ["upp", "metin"]);
-  assert.match(hoverMetin(kelime, yol) || "", /Kod noktası/);
+  assert.match(hoverMetin(kelime, yol) || "", /kod\(metin, sayi\) -> sayi/);
+});
+
+test("iç içe ad alanı: upp.windows. ve upp.windows.bellek.", () => {
+  const ns = tamamla("upp.windows.").map((x) => x.etiket);
+  assert.ok(ns.includes("bellek"));
+  assert.ok(ns.includes("mesaj"));
+  const b = tamamla("upp.windows.bellek.").map((x) => x.etiket);
+  assert.ok(b.includes("sayioku"));
+  assert.match(hoverMetin("sayioku", ["upp", "windows", "bellek"]) || "", /guvensiz/);
+});
+
+test("kaldırılan adlar önerilmez, çekirdek yerleşikleri işaretli", () => {
+  const ust = tamamla("upp.").map((x) => x.etiket);
+  assert.ok(!ust.includes("dosya_oku"));
+  assert.ok(!ust.includes("metin_bosalt"));
+  assert.match(hoverMetin("port_yaz8", ["upp", "cekirdek"]) || "", /serbest\/çekirdek/);
 });
 
 test("outline fonk ve sinif", () => {

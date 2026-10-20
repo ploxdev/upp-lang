@@ -1,0 +1,82 @@
+// u++ ile yazılmış minik bir işletim sistemi kabuğu.
+//     uppc ornekler/cekirdek/kabuk.upp --hedef cekirdek
+// Komutlar klavyeden (VGA penceresi) ya da seri porttan (terminal) okunur.
+// Kesmeler, zamanlayıcı ve klavye ilk upp.giris/zaman çağrısında kendiliğinden kurulur.
+
+fonk qemu_cik(sayi kod) -> bos {
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, kod);
+    }
+}
+
+fonk yardim() -> bos {
+    upp.satir_yaz("Komutlar:");
+    upp.satir_yaz("  yardim              bu liste");
+    upp.satir_yaz("  saat                açılıştan beri geçen süre");
+    upp.satir_yaz("  topla <a> <b>       iki sayıyı topla");
+    upp.satir_yaz("  buyuk <metin>       Türkçe büyük harf");
+    upp.satir_yaz("  bekle <ms>          zamanlayıcıyla bekle");
+    upp.satir_yaz("  ata <ad> <değer>    değişken ata; 'goster' ile listele");
+    upp.satir_yaz("  bol                 sıfıra bölme (istisna gösterimi)");
+    upp.satir_yaz("  cik                 makineyi kapat (QEMU)");
+}
+
+fonk arg(liste[metin] p, sayi i) -> metin {
+    eger (i < p.uzunluk()) { don p.al(i); }
+    don "";
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("u++ kabuk 0.1 — 'yardim' yazın.");
+    harita[metin, metin] degiskenler;
+    iken (dogru) {
+        upp.yaz("u++> ");
+        metin satir = upp.metin.kirp(upp.giris());
+        liste[metin] p = upp.metin.bol(satir, " ");
+        metin komut = arg(p, 0);
+        secim (komut) {
+            durum "":
+                dur;
+            durum "yardim":
+                yardim();
+                dur;
+            durum "saat":
+                upp.satir_yaz("çalışma süresi: {upp.zaman()} ms (tık: {upp.cekirdek.tik()})");
+                dur;
+            durum "topla":
+                sayi a = upp.metinden_sayiya(arg(p, 1));
+                sayi b = upp.metinden_sayiya(arg(p, 2));
+                upp.satir_yaz("{a} + {b} = {a + b}");
+                dur;
+            durum "buyuk":
+                upp.satir_yaz(upp.metin.buyuk(upp.metin.kes(satir, 6, upp.uzunluk(satir))));
+                dur;
+            durum "bekle":
+                sayi ms = upp.metinden_sayiya(arg(p, 1));
+                sayi t0 = upp.zaman();
+                upp.uyut(ms);
+                upp.satir_yaz("{upp.zaman() - t0} ms beklendi");
+                dur;
+            durum "ata":
+                degiskenler.koy(arg(p, 1), arg(p, 2));
+                dur;
+            durum "goster":
+                her (oto ad in degiskenler) {
+                    upp.satir_yaz("  {ad} = {degiskenler.al(ad)}");
+                }
+                dur;
+            durum "bol":
+                sayi sifir = upp.metinden_sayiya("0");
+                sayi sonuc = 10 / sifir;
+                upp.satir_yaz("sonuç: {sonuc}");
+                dur;
+            durum "cik":
+                upp.satir_yaz("Görüşürüz!");
+                qemu_cik(0);
+                dur;
+            varsayilan:
+                upp.satir_yaz("bilinmeyen komut: {komut} ('yardim' yazın)");
+        }
+    }
+    don 0;
+}

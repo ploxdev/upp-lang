@@ -14,6 +14,8 @@ Kaynak yorumları:
   // @cikis: N        runtime kategorisinde beklenen süreç çıkış kodu (varsayılan 1)
   // @bayrak: ...      derleyiciye eklenecek bayraklar (ör. --hedef serbest)
   derleme/  yalnızca C üretimi başarılı olmalı (serbest/çekirdek hedefleri için)
+  cekirdek/ --hedef cekirdek ile derlenip QEMU'da açılır; QEMU yoksa atlanır
+  // @girdi: METİN    cekirdek/ testlerinde seri porta gönderilecek satır
 
 Kullanım:
   python tests/run_tests.py
@@ -34,13 +36,14 @@ from typing import List, Optional, Tuple
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.dirname(os.path.abspath(__file__))
 
-KATEGORILER = ("positive", "negative", "safety", "runtime", "derleme", "ozel")
+KATEGORILER = ("positive", "negative", "safety", "runtime", "derleme", "cekirdek", "ozel")
 KATEGORI_BASLIK = {
     "positive": "Pozitif / E2E",
     "negative": "Negatif / derleyici hataları",
     "safety": "Güvenlik ihlalleri",
     "runtime": "Çalışma zamanı / güvenli hata",
     "derleme": "Derleme / serbest hedef",
+    "cekirdek": "Çekirdek / QEMU",
     "ozel": "Özel / Beta Özellikleri",
 }
 
@@ -107,6 +110,7 @@ class Meta:
     icerir: List[str] = field(default_factory=list)
     cikis: Optional[int] = None
     bayrak: List[str] = field(default_factory=list)
+    girdi: List[str] = field(default_factory=list)
 
 
 def meta_oku(kaynak: str, yol: str) -> Meta:
@@ -129,6 +133,10 @@ def meta_oku(kaynak: str, yol: str) -> Meta:
             parca = s.split(":", 1)[1].strip()
             if parca:
                 meta.icerir.append(parca)
+            continue
+        if s.startswith("// @girdi:"):
+            stdout_mod = False
+            meta.girdi.append(s.split(":", 1)[1].strip())
             continue
         if s.startswith("// @bayrak:"):
             stdout_mod = False
@@ -371,6 +379,50 @@ def calistir_runtime(uppc: str, yol: str, kaynak: str, meta: Meta, cikti_dir: st
     return Sonuc("runtime", ad, True)
 
 
+def calistir_cekirdek(uppc: str, yol: str, meta: Meta, cikti_dir: str, timeout: float) -> Sonuc:
+    ad = os.path.relpath(yol, TESTS)
+    stem = os.path.join(cikti_dir, "ck_" + os.path.splitext(os.path.basename(yol))[0])
+    girdi = "".join(g + "\n" for g in meta.girdi)
+    # stdin çekirdek kapanana kadar açık kalmalı: EOF'ta wsl/QEMU hemen sonlanır.
+    cikti_yol = stem + ".konsol"
+    with open(cikti_yol, "wb") as cf:
+        proc = subprocess.Popen(
+            [uppc, yol, "--hedef", "cekirdek", "-o", stem] + meta.bayrak,
+            cwd=ROOT,
+            stdin=subprocess.PIPE,
+            stdout=cf,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            if girdi:
+                proc.stdin.write(girdi.encode("utf-8"))
+                proc.stdin.flush()
+            proc.wait(timeout=max(timeout, 120.0))
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            return Sonuc("cekirdek", ad, False, "zaman aşımı (çekirdek kapanmadı mı? port 0xf4 ile çıkılmalı)")
+        finally:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+    with open(cikti_yol, encoding="utf-8", errors="replace") as cf:
+        tum = cf.read()
+    if "QEMU bulunamadı" in tum or "araç zinciri bulunamadı" in tum:
+        return Sonuc("cekirdek", ad, True, "atlandı (QEMU/araç zinciri yok)")
+    ayrac = "=================================================="
+    cikti = tum.split(ayrac, 1)[1] if ayrac in tum else tum
+    cikti = cikti.replace("\r\n", "\n").replace("\r", "").lstrip("\n")
+    if meta.stdout is not None:
+        if norm_cikti(cikti) != norm_cikti(meta.stdout):
+            return Sonuc("cekirdek", ad, False, "çıktı uyuşmadı\n  beklenen:\n" + meta.stdout + "\n  bulunan:\n" + cikti)
+    eksik = [x for x in meta.icerir if x not in cikti]
+    if eksik:
+        return Sonuc("cekirdek", ad, False, "çıktıda yok: " + ", ".join(eksik) + "\n  bulunan:\n" + tum)
+    return Sonuc("cekirdek", ad, True)
+
+
 def dosya_calistir(uppc: str, yol: str, kategori: str, cikti_dir: str, timeout: float) -> Sonuc:
     with open(yol, encoding="utf-8") as handle:
         kaynak = handle.read()
@@ -381,6 +433,8 @@ def dosya_calistir(uppc: str, yol: str, kategori: str, cikti_dir: str, timeout: 
         return calistir_pozitif(uppc, yol, kaynak, meta, cikti_dir, timeout)
     if kategori == "negative":
         return calistir_hata(uppc, yol, kaynak, meta, kategori, "[u++ HATA]", timeout, cikti_dir)
+    if kategori == "cekirdek":
+        return calistir_cekirdek(uppc, yol, meta, cikti_dir, timeout)
     if kategori == "derleme":
         return calistir_hata(uppc, yol, kaynak, meta, kategori, "", timeout, cikti_dir, basari_bekle=True)
     if kategori == "safety":
@@ -438,7 +492,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="u++ tests/ native test runner")
     parser.add_argument(
         "--kategori",
-        choices=["positive", "negative", "safety", "runtime", "derleme", "ozel", "hepsi"],
+        choices=["positive", "negative", "safety", "runtime", "derleme", "cekirdek", "ozel", "hepsi"],
         default="hepsi",
         help="yalnız bu kategoriyi çalıştır (varsayılan: hepsi)",
     )
@@ -468,7 +522,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return raporla([dosya_calistir(uppc, yol, kat, cikti_dir, args.timeout)])
 
     secilen = (
-        ["positive", "negative", "safety", "runtime", "derleme", "ozel"]
+        ["positive", "negative", "safety", "runtime", "derleme", "cekirdek", "ozel"]
         if args.kategori == "hepsi"
         else [args.kategori]
     )

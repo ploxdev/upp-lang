@@ -13,7 +13,7 @@
   <a href="#-lisans"><img src="https://img.shields.io/badge/lisans-Apache%202.0-blue.svg?style=flat-square" alt="Lisans" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20x86__64%20çekirdek-222222.svg?style=flat-square" alt="Platform" />
   <img src="https://img.shields.io/badge/derleyici-Native%20Self--Hosted%20(Standalone)-success.svg?style=flat-square" alt="Derleyici" />
-  <img src="https://img.shields.io/badge/testler-81%2F81%20geçti-brightgreen.svg?style=flat-square" alt="Testler" />
+  <img src="https://img.shields.io/badge/testler-85%2F85%20geçti-brightgreen.svg?style=flat-square" alt="Testler" />
   <a href="eklenti/README.md"><img src="https://img.shields.io/badge/IDE-VS%20Code%20%7C%20Cursor-blueviolet.svg?style=flat-square" alt="IDE Desteği" /></a>
 </p>
 
@@ -260,7 +260,13 @@ uppc ornekler/cekirdek/merhaba.upp --hedef cekirdek
 # → merhaba.elf (x86_64) ve merhaba32.elf; QEMU varsa: qemu-system-x86_64 -kernel merhaba32.elf -serial stdio
 ```
 
-Dilin tamamı çekirdekte çalışır: sınıflar, `liste`/`harita`, metin interpolasyonu ve otomatik bellek yönetimi. Bunları libc'siz çalışma zamanı (`src/runtime/upp_on_serbest.c` + `upp_cekirdek.c` + `upp_serbest.c`) sağlar: kendi yığın ayırıcısı, seri port ve VGA konsolu ile birlikte gelir. Önyükleyici Multiboot üzerinden açılır, long mode'a geçer, ilk 1 GiB'ı eşler, SSE'yi etkinleştirir ve `ana()`'yı çağırır. Önyükleyici derleyicinin içinde gömülüdür. İşletim sistemi isteyen API'ler (`upp.dosya`, `arkaplan` vb.) bu hedefte derleme hatası verir.
+Dilin tamamı çekirdekte çalışır: sınıflar, `liste`/`harita`, metin interpolasyonu ve otomatik bellek yönetimi. Çekirdek çalışma zamanı ayrıca şunları sağlar:
+
+- IDT ve Türkçe istisna mesajları
+- 1000 Hz PIT zamanlayıcı (`upp.zaman`, `upp.uyut`)
+- PS/2 klavye (Türkçe Q) ve seri girdi (`upp.giris`)
+
+[`ornekler/cekirdek/kabuk.upp`](ornekler/cekirdek/kabuk.upp) bunlarla yazılmış küçük bir kabuktur: `yardim`, `saat`, `topla`, `bekle`, `ata`/`goster`, `cik` komutlarını tanır. Bunları libc'siz çalışma zamanı (`src/runtime/upp_on_serbest.c` + `upp_cekirdek.c` + `upp_serbest.c`) sağlar: kendi yığın ayırıcısı, seri port ve VGA konsolu ile birlikte gelir. Önyükleyici Multiboot üzerinden açılır, long mode'a geçer, ilk 1 GiB'ı eşler, SSE'yi etkinleştirir ve `ana()`'yı çağırır. Önyükleyici derleyicinin içinde gömülüdür. İşletim sistemi isteyen API'ler (`upp.dosya`, `arkaplan` vb.) bu hedefte derleme hatası verir.
 
 ---
 

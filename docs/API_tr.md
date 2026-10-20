@@ -62,7 +62,7 @@ Kopyasız, salt okunur ödünç bakışlardır: `fonk yaz(&metin v)`, `&dilim[sa
 |---|---|---|
 | `upp.yaz(x)`, `upp.satir_yaz(x)` | `(yazdırılabilir) -> bos` | stdout (serbest hedefte seri port + VGA); `upp.satir_yaz(42)` geçerli |
 | `upp.hata_yaz(x)`, `upp.hata_satir_yaz(x)` | `(yazdırılabilir) -> bos` | stderr |
-| `upp.giris()` | `() -> metin` | stdin'den bir satır |
+| `upp.giris()` | `() -> metin` | stdin'den bir satır (çekirdekte klavye/seri port) |
 
 Bu fonksiyonlar en fazla bir argüman alır, birden çok değer için interpolasyon kullanılır. printf biçim dizgeleri yoktur.
 
@@ -78,8 +78,8 @@ Bu fonksiyonlar en fazla bir argüman alır, birden çok değer için interpolas
 | `upp.ondalikdan_metin(d)` | `(ondalik) -> metin` | 17 anlamlı basamak |
 | `upp.metinden_ondalik(s)` | `(metin) -> ondalik` | barındırılan |
 | `upp.min`, `upp.max`, `upp.mutlak` | `sayi` | |
-| `upp.zaman()` | `() -> sayi` | ms, monotonik |
-| `upp.uyut(ms)` | `(sayi) -> bos` | |
+| `upp.zaman()` | `() -> sayi` | ms, monotonik (çekirdekte de var) |
+| `upp.uyut(ms)` | `(sayi) -> bos` | çekirdekte de var |
 | `upp.rastgele(a, b)` | `(sayi, sayi) -> sayi` | `[a, b]` |
 | `upp.platform()` | `() -> metin` | `"windows"` / `"linux"` |
 | `upp.arguman_sayisi()`, `upp.arguman(i)` | | Komut satırı |
@@ -185,6 +185,14 @@ Bu bölümdeki her şey, `uzunluk`/`min`/`max`/`mutlak`/`sayidan_metin`/`metinde
 | `bellek_yaz8/16/32/64(adres, deger)`, `bellek_oku8/16/32/64(adres) -> sayi` | volatile MMIO |
 | `dur()`, `kesme_kapat()`, `kesme_ac()` | `hlt`, `cli`, `sti` |
 | `yigin_kur(adres, boyut)` | Metin/koleksiyon ayırıcısına bellek bölgesi verir (varsayılan 4 MiB `.bss`) |
+| `kesmeler_kur()` | IDT, PIC ve 1000 Hz PIT'i kurar (açılışta kendiliğinden çağrılır) |
+| `tik() -> sayi` | Açılıştan beri zamanlayıcı tıkı (1 ms) |
+| `tus_oku() -> sayi` | Klavye (PS/2, Türkçe Q) ya da seri porttan bir kod noktası; yoksa 0 |
+| `tus_bekle() -> sayi` | Bir tuş gelene kadar `hlt` ile bekler |
+
+`kesmeler_kur` dışındaki satırlar `guvensiz` gerektirmez.
+
+Çekirdek hedefinde `upp.giris()` (klavye ve seri porttan satır okur, yankılar, geri silmeyi destekler), `upp.zaman()` ve `upp.uyut(ms)` da çalışır. İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe adı ve RIP ile panik verir. QEMU'da panik 3 koduyla çıkar.
 
 ---
 

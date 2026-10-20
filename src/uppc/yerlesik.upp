@@ -32,7 +32,7 @@ fonk yerlesik_kur() -> bos {
     eger (y_hazir != 0) { don; }
     y_hazir = 1;
     // ---- upp.* (üst düzey) ----
-    yk("giris", "", "metin", "upp_giris", 2);
+    yk("giris", "", "metin", "upp_giris", 0);
     yk("metinden_sayiya", "metin", "sayi", "upp_metinden_sayiya", 0);
     yk("sayidan_metin", "sayi", "metin", "upp_sayidan_metin", 0);
     yk("ondalikdan_metin", "ondalik", "metin", "upp_ondalikdan_metin", 0);
@@ -40,8 +40,8 @@ fonk yerlesik_kur() -> bos {
     yk("min", "sayi,sayi", "sayi", "upp_min", 0);
     yk("max", "sayi,sayi", "sayi", "upp_max", 0);
     yk("mutlak", "sayi", "sayi", "upp_mutlak", 0);
-    yk("zaman", "", "sayi", "upp_zaman", 2);
-    yk("uyut", "sayi", "bos", "upp_uyut", 2);
+    yk("zaman", "", "sayi", "upp_zaman", 0);
+    yk("uyut", "sayi", "bos", "upp_uyut", 0);
     yk("rastgele", "sayi,sayi", "sayi", "upp_rastgele", 2);
     yk("platform", "", "metin", "upp_platform", 2);
     yk("arguman_sayisi", "", "sayi", "upp_arguman_sayisi", 2);
@@ -160,6 +160,10 @@ fonk yerlesik_kur() -> bos {
     yk("cekirdek.kesme_kapat", "", "bos", "upp_cekirdek_kesme_kapat", 1 + 64);
     yk("cekirdek.kesme_ac", "", "bos", "upp_cekirdek_kesme_ac", 1 + 64);
     yk("cekirdek.yigin_kur", "sayi,sayi", "bos", "upp_cekirdek_yigin_kur", 1 + 64);
+    yk("cekirdek.kesmeler_kur", "", "bos", "upp_cekirdek_kesmeler_kur", 64);
+    yk("cekirdek.tik", "", "sayi", "upp_cekirdek_tik", 64);
+    yk("cekirdek.tus_oku", "", "sayi", "upp_cekirdek_tus_oku", 64);
+    yk("cekirdek.tus_bekle", "", "sayi", "upp_cekirdek_tus_bekle", 64);
     // ---- upp.windows ----
     yk("windows.mesaj", "metin,metin", "bos", "upp_mesaj", 2 + 4);
     yk("windows.hata", "metin,metin", "bos", "upp_hata", 2 + 4);

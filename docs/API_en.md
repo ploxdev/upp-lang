@@ -118,6 +118,11 @@ The following are only allowed inside `guvensiz { }`: pointers (`*`, `&`), `bell
 - `bellek_yaz8..64`, `bellek_oku8..64`: volatile MMIO
 - `dur` (`hlt`), `kesme_kapat` (`cli`), `kesme_ac` (`sti`)
 - `yigin_kur(adres, boyut)`: hands a memory region to the string/collection allocator (the default is a 4 MiB `.bss` arena)
+- `kesmeler_kur()`: sets up the IDT, PIC, and a 1000 Hz PIT (called automatically at boot)
+- `tik()`: timer ticks since boot (1 ms)
+- `tus_oku()` / `tus_bekle()`: read a code point from the PS/2 keyboard (Turkish Q layout) or the serial port
+
+On the kernel target, `upp.giris()` (line input from keyboard/serial with echo and backspace), `upp.zaman()`, and `upp.uyut(ms)` also work. CPU exceptions panic with the exception name and RIP, and a panic exits QEMU with code 3.
 
 ## 15. Targets
 

@@ -1,0 +1,42 @@
+// Çekirdek: dil özellikleri işletim sistemi olmadan (QEMU)
+// @stdout
+// Merhaba, çekirdek!
+// asallar: 2 3 5 7 11
+// Ali 3 yaşında
+// İŞLETİM SİSTEMİ 3.14159
+
+sinif Kisi {
+    metin ad;
+    sayi yas;
+}
+
+fonk cik() -> bos {
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, 0);
+    }
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("Merhaba, çekirdek!");
+    liste[sayi] L;
+    sayi n = 2;
+    iken (L.uzunluk() < 5) {
+        mantik asal = dogru;
+        her (oto p in L) {
+            eger (n % p == 0) { asal = yanlis; }
+        }
+        eger (asal) { L.ekle(n); }
+        n += 1;
+    }
+    metin s = "asallar:";
+    her (oto p in L) { s += " {p}"; }
+    upp.satir_yaz(s);
+    Kisi k;
+    k.ad = "Ali";
+    k.yas = 3;
+    Kisi k2 = k;
+    upp.satir_yaz("{k2.ad} {k2.yas} yaşında");
+    upp.satir_yaz("{upp.metin.buyuk(\"işletim sistemi\")} {upp.matematik.pi()}");
+    cik();
+    don 0;
+}

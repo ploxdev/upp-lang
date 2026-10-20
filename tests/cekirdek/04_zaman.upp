@@ -1,0 +1,13 @@
+// Çekirdek: PIT zamanlayıcı ile upp.uyut / upp.zaman
+// @stdout
+// dogru
+
+fonk ana() -> sayi {
+    sayi t0 = upp.zaman();
+    upp.uyut(30);
+    upp.satir_yaz(upp.zaman() - t0 >= 30);
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, 0);
+    }
+    don 0;
+}

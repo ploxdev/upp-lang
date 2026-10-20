@@ -112,11 +112,11 @@
         },
         {
           "name": "support.namespace.upp",
-          "match": "\\bupp\\.(girdi|bellek|cizim|matematik|metin|json|stdio|sistem|yol|dosya)\\b"
+          "match": "\\bupp(\\.[A-Za-z_][A-Za-z0-9_]*)+\\b"
         },
         {
           "name": "support.function.upp",
-          "match": "\\bupp\\.(yaz|satir_yaz|mesaj|hata|hata_yaz|hata_satir_yaz|ses_cal|uyut|rastgele|dosya_oku|dosya_yaz|dosya_ekle|uzunluk|giris|min|max|mutlak|bekle|arguman_sayisi|arguman|dosya_var_mi|dosya_sil|zaman|metinden_sayiya|sayidan_metin|ondalikdan_metin|metinden_ondalik|ortam_al)\\b"
+          "match": "\\bupp(\\.[A-Za-z_][A-Za-z0-9_]*)+\\b"
         },
         { "name": "support.namespace.upp", "match": "\\bupp\\b" }
       ]

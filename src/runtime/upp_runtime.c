@@ -4721,7 +4721,8 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = wr;
     si.hStdError = wr;
-    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    /* Yakalama kipi etkileşimsizdir: alt süreç üst sürecin stdin'ini tüketmesin. */
+    si.hStdInput = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
     memset(&pi, 0, sizeof(pi));
     satir = (char*)malloc(strlen(komut) + 16);
     if (!satir) {
@@ -4734,10 +4735,12 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
         free(satir);
         CloseHandle(rd);
         CloseHandle(wr);
+        if (si.hStdInput != INVALID_HANDLE_VALUE) CloseHandle(si.hStdInput);
         return r;
     }
     free(satir);
     CloseHandle(wr);
+    if (si.hStdInput != INVALID_HANDLE_VALUE) CloseHandle(si.hStdInput);
     cikti = (char*)malloc(cap);
     if (!cikti) {
         CloseHandle(rd);
@@ -4796,12 +4799,12 @@ static SurecCikti upp_sistem_calistir(const char* komut) {
     {
         /* Windows sürümü gibi stderr de yakalanır. */
         size_t kn = strlen(komut);
-        char* tam = (char*)malloc(kn + 8u);
+        char* tam = (char*)malloc(kn + 20u);
         if (!tam) {
             return r;
         }
         memcpy(tam, komut, kn);
-        memcpy(tam + kn, " 2>&1", 6u);
+        memcpy(tam + kn, " 2>&1 </dev/null", 17u);
         f = popen(tam, "r");
         free(tam);
     }
@@ -4870,6 +4873,20 @@ static long long upp_sistem_kos(const char* komut) {
     snprintf(satir, n, "cmd.exe /C \"%s\"", komut);
     memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
+    /* stdin/stdout/stderr boru da olsa alt sürece açıkça aktarılır. */
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    if (si.hStdInput && si.hStdInput != INVALID_HANDLE_VALUE) {
+        SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    }
+    if (si.hStdOutput && si.hStdOutput != INVALID_HANDLE_VALUE) {
+        SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    }
+    if (si.hStdError && si.hStdError != INVALID_HANDLE_VALUE) {
+        SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    }
     memset(&pi, 0, sizeof(pi));
     if (!CreateProcessA(NULL, satir, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
         free(satir);

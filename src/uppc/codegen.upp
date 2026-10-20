@@ -1594,6 +1594,7 @@ fonk uret_cumle(sayi stmt) -> bos {
                 }
                 emit("{");
                 indent_ekle(1);
+                drop_cerceve_ac();
                 sayi sl = dugum_liste(c);
                 sayi j = 0;
                 iken (j < liste_uzunluk(sl)) {
@@ -1603,6 +1604,8 @@ fonk uret_cumle(sayi stmt) -> bos {
                     }
                     j = j + 1;
                 }
+                emit_drop_cerceve();
+                drop_cerceve_pop();
                 indent_ekle(-1);
                 emit("}");
                 i = i + 1;
@@ -1623,14 +1626,23 @@ fonk uret_cumle(sayi stmt) -> bos {
             yoksa {
                 emit(kat3("case ", uret_ifade(dugum_a(c)), ":"));
             }
+            emit("{");
             indent_ekle(1);
+            drop_cerceve_ac();
             sayi sl = dugum_liste(c);
             sayi j = 0;
             iken (j < liste_uzunluk(sl)) {
-                uret_cumle(liste_al(sl, j));
+                sayi s = liste_al(sl, j);
+                eger (dugum_tur(s) == DugumTur.D_DUR) {
+                    emit_drop_cerceve();
+                }
+                uret_cumle(s);
                 j = j + 1;
             }
+            emit_drop_cerceve();
+            drop_cerceve_pop();
             indent_ekle(-1);
+            emit("}");
             i = i + 1;
         }
         indent_ekle(-1);
@@ -2232,6 +2244,7 @@ fonk uret_program(sayi program) -> bos {
         emit("");
         emit("/* Önyükleyicinin çağırdığı giriş: ana() döndükten sonra işlemci durdurulur. */");
         emit("void upp_cekirdek_giris(void) {");
+        emit("    upp_cekirdek_kesmeler_kur();");
         emit("    (void)upp_ana();");
         emit("    _upp_sonsuz_dur();");
         emit("}");

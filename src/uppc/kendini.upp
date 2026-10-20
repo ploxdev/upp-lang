@@ -78,6 +78,22 @@ fonk kd_degisirse_yaz(metin yol, metin icerik) -> bos {
     }
 }
 
+// VS Code eklentisinin tamamlama/hover sözlüğü: yerleşik tablosundan üretilir.
+fonk kd_eklenti_ts() -> metin {
+    yerlesik_kur();
+    metin o = "// OTOMATİK ÜRETİLDİ (uppc kendini-derle) — kaynak: src/uppc/yerlesik.upp. Düzenlemeyin.\n";
+    o += "export type Yerlesik = { ad: string; param: string; donus: string; bayrak: number };\n\n";
+    o += "/** bayrak: 1 guvensiz, 2 barındırılan, 4 Windows, 8 Linux, 64 serbest/çekirdek */\n";
+    o += "export const YERLESIK: Yerlesik[] = [\n";
+    sayi i = 0;
+    iken (i < y_anahtar.uzunluk()) {
+        o += "  { ad: \"" + y_anahtar.al(i) + "\", param: \"" + y_param.al(i) + "\", donus: \"" + y_donus.al(i) + "\", bayrak: " + upp.sayidan_metin(y_bayrak.al(i)) + " },\n";
+        i = i + 1;
+    }
+    o += "];\n";
+    don o;
+}
+
 fonk kd_exe_uzanti() -> metin {
     eger (os_host_linux() != 0) { don ""; }
     don ".exe";
@@ -161,6 +177,9 @@ fonk kendini_derle(metin kok, mantik hizli) -> sayi {
     kd_degisirse_yaz(kd_yol(kok, "src/runtime/upp_runtime_serbest.c"), paket_s);
     kd_degisirse_yaz(kd_yol(kok, "src/uppc/gomulu_runtime.upp"), kd_gomulu_runtime(paket_b, "os_runtime_gomulu_yay", "upp_runtime.c"));
     kd_degisirse_yaz(kd_yol(kok, "src/uppc/gomulu_serbest.upp"), kd_gomulu_runtime(paket_s, "os_runtime_serbest_yay", "upp_runtime_serbest.c"));
+    eger (upp.yol.dizin_var_mi(kd_yol(kok, "eklenti/src"))) {
+        kd_degisirse_yaz(kd_yol(kok, "eklenti/src/yerlesik_uretilen.ts"), kd_eklenti_ts());
+    }
     // 2. birleştir
     liste[metin] mods = kd_moduller(kok);
     eger (mods.uzunluk() == 0) {

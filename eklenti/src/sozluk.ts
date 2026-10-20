@@ -1,3 +1,5 @@
+import { YERLESIK } from "./yerlesik_uretilen";
+
 export type TamamTur = "anahtar" | "tip" | "fonksiyon" | "adalan" | "yontem";
 
 export type TamamItem = {
@@ -20,7 +22,7 @@ export const ANAHTARLAR: Record<string, string> = {
   secim: "C `switch`. `sayi` veya `metin`.",
   durum: "`secim` sabiti. Çalışma anı değişken olamaz.",
   varsayilan: "`secim` varsayılan dalı.",
-  arkaplan: "İş parçacığı. `upp.bekle`.",
+  arkaplan: "İş parçacığı: `oto is = arkaplan { ... }; is.bekle();` (barındırılan).",
   guvensiz: "İşaretçi, `c_kod`, süreç belleği kapısı.",
   guvenli: "İç içe güvenli moda dönüş.",
   sinif: "Yapı + metotlar. Alanlarda ham işaretçi yok.",
@@ -36,108 +38,74 @@ export const ANAHTARLAR: Record<string, string> = {
 };
 
 export const TIPLER: Record<string, string> = {
-  sayi: "64-bit tam sayı (`long long`).",
-  bayt: "8-bit işaretsiz (`uint8_t`).",
+  sayi: "İşaretli 64 bit (`s64`).",
+  s64: "İşaretli 64 bit (`sayi`).",
+  u64: "İşaretsiz 64 bit (`usayi`).",
+  usayi: "İşaretsiz 64 bit (`u64`).",
+  s32: "İşaretli 32 bit.",
+  u32: "İşaretsiz 32 bit.",
+  s16: "İşaretli 16 bit.",
+  u16: "İşaretsiz 16 bit.",
+  bayt: "İşaretli 8 bit (`s8`).",
+  ubayt: "İşaretsiz 8 bit (`u8`).",
   ondalik: "64-bit kayan (`double`).",
-  metin: "C dizgesi (`char*`).",
+  metin: "Yönetilen UTF-8 metin; kopya O(1), otomatik bırakılır.",
   mantik: "Boolean (`dogru` / `yanlis`).",
   bos: "Yok türü (`void`).",
   liste: "`liste[T]`. ekle, al, yaz, sil, temizle, uzunluk, bosalt.",
   harita: "`harita[K,V]`. koy, al, sil, temizle, anahtarlar.",
 };
 
-export const UPP_FONK: Record<string, string> = {
-  yaz: "Biçimli yaz. `{ad}` interpolasyonu.",
-  satir_yaz: "Satır yaz. Argümansız boş satır.",
-  mesaj: "`mesaj(baslik, govde)` — bilgi kutusu.",
-  hata: "`hata(baslik, govde)` — hata kutusu.",
-  hata_yaz: "stderr yaz.",
-  hata_satir_yaz: "stderr + satır sonu.",
-  ses_cal: "WAV çal. Dönüş `sayi`.",
-  uyut: "Milisaniye uyu.",
-  rastgele: "`rastgele(min, max)` dahil aralık.",
-  dosya_oku: "Metin oku.",
-  dosya_yaz: "Metin yaz. `1`/`0`.",
-  dosya_ekle: "Dosyanın sonuna yaz.",
-  dosya_var_mi: "Dosya var mı.",
-  dosya_sil: "Dosya sil.",
-  dosya_boyut: "Dosya boyutu (`sayi`).",
-  uzunluk: "Metin veya koleksiyon uzunluğu.",
-  giris: "Konsol satırı oku.",
-  min: "İki `sayi` minimumu.",
-  max: "İki `sayi` maksimumu.",
-  mutlak: "`sayi` mutlak değer.",
-  bekle: "`ArkaplanIs` bitene kadar bekle.",
-  arguman_sayisi: "`argc`.",
-  arguman: "`argv[i]`.",
-  zaman: "Unix zamanı.",
-  metinden_sayiya: "Metni `sayi` yap.",
-  sayidan_metin: "`sayi` → metin.",
-  ondalikdan_metin: "`ondalik` → metin.",
-  metinden_ondalik: "Metni `ondalik` yap.",
-  ortam_al: "Ortam değişkeni; yoksa `yok`.",
-  ortam_yaz: "Ortam değişkeni yaz (`mantik`).",
-  platform: "`windows` veya `linux`.",
+/** Tabloda olmayan özel yerleşikler. */
+const OZEL_FONK: Record<string, string> = {
+  yaz: "`yaz(x)` — yazdırılabilir her tür; `\"{ifade}\"` interpolasyonu. printf yok.",
+  satir_yaz: "`satir_yaz(x)` — satır sonu ile yaz; argümansız boş satır.",
+  hata_yaz: "`hata_yaz(x)` — stderr.",
+  hata_satir_yaz: "`hata_satir_yaz(x)` — stderr + satır sonu.",
+  uzunluk: "`uzunluk(x) -> sayi` — metin, dizi, liste, harita veya görünüm.",
+  bekle: "`bekle(is)` — `ArkaplanIs` bitene kadar bekle.",
 };
 
-export const ADALAN: Record<string, Record<string, string>> = {
-  metin: {
-    kod: "Kod noktası (`sayi`). İndeks kod noktası.",
-    ileri: "Kod noktasının bayt uzunluğu (1–4).",
-    kes: "`kes(s, bas, uzunluk)` kod noktası dilimi.",
-    bol: "Ayırıcıya göre böl → `liste[metin]`.",
-    birlestir: "İki metni birleştir.",
-    icinde: "Alt dizge indeksi.",
-    ara: "Alt dizge ara.",
-    degistir: "Değiştir.",
-    kirp: "Kenar boşluklarını kırp.",
-    hex_coz: "Hex dizgeyi bayta çevir.",
-    baslar: "Önek mi.",
-    biter: "Sonek mi.",
-  },
-  sistem: {
-    calistir: "`SurecCikti { cikti, kod, basarili }`.",
-    komut_bul: "PATH'te komut ara.",
-    exe_dizin: "Çalışan ikilinin dizini.",
-    pid: "Süreç kimliği.",
-  },
-  yol: {
-    dizin: "Üst dizin.",
-    birlestir: "Yol birleştir.",
-    gercek: "Gerçek yol.",
-    calisma: "Çalışma dizini.",
-    mutlak_mi: "Mutlak yol mu.",
-    klasor_olustur: "Klasör oluştur.",
-  },
-  dosya: {
-    listele: "`liste[metin]` dizin içeriği.",
-  },
-  json: {
-    ayristir: "JSON metnini ayrıştır.",
-    olustur: "JSON değeri oluştur.",
-  },
-  matematik: {
-    pi: "π.",
-    tan: "tanjant (radyan).",
-    atan2: "atan2.",
-  },
-  linux: {
-    pid: "Süreç kimliği.",
-    sinyal_gonder: "`sinyal_gonder(pid, sig)`.",
-    proc_oku: "`/proc` oku.",
-    sayi_oku: "Süreç belleği oku — `guvensiz`.",
-    sayi_yaz: "Süreç belleği yaz — `guvensiz`.",
-  },
-  windows: {
-    mesaj: "MessageBox.",
-    hata: "Hata kutusu.",
-    ses_cal: "WAV.",
-  },
-  bellek: {
-    sayioku: "Yabancı süreç `sayi` oku — `guvensiz`.",
-    sayiyaz: "Yabancı süreç `sayi` yaz — `guvensiz`.",
-  },
-};
+function bayrakNotu(b: number): string {
+  const n: string[] = [];
+  if (b & 1) n.push("guvensiz");
+  if (b & 2) n.push("barındırılan");
+  if (b & 4) n.push("yalnızca Windows");
+  if (b & 8) n.push("yalnızca Linux");
+  if (b & 64) n.push("yalnızca serbest/çekirdek");
+  return n.length ? ` · ${n.join(", ")}` : "";
+}
+
+export const UPP_FONK: Record<string, string> = { ...OZEL_FONK };
+/** Ad alanı → (ad → açıklama). Anahtarlar iç içe olabilir: "windows.bellek". */
+export const ADALAN: Record<string, Record<string, string>> = {};
+for (const y of YERLESIK) {
+  const parca = y.ad.split(".");
+  const ad = parca.pop() as string;
+  const ns = parca.join(".");
+  const param = y.param ? y.param.split(",").join(", ") : "";
+  const metin = `\`${ad}(${param}) -> ${y.donus}\`${bayrakNotu(y.bayrak)}`;
+  if (!ns) {
+    UPP_FONK[ad] = metin;
+  } else {
+    (ADALAN[ns] ??= {})[ad] = metin;
+  }
+}
+ADALAN["matematik"] = { ...(ADALAN["matematik"] ?? {}), dunya_ekran: "`dunya_ekran(...) -> EkranNokta`" };
+ADALAN["windows.bellek"] = { ...(ADALAN["windows.bellek"] ?? {}), zincir_oku: "`zincir_oku(taban, [ofsetler]) -> sayi` · guvensiz" };
+
+/** ns altındaki doğrudan alt ad alanları ("windows" → bellek, girdi, cizim). */
+function altAdalanlar(ns: string): string[] {
+  const on = ns ? `${ns}.` : "";
+  const set = new Set<string>();
+  for (const k of Object.keys(ADALAN)) {
+    if (k.startsWith(on)) {
+      const kalan = k.slice(on.length);
+      if (kalan) set.add(kalan.split(".")[0]);
+    }
+  }
+  return [...set].sort();
+}
 
 export const LISTE_YONTEM: Record<string, string> = {
   ekle: "Sona ekle.",
@@ -201,19 +169,12 @@ export function noktaYol(oncesi: string): { yol: string[]; pref: string; nokta: 
 export function tamamla(oncesi: string): TamamItem[] {
   const { yol, pref, nokta } = noktaYol(oncesi);
   if (nokta && yol[0] === "upp") {
-    if (yol.length === 1) {
-      const ns = Object.keys(ADALAN)
-        .sort()
-        .map((k) => item(k, "adalan", "upp ad alanı"));
-      return filtrele([...ns, ...kayitlar(UPP_FONK, "fonksiyon")], pref);
+    const ns = yol.slice(1).join(".");
+    const alt = altAdalanlar(ns).map((k) => item(k, "adalan", "upp ad alanı"));
+    if (!ns) {
+      return filtrele([...alt, ...kayitlar(UPP_FONK, "fonksiyon")], pref);
     }
-    if (yol.length === 2 && ADALAN[yol[1]]) {
-      return filtrele(kayitlar(ADALAN[yol[1]], "yontem"), pref);
-    }
-    if (yol.length === 3 && yol[1] === "windows" && yol[2] === "bellek") {
-      return filtrele(kayitlar(ADALAN.bellek, "yontem"), pref);
-    }
-    return [];
+    return filtrele([...alt, ...kayitlar(ADALAN[ns] ?? {}, "yontem")], pref);
   }
   if (nokta) {
     const birlesik = { ...LISTE_YONTEM, ...HARITA_YONTEM };
@@ -227,11 +188,12 @@ export function tamamla(oncesi: string): TamamItem[] {
 
 export function hoverMetin(kelime: string, yol: string[] = []): string | undefined {
   if (yol[0] === "upp" && yol.length === 1) {
-    return ADALAN[kelime] ? "upp ad alanı" : UPP_FONK[kelime];
+    return altAdalanlar("").includes(kelime) ? "upp ad alanı" : UPP_FONK[kelime];
   }
-  if (yol[0] === "upp" && yol.length === 2) {
-    const ns = ADALAN[yol[1]];
-    return ns ? ns[kelime] : undefined;
+  if (yol[0] === "upp" && yol.length >= 2) {
+    const ns = yol.slice(1).join(".");
+    if (altAdalanlar(ns).includes(kelime)) return "upp ad alanı";
+    return ADALAN[ns]?.[kelime];
   }
   if (LISTE_YONTEM[kelime]) {
     return LISTE_YONTEM[kelime];

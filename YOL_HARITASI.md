@@ -45,8 +45,10 @@
 - [x] Serbest runtime: sınır etiketli yığın ayırıcı, COM1 + VGA konsolu (CP437 Türkçe eşleme), panik, libc'siz `%g`.
 - [x] `upp.cekirdek.*`: port G/Ç, MMIO, `hlt`/`cli`/`sti`, `yigin_kur`. Barındırılan API'ler, `arkaplan` ve `Kilit` serbest hedefte derleme hatası verir.
 - [x] `ornekler/cekirdek/merhaba.upp`. Yapısal doğrulama yapıldı (ELF32, Multiboot başlığı ofset 0x1000, giriş `_start`).
-- [ ] QEMU ile önyükleme testi (QEMU kurulunca) ve CI'da otomatik çekirdek testi (`isa-debug-exit`).
-- [ ] Sonraki: IDT/kesmeler, sayfa ayırıcı, klavye sürücüsü, zamanlayıcı.
+- [x] QEMU ile önyükleme: `tests/cekirdek/` kategorisi (çıktı, istisna, seri girdi, zamanlayıcı) QEMU'da açılır. CI Linux işi QEMU kurar.
+- [x] IDT + 32 istisna (Türkçe ad, RIP, CR2), PIC yeniden eşleme, 1000 Hz PIT, PS/2 klavye (Türkçe Q), COM1 UTF-8 girdi.
+- [x] Çekirdekte `upp.giris`, `upp.zaman`, `upp.uyut`; `upp.cekirdek.tik/tus_oku/tus_bekle/kesmeler_kur`. Örnek: `ornekler/cekirdek/kabuk.upp`.
+- [ ] Sonraki: fiziksel sayfa ayırıcı (Multiboot bellek haritası), sanal bellek, görevler/zamanlama, ATA/FAT sürücüsü.
 
 ## Faz 4 — Derleme asistanı ✅
 
@@ -56,4 +58,4 @@
 ## Faz 5 — Belgeler ve testler
 
 - [x] README, OGREN, API (TR/EN), derleyici.md güncel. 81 test; Linux'ta ASan, UBSan ve LSan temiz.
-- [ ] Eklenti sözlüğü ve sözdizimi dosyaları `yerlesik.upp`'den üretilsin.
+- [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.
