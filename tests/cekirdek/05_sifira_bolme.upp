@@ -1,0 +1,9 @@
+// Çekirdek: dil seviyesinde sıfıra bölme paniği (çekirdekte de)
+// @icerir: [u++ PANİK] sıfıra bölme
+
+fonk ana() -> sayi {
+    sayi sifir = upp.metinden_sayiya("0");
+    sayi x = 10 / sifir;
+    upp.satir_yaz("ulaşılmamalı {x}");
+    don 0;
+}

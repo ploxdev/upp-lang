@@ -1,0 +1,32 @@
+// Çekirdek: fonksiyon değerleriyle komut tablosu (işleyici kaydı)
+// @stdout
+// topla 7
+// carp 12
+// bilinmiyor
+
+fonk topla(sayi a, sayi b) -> sayi => a + b;
+
+fonk cik() -> bos {
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, 0);
+    }
+}
+
+fonk ana() -> sayi {
+    harita[metin, fonk(sayi, sayi) -> sayi] komutlar;
+    komutlar.koy("topla", topla);
+    komutlar.koy("carp", fonk(sayi a, sayi b) -> sayi => a * b);
+    liste[metin] sira;
+    sira.ekle("topla");
+    sira.ekle("carp");
+    sira.ekle("bol");
+    her (oto ad in sira) {
+        eger (komutlar.var_mi(ad)) {
+            upp.satir_yaz("{ad} {komutlar.al(ad)(3, 4)}");
+        } yoksa {
+            upp.satir_yaz("bilinmiyor");
+        }
+    }
+    cik();
+    don 0;
+}

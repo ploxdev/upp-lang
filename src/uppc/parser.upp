@@ -334,6 +334,9 @@ fonk tur_baslangici_mi() -> mantik {
     eger (bak_tur() == JetonTur.J_ANAHTAR && tur_adi_mi(bak_deger())) {
         don dogru;
     }
+    eger (bak_tur() == JetonTur.J_ANAHTAR && metin_esit(bak_deger(), "fonk") && bak_tur_at(1) == JetonTur.J_PARANTEZ_AC) {
+        don dogru;
+    }
     eger (bak_tur() == JetonTur.J_KIMLIK) {
         sayi i = 1;
         eger (bak_tur_at(i) == JetonTur.J_NOKTA && bak_tur_at(i + 1) == JetonTur.J_KIMLIK) {
@@ -362,6 +365,60 @@ fonk ayristir_koleksiyon_elem() -> metin {
     hata_fmt_yaz("' bulundu.");
     hata_fmt_ver(bak_satir(), bak_sutun());
     don "";
+}
+
+// Koleksiyon eleman türü: işaretçi ve görünüm dışında her değer türü
+// (sayısal türler, metin, sınıf, liste[...], harita[...]).
+fonk ayristir_koleksiyon_tur() -> metin {
+    eger (hata_var()) { don ""; }
+    sayi satir = bak_satir();
+    sayi sutun = bak_sutun();
+    sayi t = ayristir_tur();
+    eger (hata_var() || t == 0) { don ""; }
+    eger (dugum_ptrd(t) != 0 || metin_esit(intern_dilim(dugum_ad(t), 0, 1), "&")) {
+        hata_ver(satir, sutun, "Koleksiyon elemanı işaretçi ya da görünüm olamaz.");
+        don "";
+    }
+    eger (metin_esit(dugum_ad(t), "bos")) {
+        hata_ver(satir, sutun, "Koleksiyon elemanı 'bos' olamaz.");
+        don "";
+    }
+    don dugum_ad(t);
+}
+
+// fonk(P1, P2) -> R  (R yazılmazsa bos). Parametre adı yazılmaz.
+fonk ayristir_fonk_tur() -> sayi {
+    sayi satir = bak_satir();
+    sayi sutun = bak_sutun();
+    j_ilerle();
+    beklenen_tur(JetonTur.J_PARANTEZ_AC, "(");
+    metin s = "fonk(";
+    sayi n = 0;
+    eger (bak_tur() != JetonTur.J_PARANTEZ_KAPA) {
+        mantik devam_et = dogru;
+        iken (devam_et && !hata_var()) {
+            sayi ps = bak_satir();
+            sayi pc = bak_sutun();
+            sayi pt = ayristir_tur();
+            eger (hata_var() || pt == 0) { don 0; }
+            eger (dugum_dims(pt) > 0 || tip_void_mi(pt)) {
+                hata_ver(ps, pc, "Fonksiyon türü parametresi 'bos' ya da dizi olamaz.");
+                don 0;
+            }
+            eger (n > 0) { s = kat(s, ","); }
+            s = kat(s, tur_kanonik_ad(pt));
+            n = n + 1;
+            devam_et = esles_tur(JetonTur.J_VIRGUL);
+        }
+    }
+    beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+    metin r = "bos";
+    eger (esles_tur(JetonTur.J_OK)) {
+        sayi rt = ayristir_tur();
+        eger (hata_var() || rt == 0) { don 0; }
+        r = tur_kanonik_ad(rt);
+    }
+    don tur_dugum(satir, sutun, intern(kat3(s, ")->", r)), 0, 0);
 }
 
 fonk ayristir_tur() -> sayi {
@@ -394,6 +451,9 @@ fonk ayristir_tur() -> sayi {
         hata_ver(satir, sutun, "'&' tür konumunda yalnızca '&metin' veya '&dilim[T]' olabilir.");
         don 0;
     }
+    eger (bak_tur() == JetonTur.J_ANAHTAR && metin_esit(bak_deger(), "fonk") && bak_tur_at(1) == JetonTur.J_PARANTEZ_AC) {
+        don ayristir_fonk_tur();
+    }
     metin ad = "";
     eger (bak_tur() == JetonTur.J_ANAHTAR && tur_adi_mi(bak_deger())) {
         ad = bak_deger();
@@ -420,14 +480,14 @@ fonk ayristir_tur() -> sayi {
     }
     eger (metin_esit(ad, "liste")) {
         beklenen_tur(JetonTur.J_KOSE_AC, "[");
-        oto elem = ayristir_koleksiyon_elem();
+        oto elem = ayristir_koleksiyon_tur();
         beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
         ad = kat3("liste[", elem, "]");
     } yoksa eger (metin_esit(ad, "harita")) {
         beklenen_tur(JetonTur.J_KOSE_AC, "[");
-        oto k = ayristir_koleksiyon_elem();
+        oto k = ayristir_koleksiyon_tur();
         beklenen_tur(JetonTur.J_VIRGUL, ",");
-        oto v = ayristir_koleksiyon_elem();
+        oto v = ayristir_koleksiyon_tur();
         beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
         eger (!metin_esit(k, "metin") && !metin_esit(k, "sayi")) {
             hata_ver(satir, sutun, "harita anahtarı 'metin' veya 'sayi' olmalı.");
@@ -560,6 +620,16 @@ fonk ayristir_birincil() -> sayi {
         eger (metin_esit(bak_deger(), "kendi")) {
             j_ilerle();
             don kimlik_dugum(satir, sutun, "kendi");
+        }
+        eger (metin_esit(bak_deger(), "fonk") && bak_tur_at(1) == JetonTur.J_PARANTEZ_AC) {
+            sayi sl = loop_al();
+            sayi ss = switch_al();
+            loop_yaz(0);
+            switch_yaz(0);
+            sayi n = ayristir_anonim_fonk();
+            loop_yaz(sl);
+            switch_yaz(ss);
+            don n;
         }
         eger (metin_esit(bak_deger(), "arkaplan")) {
             j_ilerle();
@@ -1232,6 +1302,24 @@ fonk ayristir_fonksiyon(metin sinif_ad) -> sayi {
     eger (metin_esit(jeton_deger(nm), "upp") && metin_esit(sinif_ad, "")) {
         hata_ver(jeton_satir(nm), jeton_sutun(nm), "'upp' yerleşik ad alanıdır; fonksiyon adı olamaz.");
     }
+    don ayristir_fonk_govde(kw, jeton_deger(nm), jeton_satir(nm), jeton_sutun(nm), sinif_ad, yanlis);
+}
+
+// Anonim fonksiyon ifadesi: fonk(sayi x) -> sayi => x * 2  veya  fonk(...) -> T { ... }
+// Yakalama yoktur; gövde gizli bir üst düzey fonksiyona taşınır.
+fonk ayristir_anonim_fonk() -> sayi {
+    sayi kw = beklenen_kw("fonk");
+    g_anon_n = g_anon_n + 1;
+    oto ad = intern(kat("_upp_anon_", sayi_metin(g_anon_n)));
+    sayi fn = ayristir_fonk_govde(kw, ad, jeton_satir(kw), jeton_sutun(kw), "", dogru);
+    eger (hata_var()) { don 0; }
+    g_anon.ekle(fn);
+    sayi n = kimlik_dugum(jeton_satir(kw), jeton_sutun(kw), ad);
+    dugum_yaz_sayi(n, fn);
+    don n;
+}
+
+fonk ayristir_fonk_govde(sayi kw, metin ad, sayi nm_satir, sayi nm_sutun, metin sinif_ad, mantik ifade_ici) -> sayi {
     beklenen_tur(JetonTur.J_PARANTEZ_AC, "(");
     sayi params = liste_yeni();
     eger (bak_tur() != JetonTur.J_PARANTEZ_KAPA) {
@@ -1262,7 +1350,7 @@ fonk ayristir_fonksiyon(metin sinif_ad) -> sayi {
     sayi arrow = 0;
     eger (esles_tur(JetonTur.J_YAG_OK)) {
         sayi expr = ayristir_ifade();
-        beklenen_tur(JetonTur.J_NOKTALI_VIRGUL, ";");
+        eger (!ifade_ici) { beklenen_tur(JetonTur.J_NOKTALI_VIRGUL, ";"); }
         body = dugum_yeni(DugumTur.D_BLOK, dugum_satir(expr), dugum_sutun(expr));
         sayi L = liste_yeni();
         dugum_yaz_liste(body, L);
@@ -1274,12 +1362,12 @@ fonk ayristir_fonksiyon(metin sinif_ad) -> sayi {
         body = ayristir_blok();
     }
     sayi n = dugum_yeni(DugumTur.D_FONK, jeton_satir(kw), jeton_sutun(kw));
-    dugum_yaz_ad(n, jeton_deger(nm));
+    dugum_yaz_ad(n, ad);
     dugum_yaz_a(n, ret);
     dugum_yaz_b(n, body);
     dugum_yaz_liste(n, params);
     eger (!metin_esit(sinif_ad, "")) {
-        dugum_yaz_c(n, kimlik_dugum(jeton_satir(nm), jeton_sutun(nm), sinif_ad));
+        dugum_yaz_c(n, kimlik_dugum(nm_satir, nm_sutun, sinif_ad));
     }
     sayi fl = 0;
     eger (arrow != 0) {
@@ -1318,7 +1406,7 @@ fonk ayristir_sinif() -> sayi {
     sayi constants = liste_yeni();
     oto sinif_ad = jeton_deger(nm);
     iken (bak_tur() != JetonTur.J_SLUS_KAPA && bak_tur() != JetonTur.J_EOF && !hata_var()) {
-        eger (kw_mi("fonk")) {
+        eger (kw_mi("fonk") && bak_tur_at(1) != JetonTur.J_PARANTEZ_AC) {
             sayi m = ayristir_fonksiyon(sinif_ad);
             eger (sinif_uye_var(fields, methods, dugum_ad(m))) {
                 hata_fmt_basla();
@@ -1472,6 +1560,7 @@ fonk ayristir_birim() -> sayi {
     sayi first_satir = bak_satir();
     sayi first_sutun = bak_sutun();
     sayi decls = liste_yeni();
+    g_anon.temizle();
     iken (bak_tur() != JetonTur.J_EOF && !hata_var()) {
         eger (kw_mi("c_ekle")) {
             liste_ekle(decls, ayristir_include());
@@ -1483,7 +1572,7 @@ fonk ayristir_birim() -> sayi {
             liste_ekle(decls, ayristir_sinif());
         } yoksa eger (kw_mi("secenek")) {
             liste_ekle(decls, ayristir_secenek());
-        } yoksa eger (kw_mi("fonk")) {
+        } yoksa eger (kw_mi("fonk") && bak_tur_at(1) != JetonTur.J_PARANTEZ_AC) {
             liste_ekle(decls, ayristir_fonksiyon(""));
         } yoksa eger (kw_mi("oto") || tur_baslangici_mi()) {
             eger (kw_mi("oto")) {
@@ -1503,6 +1592,8 @@ fonk ayristir_birim() -> sayi {
     eger (hata_var()) {
         don 0;
     }
+    her (oto af in g_anon) { liste_ekle(decls, af); }
+    g_anon.temizle();
     sayi n = dugum_yeni(DugumTur.D_PROGRAM, first_satir, first_sutun);
     dugum_yaz_liste(n, decls);
     don n;

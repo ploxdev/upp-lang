@@ -1,0 +1,9 @@
+// Çalışma zamanı: tamsayı sıfıra bölme açık panik verir
+// @icerir: sıfıra bölme
+
+fonk ana() -> sayi {
+    sayi s = upp.metinden_sayiya("0");
+    sayi x = 7 / s;
+    upp.satir_yaz("{x}");
+    don 0;
+}

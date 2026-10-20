@@ -1,0 +1,35 @@
+// Pozitif: secim içindeki iç içe dur yalnızca secimden çıkar; döngü değişkenleri canlı kalır
+// @stdout
+// dongu 0
+// a 1
+// dongu 1
+// a 2
+// dongu 2
+// d2 0 kalici
+// iki 1
+// d2 1 kalici
+
+fonk ana() -> sayi {
+    dongu (sayi i = 0; i < 3; i += 1) {
+        metin k = "a";
+        secim (k) {
+            durum "a":
+                eger (i == 0) { dur; }
+                upp.satir_yaz("a {i}");
+                dur;
+        }
+        upp.satir_yaz("dongu {i}");
+    }
+    sayi n = 2;
+    dongu (sayi j = 0; j < 2; j += 1) {
+        metin canli = "kal" + "ici";
+        secim (n) {
+            durum 2:
+                eger (j == 0) { dur; }
+                upp.satir_yaz("iki {j}");
+                dur;
+        }
+        upp.satir_yaz("d2 {j} {canli}");
+    }
+    don 0;
+}

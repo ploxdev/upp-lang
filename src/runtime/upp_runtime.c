@@ -97,6 +97,40 @@ static char* upp_mk_bas(void);
 static void upp_mk_sayi(char** s, long long v);
 static void _upp_m_ekle_n(char** s, const char* x, size_t nb, int x_ascii);
 
+static long long upp_bol_s(long long a, long long b) {
+    if (b == 0) {
+        upp_panik("sıfıra bölme");
+    }
+    if (b == -1 && a == LLONG_MIN) {
+        upp_panik("tamsayı bölmede taşma");
+    }
+    return a / b;
+}
+
+static long long upp_mod_s(long long a, long long b) {
+    if (b == 0) {
+        upp_panik("sıfıra bölme (kalan)");
+    }
+    if (b == -1) {
+        return 0;
+    }
+    return a % b;
+}
+
+static unsigned long long upp_bol_u(unsigned long long a, unsigned long long b) {
+    if (b == 0) {
+        upp_panik("sıfıra bölme");
+    }
+    return a / b;
+}
+
+static unsigned long long upp_mod_u(unsigned long long a, unsigned long long b) {
+    if (b == 0) {
+        upp_panik("sıfıra bölme (kalan)");
+    }
+    return a % b;
+}
+
 static long long upp_dizi_idx(long long i, long long n) {
     if (i < 0 || i >= n) {
         char* m = upp_mk_bas();
@@ -979,46 +1013,32 @@ typedef struct Kilit {
     long long id;
 } Kilit;
 
+/* ---- koleksiyon v2: değer türü liste/harita ----
+ * Tutamaç bir hücreye işaretçidir (NULL = boş). Kopya atomik referans artışıdır;
+ * değiştiren her işlem hücre paylaşılıyorsa önce onu klonlar (copy-on-write).
+ * Elemanlar ham bayt olarak saklanır; tür tanımlayıcısı boyutu ve kopya/bırak
+ * kancalarını verir (NULL kanca = düz bellek kopyası / bırakılacak bir şey yok). */
+typedef struct UppKolTur {
+    size_t boyut;
+    void (*kopya)(void* hedef, const void* kaynak);
+    void (*birak)(void* p);
+} UppKolTur;
+
+typedef struct _UppListe _UppListe;
+typedef struct _UppHarita _UppHarita;
+
 typedef struct UppKolListe {
-    long long id;
+    _UppListe* h;
 } UppKolListe;
 
 typedef struct UppKolHarita {
-    long long id;
+    _UppHarita* h;
 } UppKolHarita;
 
-#define UPP_KT_SAYI 0
-#define UPP_KT_ONDALIK 1
-#define UPP_KT_MANTIK 2
-#define UPP_KT_METIN 3
-#define UPP_KT_BAYT 4
-#define UPP_KOLLEKSIYON_MAX 1000000LL
+/* Düz (kancasız) türler için çağrı yerinde tanımlayıcı. */
+#define UPP_KT_DUZ(T) (&(const UppKolTur){ sizeof(T), NULL, NULL })
 
-typedef struct {
-    int canli;
-    int tag;
-    long long n;
-    long long cap;
-    long long* i;
-    double* d;
-    char** s;
-} _UppKolListeH;
-
-typedef struct {
-    int canli;
-    int ktag;
-    int vtag;
-    long long n;
-    long long cap;
-    long long* k_i;
-    char** k_s;
-    long long* v_i;
-    double* v_d;
-    char** v_s;
-    long long* hash;
-    long long hash_cap;
-    long long hash_tomb;
-} _UppKolHaritaH;
+#define UPP_KOLLEKSIYON_MAX 100000000LL
 
 static double upp_mat_mutlak(double x) { return x < 0.0 ? -x : x; }
 static double upp_mat_pi(void) { return 3.14159265358979323846; }
@@ -1041,204 +1061,6 @@ static double upp_mat_yumusat(double a, double b, double t) {
 }
 
 /* ---- liste[T] / harita[K,V] (v2.7) ---- */
-
-static _UppKolListeH* _upp_listeler = NULL;
-static long long _upp_liste_n = 1;
-static long long _upp_liste_cap = 0;
-static _UppKolHaritaH* _upp_haritalar = NULL;
-static long long _upp_harita_n = 1;
-static long long _upp_harita_cap = 0;
-
-static char* _upp_kol_kopya(const char* s) {
-    return upp_metin_kopya(s);
-}
-
-static _UppKolListeH* _upp_liste_hucre(long long id) {
-    if (id <= 0 || id >= _upp_liste_n || !_upp_listeler) {
-        return NULL;
-    }
-    if (!_upp_listeler[id].canli) {
-        return NULL;
-    }
-    return &_upp_listeler[id];
-}
-
-static long long _upp_liste_yeni(int tag) {
-    long long i;
-    long long nc;
-    _UppKolListeH* np;
-    for (i = 1; i < _upp_liste_n; i++) {
-        if (!_upp_listeler[i].canli) {
-            memset(&_upp_listeler[i], 0, sizeof(_UppKolListeH));
-            _upp_listeler[i].canli = 1;
-            _upp_listeler[i].tag = tag;
-            return i;
-        }
-    }
-    if (_upp_liste_n >= UPP_KOLLEKSIYON_MAX) {
-        return 0;
-    }
-    if (_upp_liste_n + 1 > _upp_liste_cap) {
-        nc = _upp_liste_cap ? _upp_liste_cap * 2 : 16;
-        if (nc < _upp_liste_n + 1) {
-            nc = _upp_liste_n + 1;
-        }
-        np = (_UppKolListeH*)UPP_YENIDEN(_upp_listeler, (size_t)nc * sizeof(_UppKolListeH));
-        if (!np) {
-            return 0;
-        }
-        memset(np + _upp_liste_cap, 0, (size_t)(nc - _upp_liste_cap) * sizeof(_UppKolListeH));
-        _upp_listeler = np;
-        _upp_liste_cap = nc;
-    }
-    i = _upp_liste_n++;
-    memset(&_upp_listeler[i], 0, sizeof(_UppKolListeH));
-    _upp_listeler[i].canli = 1;
-    _upp_listeler[i].tag = tag;
-    return i;
-}
-
-static int _upp_liste_hazir(UppKolListe* L, int tag) {
-    if (!L) {
-        return 0;
-    }
-    if (L->id == 0) {
-        L->id = _upp_liste_yeni(tag);
-        if (L->id == 0) {
-            return 0;
-        }
-    }
-    {
-        _UppKolListeH* h = _upp_liste_hucre(L->id);
-        if (!h || h->tag != tag) {
-            return 0;
-        }
-        return 1;
-    }
-}
-
-static int _upp_liste_buyut(_UppKolListeH* h) {
-    long long nc;
-    if (!h) {
-        return 0;
-    }
-    if (h->cap > 0 && h->cap > (LLONG_MAX / 2)) {
-        upp_panik("liste kapasite taşması");
-    }
-    nc = h->cap ? h->cap * 2 : 8;
-    if (h->tag == UPP_KT_ONDALIK) {
-        double* p = (double*)UPP_YENIDEN(h->d, (size_t)nc * sizeof(double));
-        if (!p) {
-            return 0;
-        }
-        h->d = p;
-    } else if (h->tag == UPP_KT_METIN) {
-        char** p = (char**)UPP_YENIDEN(h->s, (size_t)nc * sizeof(char*));
-        if (!p) {
-            return 0;
-        }
-        h->s = p;
-    } else {
-        long long* p = (long long*)UPP_YENIDEN(h->i, (size_t)nc * sizeof(long long));
-        if (!p) {
-            return 0;
-        }
-        h->i = p;
-    }
-    h->cap = nc;
-    return 1;
-}
-
-static void upp_liste_ekle(UppKolListe* L, int tag, long long iv, double dv, const char* sv) {
-    _UppKolListeH* h;
-    if (!_upp_liste_hazir(L, tag)) {
-        upp_panik("liste bellek yetersiz");
-    }
-    h = _upp_liste_hucre(L->id);
-    if (!h) {
-        return;
-    }
-    if (h->n >= h->cap && !_upp_liste_buyut(h)) {
-        upp_panik("liste bellek yetersiz");
-    }
-    if (h->n >= h->cap) {
-        upp_panik("liste bellek yetersiz");
-    }
-    if (tag == UPP_KT_ONDALIK) {
-        h->d[h->n++] = dv;
-    } else if (tag == UPP_KT_METIN) {
-        h->s[h->n++] = _upp_kol_kopya(sv);
-    } else if (tag == UPP_KT_BAYT) {
-        h->i[h->n++] = (long long)((unsigned char)iv);
-    } else {
-        h->i[h->n++] = iv;
-    }
-}
-
-/* Ham C tamponunu (yığın dizisi, dirent adı) önünü okumadan listeye ekler. */
-static void _upp_liste_ekle_c(UppKolListe* L, const char* ham) {
-    char* m = _upp_m_c(ham);
-    upp_liste_ekle(L, UPP_KT_METIN, 0, 0.0, m);
-    upp_metin_release(m);
-}
-
-static void upp_liste_yaz(UppKolListe* L, int tag, long long i, long long iv, double dv, const char* sv) {
-    _UppKolListeH* h;
-    if (!L || L->id == 0) {
-        return;
-    }
-    h = _upp_liste_hucre(L->id);
-    if (!h || h->tag != tag || i < 0 || i >= h->n) {
-        upp_panik("liste indeks sınır dışı");
-    }
-    if (tag == UPP_KT_ONDALIK) {
-        h->d[i] = dv;
-    } else if (tag == UPP_KT_METIN) {
-        if (h->s[i]) {
-            upp_metin_release(h->s[i]);
-        }
-        h->s[i] = _upp_kol_kopya(sv);
-    } else if (tag == UPP_KT_BAYT) {
-        h->i[i] = (long long)((unsigned char)iv);
-    } else {
-        h->i[i] = iv;
-    }
-}
-
-static long long upp_liste_al_i(UppKolListe L, long long i) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h || i < 0 || i >= h->n) {
-        upp_panik("liste indeks sınır dışı");
-    }
-    if (h->tag == UPP_KT_ONDALIK || h->tag == UPP_KT_METIN) {
-        return 0;
-    }
-    if (h->tag == UPP_KT_BAYT) {
-        return (long long)((unsigned char)h->i[i]);
-    }
-    return h->i[i];
-}
-
-static double upp_liste_al_d(UppKolListe L, long long i) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h || h->tag != UPP_KT_ONDALIK || i < 0 || i >= h->n) {
-        upp_panik("liste indeks sınır dışı");
-    }
-    return h->d[i];
-}
-
-static char* upp_liste_al_s(UppKolListe L, long long i) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h || h->tag != UPP_KT_METIN || i < 0 || i >= h->n) {
-        upp_panik("liste indeks sınır dışı");
-    }
-    return h->s[i] ? _upp_kol_kopya(h->s[i]) : NULL;
-}
-
-static long long upp_liste_uzunluk(UppKolListe L) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    return h ? h->n : 0;
-}
 
 static void upp_dilim_sinir(long long a, long long b, long long n) {
     if (a < 0 || b < a || b > n) {
@@ -1294,710 +1116,617 @@ static upp_ref_dilim_mantik upp_dilim_mantik(const bool* p, long long n, long lo
     return r;
 }
 
-static upp_ref_dilim_sayi upp_liste_dilim_sayi(UppKolListe L, long long a, long long b) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h) {
-        return upp_dilim_sayi(NULL, 0, a, b);
-    }
-    if (h->tag != UPP_KT_SAYI) {
-        upp_panik("liste dilim türü uyumsuz");
-    }
-    return upp_dilim_sayi(h->i, h->n, a, b);
+/* =====================================================================
+ * koleksiyon v2 — uygulama
+ * ===================================================================== */
+struct _UppListe {
+    long long ref;
+    const UppKolTur* tur;
+    long long n;
+    long long kap;
+    unsigned char* veri;
+};
+
+#define _UPP_HK_TAM 0
+#define _UPP_HK_METIN 1
+#define _UPP_H_BOS (-1LL)
+#define _UPP_H_MEZAR (-2LL)
+
+struct _UppHarita {
+    long long ref;
+    int kk;                  /* anahtar türü: _UPP_HK_TAM (long long) / _UPP_HK_METIN (char*) */
+    const UppKolTur* vtur;
+    long long n;
+    long long kap;
+    unsigned char* anahtar;  /* n adet: long long ya da char* — eklenme sırası */
+    unsigned char* deger;    /* n adet vtur->boyut */
+    long long* hash;         /* açık adresleme: indeks ya da _UPP_H_BOS/_UPP_H_MEZAR */
+    long long hash_kap;
+    long long mezar;
+};
+
+/* ---- yerleşik tür tanımlayıcıları ---- */
+static void _upp_kt_metin_kopya(void* d, const void* s) {
+    *(char**)d = upp_metin_kopya(*(char* const*)s);
+}
+static void _upp_kt_metin_birak(void* p) {
+    upp_metin_release(*(char**)p);
+    *(char**)p = NULL;
+}
+static UppKolListe upp_liste_paylas(UppKolListe L);
+static void upp_liste_birak(UppKolListe* L);
+static UppKolHarita upp_harita_paylas(UppKolHarita H);
+static void upp_harita_birak(UppKolHarita* H);
+static void _upp_kt_liste_kopya(void* d, const void* s) {
+    *(UppKolListe*)d = upp_liste_paylas(*(const UppKolListe*)s);
+}
+static void _upp_kt_liste_birak(void* p) {
+    upp_liste_birak((UppKolListe*)p);
+}
+static void _upp_kt_harita_kopya(void* d, const void* s) {
+    *(UppKolHarita*)d = upp_harita_paylas(*(const UppKolHarita*)s);
+}
+static void _upp_kt_harita_birak(void* p) {
+    upp_harita_birak((UppKolHarita*)p);
 }
 
-static upp_ref_dilim_ondalik upp_liste_dilim_ondalik(UppKolListe L, long long a, long long b) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h) {
-        return upp_dilim_ondalik(NULL, 0, a, b);
-    }
-    if (h->tag != UPP_KT_ONDALIK) {
-        upp_panik("liste dilim türü uyumsuz");
-    }
-    return upp_dilim_ondalik(h->d, h->n, a, b);
-}
+static const UppKolTur upp_kt_sayi = { sizeof(long long), NULL, NULL };
+static const UppKolTur upp_kt_ondalik = { sizeof(double), NULL, NULL };
+static const UppKolTur upp_kt_mantik = { sizeof(bool), NULL, NULL };
+static const UppKolTur upp_kt_metin = { sizeof(char*), _upp_kt_metin_kopya, _upp_kt_metin_birak };
+static const UppKolTur upp_kt_liste = { sizeof(UppKolListe), _upp_kt_liste_kopya, _upp_kt_liste_birak };
+static const UppKolTur upp_kt_harita = { sizeof(UppKolHarita), _upp_kt_harita_kopya, _upp_kt_harita_birak };
 
-static upp_ref_dilim_sayi upp_liste_gorunum_sayi(UppKolListe L) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h) {
-        return upp_dilim_sayi(NULL, 0, 0, 0);
-    }
-    if (h->tag != UPP_KT_SAYI) {
-        upp_panik("liste görünüm türü uyumsuz");
-    }
-    return upp_dilim_sayi(h->i, h->n, 0, h->n);
-}
-
-static upp_ref_dilim_ondalik upp_liste_gorunum_ondalik(UppKolListe L) {
-    _UppKolListeH* h = _upp_liste_hucre(L.id);
-    if (!h) {
-        return upp_dilim_ondalik(NULL, 0, 0, 0);
-    }
-    if (h->tag != UPP_KT_ONDALIK) {
-        upp_panik("liste görünüm türü uyumsuz");
-    }
-    return upp_dilim_ondalik(h->d, h->n, 0, h->n);
-}
-
-static void upp_liste_bosalt(UppKolListe* L) {
-    _UppKolListeH* h;
-    long long i;
-    if (!L || L->id == 0) {
-        return;
-    }
-    h = _upp_liste_hucre(L->id);
-    if (!h) {
-        L->id = 0;
-        return;
-    }
-    if (h->tag == UPP_KT_METIN && h->s) {
-        for (i = 0; i < h->n; i++) {
-            upp_metin_release(h->s[i]);
-        }
-    }
-    UPP_BIRAK(h->i);
-    UPP_BIRAK(h->d);
-    UPP_BIRAK(h->s);
-    memset(h, 0, sizeof(_UppKolListeH));
-    L->id = 0;
-}
-
-static void upp_liste_sil(UppKolListe* L, long long idx) {
-    _UppKolListeH* h;
-    long long j;
-    if (!L || L->id == 0) return;
-    h = _upp_liste_hucre(L->id);
-    if (!h || idx < 0 || idx >= h->n) return;
-    if (h->tag == UPP_KT_METIN) {
-        if (h->s[idx]) upp_metin_release(h->s[idx]);
-        for (j = idx; j < h->n - 1; j++) {
-            h->s[j] = h->s[j + 1];
-        }
-        h->s[h->n - 1] = NULL;
-    } else if (h->tag == UPP_KT_ONDALIK) {
-        for (j = idx; j < h->n - 1; j++) {
-            h->d[j] = h->d[j + 1];
-        }
+static void _upp_kol_eleman_kopya(const UppKolTur* t, void* d, const void* s) {
+    if (t->kopya) {
+        t->kopya(d, s);
     } else {
-        for (j = idx; j < h->n - 1; j++) {
-            h->i[j] = h->i[j + 1];
+        memcpy(d, s, t->boyut);
+    }
+}
+
+static void _upp_kol_eleman_birak(const UppKolTur* t, void* p) {
+    if (t->birak) {
+        t->birak(p);
+    }
+}
+
+/* ---- liste ---- */
+static _UppListe* _upp_liste_yeni(const UppKolTur* t, long long kap) {
+    _UppListe* h = (_UppListe*)UPP_AYIR(sizeof(_UppListe));
+    if (!h) {
+        upp_panik("liste bellek yetersiz");
+    }
+    h->ref = 1;
+    h->tur = t;
+    h->n = 0;
+    h->kap = kap > 0 ? kap : 0;
+    h->veri = NULL;
+    if (h->kap > 0) {
+        h->veri = (unsigned char*)UPP_AYIR((size_t)h->kap * t->boyut);
+        if (!h->veri) {
+            upp_panik("liste bellek yetersiz");
         }
     }
+    return h;
+}
+
+static void _upp_liste_hucre_birak(_UppListe* h) {
+    long long i;
+    if (h->tur->birak) {
+        for (i = 0; i < h->n; i++) {
+            h->tur->birak(h->veri + (size_t)i * h->tur->boyut);
+        }
+    }
+    UPP_BIRAK(h->veri);
+    UPP_BIRAK(h);
+}
+
+static UppKolListe upp_liste_paylas(UppKolListe L) {
+    if (L.h) {
+        __atomic_add_fetch(&L.h->ref, 1, __ATOMIC_RELAXED);
+    }
+    return L;
+}
+
+static void upp_liste_birak(UppKolListe* L) {
+    if (!L || !L->h) {
+        return;
+    }
+    if (__atomic_sub_fetch(&L->h->ref, 1, __ATOMIC_ACQ_REL) == 0) {
+        _upp_liste_hucre_birak(L->h);
+    }
+    L->h = NULL;
+}
+
+/* Yazmadan önce: hücre yoksa oluştur, paylaşılıyorsa klonla. */
+static _UppListe* _upp_liste_yazilabilir(UppKolListe* L, const UppKolTur* t) {
+    _UppListe* h = L->h;
+    if (!h) {
+        if (!t) {
+            return NULL;
+        }
+        L->h = _upp_liste_yeni(t, 0);
+        return L->h;
+    }
+    if (__atomic_load_n(&h->ref, __ATOMIC_ACQUIRE) > 1) {
+        long long i;
+        _UppListe* y = _upp_liste_yeni(h->tur, h->n);
+        for (i = 0; i < h->n; i++) {
+            size_t o = (size_t)i * h->tur->boyut;
+            _upp_kol_eleman_kopya(h->tur, y->veri + o, h->veri + o);
+        }
+        y->n = h->n;
+        upp_liste_birak(L);
+        L->h = y;
+        return y;
+    }
+    return h;
+}
+
+static void _upp_liste_sinir(_UppListe* h, long long i) {
+    if (!h || i < 0 || i >= h->n) {
+        char* m = upp_mk_bas();
+        _upp_m_ekle_n(&m, "liste indeks ", 13u, 1);
+        upp_mk_sayi(&m, i);
+        _upp_m_ekle_n(&m, ", uzunluk ", 10u, 1);
+        upp_mk_sayi(&m, h ? h->n : 0);
+        _upp_m_ekle_n(&m, " sınır dışı", strlen(" sınır dışı"), 0);
+        upp_panik(m);
+    }
+}
+
+static long long upp_liste_uzunluk(UppKolListe L) {
+    return L.h ? L.h->n : 0;
+}
+
+/* Okuma için eleman işaretçisi (sınır denetimli). */
+static void* upp_liste_ptr(UppKolListe L, long long i) {
+    _upp_liste_sinir(L.h, i);
+    return L.h->veri + (size_t)i * L.h->tur->boyut;
+}
+
+/* Yazma için eleman işaretçisi (COW + sınır denetimi). */
+static void* upp_liste_yaz_ptr(UppKolListe* L, long long i) {
+    _UppListe* h = _upp_liste_yazilabilir(L, NULL);
+    _upp_liste_sinir(h, i);
+    return h->veri + (size_t)i * h->tur->boyut;
+}
+
+/* Sona sıfırlanmış yeni bir yer ekler ve işaretçisini döner. */
+static void* upp_liste_ekle_ptr(UppKolListe* L, const UppKolTur* t) {
+    _UppListe* h = _upp_liste_yazilabilir(L, t);
+    unsigned char* p;
+    if (h->n >= h->kap) {
+        long long yk = h->kap < 8 ? 8 : h->kap * 2;
+        unsigned char* yv;
+        if (yk > UPP_KOLLEKSIYON_MAX) {
+            upp_panik("liste en fazla boyuta ulaştı");
+        }
+        yv = (unsigned char*)UPP_YENIDEN(h->veri, (size_t)yk * h->tur->boyut);
+        if (!yv) {
+            upp_panik("liste bellek yetersiz");
+        }
+        h->veri = yv;
+        h->kap = yk;
+    }
+    p = h->veri + (size_t)h->n * h->tur->boyut;
+    memset(p, 0, h->tur->boyut);
+    h->n++;
+    return p;
+}
+
+static void upp_liste_sil(UppKolListe* L, long long i) {
+    _UppListe* h = _upp_liste_yazilabilir(L, NULL);
+    size_t b;
+    _upp_liste_sinir(h, i);
+    b = h->tur->boyut;
+    _upp_kol_eleman_birak(h->tur, h->veri + (size_t)i * b);
+    memmove(h->veri + (size_t)i * b, h->veri + (size_t)(i + 1) * b, (size_t)(h->n - i - 1) * b);
     h->n--;
 }
 
 static void upp_liste_temizle(UppKolListe* L) {
-    _UppKolListeH* h;
-    long long j;
-    if (!L || L->id == 0) return;
-    h = _upp_liste_hucre(L->id);
-    if (!h) return;
-    if (h->tag == UPP_KT_METIN && h->s) {
-        for (j = 0; j < h->n; j++) {
-            if (h->s[j]) upp_metin_release(h->s[j]);
-            h->s[j] = NULL;
-        }
+    _UppListe* h;
+    long long i;
+    if (!L->h) {
+        return;
+    }
+    if (__atomic_load_n(&L->h->ref, __ATOMIC_ACQUIRE) > 1) {
+        upp_liste_birak(L);
+        return;
+    }
+    h = L->h;
+    for (i = 0; i < h->n; i++) {
+        _upp_kol_eleman_birak(h->tur, h->veri + (size_t)i * h->tur->boyut);
     }
     h->n = 0;
 }
 
-static _UppKolHaritaH* _upp_harita_hucre(long long id) {
-    if (id <= 0 || id >= _upp_harita_n || !_upp_haritalar) {
-        return NULL;
-    }
-    if (!_upp_haritalar[id].canli) {
-        return NULL;
-    }
-    return &_upp_haritalar[id];
+/* Boşalt: bu değişkenin içeriğini bırakır; liste boş kalır. */
+static void upp_liste_bosalt(UppKolListe* L) {
+    upp_liste_birak(L);
 }
 
-static long long _upp_harita_yeni(int ktag, int vtag) {
-    long long i;
-    long long nc;
-    _UppKolHaritaH* np;
-    for (i = 1; i < _upp_harita_n; i++) {
-        if (!_upp_haritalar[i].canli) {
-            memset(&_upp_haritalar[i], 0, sizeof(_UppKolHaritaH));
-            _upp_haritalar[i].canli = 1;
-            _upp_haritalar[i].ktag = ktag;
-            _upp_haritalar[i].vtag = vtag;
-            return i;
-        }
-    }
-    if (_upp_harita_n >= UPP_KOLLEKSIYON_MAX) {
-        return 0;
-    }
-    if (_upp_harita_n + 1 > _upp_harita_cap) {
-        nc = _upp_harita_cap ? _upp_harita_cap * 2 : 16;
-        if (nc < _upp_harita_n + 1) {
-            nc = _upp_harita_n + 1;
-        }
-        np = (_UppKolHaritaH*)UPP_YENIDEN(_upp_haritalar, (size_t)nc * sizeof(_UppKolHaritaH));
-        if (!np) {
-            return 0;
-        }
-        memset(np + _upp_harita_cap, 0, (size_t)(nc - _upp_harita_cap) * sizeof(_UppKolHaritaH));
-        _upp_haritalar = np;
-        _upp_harita_cap = nc;
-    }
-    i = _upp_harita_n++;
-    memset(&_upp_haritalar[i], 0, sizeof(_UppKolHaritaH));
-    _upp_haritalar[i].canli = 1;
-    _upp_haritalar[i].ktag = ktag;
-    _upp_haritalar[i].vtag = vtag;
-    return i;
+static void _upp_liste_ekle_metin(UppKolListe* L, const char* s) {
+    upp_metin_ata((char**)upp_liste_ekle_ptr(L, &upp_kt_metin), s);
 }
 
-static int _upp_harita_hazir(UppKolHarita* H, int ktag, int vtag) {
-    if (!H) {
-        return 0;
-    }
-    if (H->id == 0) {
-        H->id = _upp_harita_yeni(ktag, vtag);
-        if (H->id == 0) {
-            return 0;
-        }
-    }
-    {
-        _UppKolHaritaH* h = _upp_harita_hucre(H->id);
-        if (!h || h->ktag != ktag || h->vtag != vtag) {
-            return 0;
-        }
-        return 1;
+/* Ham C tamponunu (yığın dizisi, dirent adı) önünü okumadan listeye ekler. */
+static void _upp_liste_ekle_c(UppKolListe* L, const char* ham) {
+    char* m = _upp_m_c(ham);
+    *(char**)upp_liste_ekle_ptr(L, &upp_kt_metin) = m;
+}
+
+static void _upp_liste_tur_dene(_UppListe* h, const UppKolTur* t, const char* ne) {
+    if (h && h->tur->boyut != t->boyut) {
+        upp_panik(ne);
     }
 }
 
-#define UPP_H_EMPTY (-1LL)
-#define UPP_H_TOMB  (-2LL)
-
-static unsigned _upp_fnv(const char* s) {
-    unsigned h = 2166136261u;
-    const unsigned char* p = (const unsigned char*)(s ? s : "");
-    while (*p) {
-        h ^= *p++;
-        h *= 16777619u;
-    }
-    return h ? h : 1u;
+static upp_ref_dilim_sayi upp_liste_dilim_sayi(UppKolListe L, long long a, long long b) {
+    _upp_liste_tur_dene(L.h, &upp_kt_sayi, "liste dilim türü uyumsuz");
+    return upp_dilim_sayi(L.h ? (const long long*)L.h->veri : NULL, upp_liste_uzunluk(L), a, b);
 }
 
-static unsigned _upp_mix_i(long long k) {
-    unsigned long long x = (unsigned long long)k * 0x9E3779B97F4A7C15ull;
-    x ^= x >> 32;
-    return (unsigned)x ? (unsigned)x : 1u;
+static upp_ref_dilim_ondalik upp_liste_dilim_ondalik(UppKolListe L, long long a, long long b) {
+    _upp_liste_tur_dene(L.h, &upp_kt_ondalik, "liste dilim türü uyumsuz");
+    return upp_dilim_ondalik(L.h ? (const double*)L.h->veri : NULL, upp_liste_uzunluk(L), a, b);
 }
 
-static unsigned _upp_hkey(_UppKolHaritaH* h, long long ki, const char* ks) {
-    if (h->ktag == UPP_KT_METIN) {
-        return _upp_fnv(ks);
-    }
-    return _upp_mix_i(ki);
+static upp_ref_dilim_sayi upp_liste_gorunum_sayi(UppKolListe L) {
+    return upp_liste_dilim_sayi(L, 0, upp_liste_uzunluk(L));
 }
 
-static int _upp_hesit(_UppKolHaritaH* h, long long i, long long ki, const char* ks) {
-    if (h->ktag == UPP_KT_METIN) {
-        const char* a = h->k_s[i] ? h->k_s[i] : "";
-        const char* b = ks ? ks : "";
-        return strcmp(a, b) == 0;
-    }
-    return h->k_i[i] == ki;
+static upp_ref_dilim_ondalik upp_liste_gorunum_ondalik(UppKolListe L) {
+    return upp_liste_dilim_ondalik(L, 0, upp_liste_uzunluk(L));
 }
 
-static long long _upp_hprobe(_UppKolHaritaH* h, unsigned hv, long long step) {
-    long long cap = h->hash_cap;
-    if (cap <= 0) {
-        return 0;
-    }
-    if ((cap & (cap - 1)) == 0) {
-        return (long long)((hv + (unsigned)step) & (unsigned)(cap - 1));
-    }
-    return (long long)((hv + (unsigned)step) % (unsigned)cap);
+/* ---- harita ---- */
+static unsigned long long _upp_h_karistir(unsigned long long x) {
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    x *= 0xc4ceb9fe1a85ec53ULL;
+    x ^= x >> 33;
+    return x;
 }
 
-static int _upp_harita_rehash(_UppKolHaritaH* h, long long cap) {
-    long long* nh;
-    long long i;
-    long long n = 8;
+static unsigned long long _upp_h_metin(const char* s) {
+    unsigned long long h = 1469598103934665603ULL;
+    size_t n = s ? upp_metin_nbayt(s) : 0u;
+    size_t i;
+    for (i = 0; i < n; i++) {
+        h ^= (unsigned char)s[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static size_t _upp_h_kboy(int kk) {
+    return kk == _UPP_HK_METIN ? sizeof(char*) : sizeof(long long);
+}
+
+static unsigned long long _upp_h_anahtar_hash(int kk, const void* kp) {
+    if (kk == _UPP_HK_METIN) {
+        return _upp_h_metin(*(const char* const*)kp);
+    }
+    return _upp_h_karistir((unsigned long long)*(const long long*)kp);
+}
+
+static int _upp_h_esit(int kk, const void* a, const void* b) {
+    if (kk == _UPP_HK_METIN) {
+        const char* x = *(const char* const*)a;
+        const char* y = *(const char* const*)b;
+        return upp_metin_esit(x ? x : "", y ? y : "");
+    }
+    return *(const long long*)a == *(const long long*)b;
+}
+
+static _UppHarita* _upp_harita_yeni(int kk, const UppKolTur* vt) {
+    _UppHarita* h = (_UppHarita*)UPP_AYIR(sizeof(_UppHarita));
     if (!h) {
-        return 0;
+        upp_panik("harita bellek yetersiz");
     }
-    if (cap < 8) {
-        cap = 8;
-    }
-    while (n < cap) {
-        if (n > (LLONG_MAX / 2)) {
-            n = cap;
-            break;
+    memset(h, 0, sizeof(*h));
+    h->ref = 1;
+    h->kk = kk;
+    h->vtur = vt;
+    return h;
+}
+
+static void _upp_harita_hucre_birak(_UppHarita* h) {
+    long long i;
+    for (i = 0; i < h->n; i++) {
+        if (h->kk == _UPP_HK_METIN) {
+            upp_metin_release(((char**)h->anahtar)[i]);
         }
-        n *= 2;
+        _upp_kol_eleman_birak(h->vtur, h->deger + (size_t)i * h->vtur->boyut);
     }
-    cap = n;
-    nh = (long long*)UPP_AYIR((size_t)cap * sizeof(long long));
-    if (!nh) {
-        return 0;
+    UPP_BIRAK(h->anahtar);
+    UPP_BIRAK(h->deger);
+    UPP_BIRAK(h->hash);
+    UPP_BIRAK(h);
+}
+
+static UppKolHarita upp_harita_paylas(UppKolHarita H) {
+    if (H.h) {
+        __atomic_add_fetch(&H.h->ref, 1, __ATOMIC_RELAXED);
     }
-    for (i = 0; i < cap; i++) {
-        nh[i] = UPP_H_EMPTY;
+    return H;
+}
+
+static void upp_harita_birak(UppKolHarita* H) {
+    if (!H || !H->h) {
+        return;
+    }
+    if (__atomic_sub_fetch(&H->h->ref, 1, __ATOMIC_ACQ_REL) == 0) {
+        _upp_harita_hucre_birak(H->h);
+    }
+    H->h = NULL;
+}
+
+static void _upp_harita_yeniden_hashle(_UppHarita* h, long long kap) {
+    long long i;
+    long long* yeni = (long long*)UPP_AYIR((size_t)kap * sizeof(long long));
+    size_t kb = _upp_h_kboy(h->kk);
+    if (!yeni) {
+        upp_panik("harita bellek yetersiz");
+    }
+    for (i = 0; i < kap; i++) {
+        yeni[i] = _UPP_H_BOS;
+    }
+    for (i = 0; i < h->n; i++) {
+        unsigned long long s = _upp_h_anahtar_hash(h->kk, h->anahtar + (size_t)i * kb) & (unsigned long long)(kap - 1);
+        while (yeni[s] != _UPP_H_BOS) {
+            s = (s + 1u) & (unsigned long long)(kap - 1);
+        }
+        yeni[s] = i;
     }
     UPP_BIRAK(h->hash);
-    h->hash = nh;
-    h->hash_cap = cap;
-    h->hash_tomb = 0;
-    for (i = 0; i < h->n; i++) {
-        unsigned hv = _upp_hkey(h, h->ktag == UPP_KT_METIN ? 0 : h->k_i[i],
-                               h->ktag == UPP_KT_METIN ? h->k_s[i] : NULL);
-        long long step = 0;
-        for (;;) {
-            long long p = _upp_hprobe(h, hv, step);
-            if (h->hash[p] == UPP_H_EMPTY) {
-                h->hash[p] = i;
-                break;
-            }
-            step++;
-            if (step >= cap) {
-                UPP_BIRAK(nh);
-                h->hash = NULL;
-                h->hash_cap = 0;
-                return 0;
-            }
-        }
-    }
-    return 1;
+    h->hash = yeni;
+    h->hash_kap = kap;
+    h->mezar = 0;
 }
 
-static void _upp_harita_hash_put(_UppKolHaritaH* h, long long idx) {
-    unsigned hv;
-    long long step = 0;
-    long long tomb = -1;
-    long long cap;
-    if (!h || !h->hash || h->hash_cap < 8) {
-        return;
+/* Anahtarın girdi indeksi; yoksa -1. */
+static long long _upp_harita_ara(const _UppHarita* h, const void* kp) {
+    unsigned long long s;
+    size_t kb;
+    if (!h || h->hash_kap == 0) {
+        return -1;
     }
-    cap = h->hash_cap;
-    hv = _upp_hkey(h, h->ktag == UPP_KT_METIN ? 0 : h->k_i[idx],
-                   h->ktag == UPP_KT_METIN ? h->k_s[idx] : NULL);
+    kb = _upp_h_kboy(h->kk);
+    s = _upp_h_anahtar_hash(h->kk, kp) & (unsigned long long)(h->hash_kap - 1);
     for (;;) {
-        long long p = _upp_hprobe(h, hv, step);
-        long long sl = h->hash[p];
-        if (sl == UPP_H_EMPTY) {
-            if (tomb >= 0) {
-                h->hash[tomb] = idx;
-                if (h->hash_tomb > 0) {
-                    h->hash_tomb--;
-                }
-            } else {
-                h->hash[p] = idx;
-            }
-            return;
-        }
-        if (sl == UPP_H_TOMB && tomb < 0) {
-            tomb = p;
-        }
-        step++;
-        if (step >= cap) {
-            return;
-        }
-    }
-}
-
-static void _upp_harita_indeks_kaydet(_UppKolHaritaH* h, long long idx) {
-    if (!h) {
-        return;
-    }
-    if (!h->hash || h->hash_cap < 8 || (h->n + h->hash_tomb) * 2LL >= h->hash_cap) {
-        long long nc = h->hash_cap ? h->hash_cap * 2 : 8;
-        _upp_harita_rehash(h, nc);
-        return;
-    }
-    _upp_harita_hash_put(h, idx);
-}
-
-static int _upp_harita_buyut(_UppKolHaritaH* h) {
-    long long nc;
-    if (!h) {
-        return 0;
-    }
-    if (h->cap > 0 && h->cap > (LLONG_MAX / 2)) {
-        upp_panik("harita kapasite taşması");
-    }
-    nc = h->cap ? h->cap * 2 : 8;
-    if (h->ktag == UPP_KT_METIN) {
-        char** p = (char**)UPP_YENIDEN(h->k_s, (size_t)nc * sizeof(char*));
-        if (!p) {
-            return 0;
-        }
-        h->k_s = p;
-    } else {
-        long long* p = (long long*)UPP_YENIDEN(h->k_i, (size_t)nc * sizeof(long long));
-        if (!p) {
-            return 0;
-        }
-        h->k_i = p;
-    }
-    if (h->vtag == UPP_KT_ONDALIK) {
-        double* p = (double*)UPP_YENIDEN(h->v_d, (size_t)nc * sizeof(double));
-        if (!p) {
-            return 0;
-        }
-        h->v_d = p;
-    } else if (h->vtag == UPP_KT_METIN) {
-        char** p = (char**)UPP_YENIDEN(h->v_s, (size_t)nc * sizeof(char*));
-        if (!p) {
-            return 0;
-        }
-        h->v_s = p;
-    } else {
-        long long* p = (long long*)UPP_YENIDEN(h->v_i, (size_t)nc * sizeof(long long));
-        if (!p) {
-            return 0;
-        }
-        h->v_i = p;
-    }
-    h->cap = nc;
-    return 1;
-}
-
-static long long _upp_harita_bul(_UppKolHaritaH* h, long long ki, const char* ks) {
-    unsigned hv;
-    long long step;
-    long long cap;
-    if (!h || h->n <= 0) {
-        return -1;
-    }
-    if (!h->hash || h->hash_cap < 8) {
-        long long i;
-        for (i = 0; i < h->n; i++) {
-            if (_upp_hesit(h, i, ki, ks)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-    cap = h->hash_cap;
-    hv = _upp_hkey(h, ki, ks);
-    for (step = 0; step < cap; step++) {
-        long long p = _upp_hprobe(h, hv, step);
-        long long sl = h->hash[p];
-        if (sl == UPP_H_EMPTY) {
+        long long g = h->hash[s];
+        if (g == _UPP_H_BOS) {
             return -1;
         }
-        if (sl != UPP_H_TOMB && sl >= 0 && sl < h->n && _upp_hesit(h, sl, ki, ks)) {
-            return sl;
+        if (g >= 0 && _upp_h_esit(h->kk, h->anahtar + (size_t)g * kb, kp)) {
+            return g;
         }
-    }
-    return -1;
-}
-
-static void _upp_harita_yaz_deger(_UppKolHaritaH* h, long long i, long long vi, double vd, const char* vs) {
-    if (h->vtag == UPP_KT_ONDALIK) {
-        h->v_d[i] = vd;
-    } else if (h->vtag == UPP_KT_METIN) {
-        if (h->v_s[i]) {
-            upp_metin_release(h->v_s[i]);
-        }
-        h->v_s[i] = _upp_kol_kopya(vs);
-    } else {
-        h->v_i[i] = vi;
+        s = (s + 1u) & (unsigned long long)(h->hash_kap - 1);
     }
 }
 
-static void upp_harita_koy(UppKolHarita* H, int ktag, int vtag, long long ki, const char* ks, long long vi, double vd, const char* vs) {
-    _UppKolHaritaH* h;
-    long long f;
-    if (!_upp_harita_hazir(H, ktag, vtag)) {
-        return;
-    }
-    h = _upp_harita_hucre(H->id);
+static _UppHarita* _upp_harita_yazilabilir(UppKolHarita* H, int kk, const UppKolTur* vt) {
+    _UppHarita* h = H->h;
     if (!h) {
-        return;
+        if (!vt) {
+            return NULL;
+        }
+        H->h = _upp_harita_yeni(kk, vt);
+        return H->h;
     }
-    f = _upp_harita_bul(h, ki, ks);
-    if (f >= 0) {
-        _upp_harita_yaz_deger(h, f, vi, vd, vs);
-        return;
+    if (__atomic_load_n(&h->ref, __ATOMIC_ACQUIRE) > 1) {
+        long long i;
+        size_t kb = _upp_h_kboy(h->kk);
+        _UppHarita* y = _upp_harita_yeni(h->kk, h->vtur);
+        y->kap = h->n;
+        if (h->n > 0) {
+            y->anahtar = (unsigned char*)UPP_AYIR((size_t)h->n * kb);
+            y->deger = (unsigned char*)UPP_AYIR((size_t)h->n * h->vtur->boyut);
+            if (!y->anahtar || !y->deger) {
+                upp_panik("harita bellek yetersiz");
+            }
+        }
+        for (i = 0; i < h->n; i++) {
+            if (h->kk == _UPP_HK_METIN) {
+                ((char**)y->anahtar)[i] = upp_metin_kopya(((char**)h->anahtar)[i]);
+            } else {
+                ((long long*)y->anahtar)[i] = ((long long*)h->anahtar)[i];
+            }
+            _upp_kol_eleman_kopya(h->vtur, y->deger + (size_t)i * h->vtur->boyut, h->deger + (size_t)i * h->vtur->boyut);
+        }
+        y->n = h->n;
+        if (h->hash_kap > 0) {
+            _upp_harita_yeniden_hashle(y, h->hash_kap);
+        }
+        upp_harita_birak(H);
+        H->h = y;
+        return y;
     }
-    if (h->n >= h->cap && !_upp_harita_buyut(h)) {
-        return;
-    }
-    if (h->n >= h->cap) {
-        return;
-    }
-    if (ktag == UPP_KT_METIN) {
-        h->k_s[h->n] = _upp_kol_kopya(ks);
-    } else {
-        h->k_i[h->n] = ki;
-    }
-    if (vtag == UPP_KT_ONDALIK) {
-        h->v_d[h->n] = vd;
-    } else if (vtag == UPP_KT_METIN) {
-        h->v_s[h->n] = _upp_kol_kopya(vs);
-    } else {
-        h->v_i[h->n] = vi;
-    }
-    h->n++;
-    _upp_harita_indeks_kaydet(h, h->n - 1);
-}
-
-static long long upp_harita_al_i(UppKolHarita H, int ktag, long long ki, const char* ks) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    long long f;
-    if (!h || h->ktag != ktag || h->vtag == UPP_KT_ONDALIK || h->vtag == UPP_KT_METIN) {
-        return 0;
-    }
-    f = _upp_harita_bul(h, ki, ks);
-    return f < 0 ? 0 : h->v_i[f];
-}
-
-static double upp_harita_al_d(UppKolHarita H, int ktag, long long ki, const char* ks) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    long long f;
-    if (!h || h->ktag != ktag || h->vtag != UPP_KT_ONDALIK) {
-        return 0.0;
-    }
-    f = _upp_harita_bul(h, ki, ks);
-    return f < 0 ? 0.0 : h->v_d[f];
-}
-
-static char* upp_harita_al_s(UppKolHarita H, int ktag, long long ki, const char* ks) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    long long f;
-    if (!h || h->ktag != ktag || h->vtag != UPP_KT_METIN) {
-        return NULL;
-    }
-    f = _upp_harita_bul(h, ki, ks);
-    return f < 0 ? NULL : (h->v_s[f] ? _upp_kol_kopya(h->v_s[f]) : NULL);
-}
-
-static int upp_harita_var_mi(UppKolHarita H, int ktag, long long ki, const char* ks) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    if (!h || h->ktag != ktag) {
-        return 0;
-    }
-    return _upp_harita_bul(h, ki, ks) >= 0;
+    return h;
 }
 
 static long long upp_harita_uzunluk(UppKolHarita H) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    return h ? h->n : 0;
+    return H.h ? H.h->n : 0;
 }
 
-static void upp_harita_bosalt(UppKolHarita* H) {
-    _UppKolHaritaH* h;
-    long long i;
-    if (!H || H->id == 0) {
-        return;
+/* Değer işaretçisi; anahtar yoksa NULL. */
+static void* upp_harita_bul(UppKolHarita H, const void* kp) {
+    long long g = _upp_harita_ara(H.h, kp);
+    if (g < 0) {
+        return NULL;
     }
-    h = _upp_harita_hucre(H->id);
-    if (!h) {
-        H->id = 0;
-        return;
-    }
-    if (h->ktag == UPP_KT_METIN && h->k_s) {
-        for (i = 0; i < h->n; i++) {
-            upp_metin_release(h->k_s[i]);
-        }
-    }
-    if (h->vtag == UPP_KT_METIN && h->v_s) {
-        for (i = 0; i < h->n; i++) {
-            upp_metin_release(h->v_s[i]);
-        }
-    }
-    UPP_BIRAK(h->k_i);
-    UPP_BIRAK(h->k_s);
-    UPP_BIRAK(h->v_i);
-    UPP_BIRAK(h->v_d);
-    UPP_BIRAK(h->v_s);
-    UPP_BIRAK(h->hash);
-    memset(h, 0, sizeof(_UppKolHaritaH));
-    H->id = 0;
+    return H.h->deger + (size_t)g * H.h->vtur->boyut;
 }
 
-static long long upp_harita_sil(UppKolHarita* H, int ktag, long long ki, const char* ks) {
-    _UppKolHaritaH* h;
-    long long idx, j;
-    if (!H || H->id == 0) return 0;
-    h = _upp_harita_hucre(H->id);
-    if (!h || h->ktag != ktag) return 0;
-    idx = _upp_harita_bul(h, ki, ks);
-    if (idx < 0) return 0;
-    if (h->ktag == UPP_KT_METIN && h->k_s[idx]) {
-        upp_metin_release(h->k_s[idx]);
-    }
-    if (h->vtag == UPP_KT_METIN && h->v_s[idx]) {
-        upp_metin_release(h->v_s[idx]);
-    }
-    for (j = idx; j < h->n - 1; j++) {
-        if (h->ktag == UPP_KT_METIN) h->k_s[j] = h->k_s[j + 1];
-        else h->k_i[j] = h->k_i[j + 1];
+static bool upp_harita_var(UppKolHarita H, const void* kp) {
+    return _upp_harita_ara(H.h, kp) >= 0;
+}
 
-        if (h->vtag == UPP_KT_METIN) h->v_s[j] = h->v_s[j + 1];
-        else if (h->vtag == UPP_KT_ONDALIK) h->v_d[j] = h->v_d[j + 1];
-        else h->v_i[j] = h->v_i[j + 1];
+/* Anahtarın değer yeri (yoksa sıfırlanmış yeni girdi); COW sonrası. */
+static void* upp_harita_koy_ptr(UppKolHarita* H, int kk, const UppKolTur* vt, const void* kp) {
+    _UppHarita* h = _upp_harita_yazilabilir(H, kk, vt);
+    long long g = _upp_harita_ara(h, kp);
+    size_t kb = _upp_h_kboy(h->kk);
+    unsigned long long s;
+    if (g >= 0) {
+        return h->deger + (size_t)g * h->vtur->boyut;
     }
-    if (h->ktag == UPP_KT_METIN) h->k_s[h->n - 1] = NULL;
-    if (h->vtag == UPP_KT_METIN) h->v_s[h->n - 1] = NULL;
+    if (h->n >= h->kap) {
+        long long yk = h->kap < 8 ? 8 : h->kap * 2;
+        unsigned char* ya;
+        unsigned char* yd;
+        if (yk > UPP_KOLLEKSIYON_MAX) {
+            upp_panik("harita en fazla boyuta ulaştı");
+        }
+        ya = (unsigned char*)UPP_YENIDEN(h->anahtar, (size_t)yk * kb);
+        if (!ya) {
+            upp_panik("harita bellek yetersiz");
+        }
+        h->anahtar = ya;
+        yd = (unsigned char*)UPP_YENIDEN(h->deger, (size_t)yk * h->vtur->boyut);
+        if (!yd) {
+            upp_panik("harita bellek yetersiz");
+        }
+        h->deger = yd;
+        h->kap = yk;
+    }
+    if ((h->n + h->mezar + 1) * 4 >= h->hash_kap * 3) {
+        long long hk = h->hash_kap < 16 ? 16 : h->hash_kap;
+        while ((h->n + 1) * 4 >= hk * 3) {
+            hk *= 2;
+        }
+        _upp_harita_yeniden_hashle(h, hk);
+    }
+    g = h->n;
+    if (h->kk == _UPP_HK_METIN) {
+        ((char**)h->anahtar)[g] = upp_metin_kopya(*(const char* const*)kp);
+    } else {
+        ((long long*)h->anahtar)[g] = *(const long long*)kp;
+    }
+    memset(h->deger + (size_t)g * h->vtur->boyut, 0, h->vtur->boyut);
+    h->n++;
+    s = _upp_h_anahtar_hash(h->kk, kp) & (unsigned long long)(h->hash_kap - 1);
+    while (h->hash[s] >= 0) {
+        s = (s + 1u) & (unsigned long long)(h->hash_kap - 1);
+    }
+    if (h->hash[s] == _UPP_H_MEZAR) {
+        h->mezar--;
+    }
+    h->hash[s] = g;
+    return h->deger + (size_t)g * h->vtur->boyut;
+}
+
+/* Sil: eklenme sırası korunur (kaydırma + yeniden hash). */
+static bool upp_harita_kaldir(UppKolHarita* H, const void* kp) {
+    _UppHarita* h;
+    long long g;
+    size_t kb;
+    if (!H->h || _upp_harita_ara(H->h, kp) < 0) {
+        return false;
+    }
+    h = _upp_harita_yazilabilir(H, 0, NULL);
+    g = _upp_harita_ara(h, kp);
+    kb = _upp_h_kboy(h->kk);
+    if (h->kk == _UPP_HK_METIN) {
+        upp_metin_release(((char**)h->anahtar)[g]);
+    }
+    _upp_kol_eleman_birak(h->vtur, h->deger + (size_t)g * h->vtur->boyut);
+    memmove(h->anahtar + (size_t)g * kb, h->anahtar + (size_t)(g + 1) * kb, (size_t)(h->n - g - 1) * kb);
+    memmove(h->deger + (size_t)g * h->vtur->boyut, h->deger + (size_t)(g + 1) * h->vtur->boyut, (size_t)(h->n - g - 1) * h->vtur->boyut);
     h->n--;
-    if (h->hash && h->hash_cap >= 8) {
-        _upp_harita_rehash(h, h->hash_cap);
-    }
-    return 1;
+    _upp_harita_yeniden_hashle(h, h->hash_kap);
+    return true;
 }
 
 static void upp_harita_temizle(UppKolHarita* H) {
-    _UppKolHaritaH* h;
-    long long j;
-    if (!H || H->id == 0) return;
-    h = _upp_harita_hucre(H->id);
-    if (!h) return;
-    if (h->ktag == UPP_KT_METIN && h->k_s) {
-        for (j = 0; j < h->n; j++) {
-            if (h->k_s[j]) upp_metin_release(h->k_s[j]);
-            h->k_s[j] = NULL;
-        }
-    }
-    if (h->vtag == UPP_KT_METIN && h->v_s) {
-        for (j = 0; j < h->n; j++) {
-            if (h->v_s[j]) upp_metin_release(h->v_s[j]);
-            h->v_s[j] = NULL;
-        }
-    }
-    h->n = 0;
-    h->hash_tomb = 0;
-    if (h->hash && h->hash_cap > 0) {
-        for (j = 0; j < h->hash_cap; j++) {
-            h->hash[j] = UPP_H_EMPTY;
-        }
-    }
+    upp_harita_birak(H);
 }
 
-static long long upp_harita_anahtar_i(UppKolHarita H, long long i) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    if (!h || h->ktag == UPP_KT_METIN || i < 0 || i >= h->n) {
-        return 0;
-    }
-    return h->k_i[i];
+static void upp_harita_bosalt(UppKolHarita* H) {
+    upp_harita_birak(H);
 }
 
-static char* upp_harita_anahtar_s(UppKolHarita H, long long i) {
-    _UppKolHaritaH* h = _upp_harita_hucre(H.id);
-    if (!h || h->ktag != UPP_KT_METIN || i < 0 || i >= h->n) {
-        return NULL;
-    }
-    return h->k_s[i] ? _upp_kol_kopya(h->k_s[i]) : NULL;
-}
-
-static UppKolListe upp_harita_anahtarlar(UppKolHarita H, int ktag) {
+/* Anahtarların listesi (eklenme sırası). */
+static UppKolListe upp_harita_anahtar_listesi(UppKolHarita H) {
     UppKolListe L;
-    _UppKolHaritaH* h;
     long long i;
-    L.id = 0;
-    h = _upp_harita_hucre(H.id);
-    if (!h || h->ktag != ktag) {
+    L.h = NULL;
+    if (!H.h) {
         return L;
     }
-    for (i = 0; i < h->n; i++) {
-        if (ktag == UPP_KT_METIN) {
-            upp_liste_ekle(&L, UPP_KT_METIN, 0, 0.0, h->k_s[i]);
+    for (i = 0; i < H.h->n; i++) {
+        if (H.h->kk == _UPP_HK_METIN) {
+            _upp_liste_ekle_metin(&L, ((char**)H.h->anahtar)[i]);
         } else {
-            upp_liste_ekle(&L, UPP_KT_SAYI, h->k_i[i], 0.0, NULL);
+            *(long long*)upp_liste_ekle_ptr(&L, &upp_kt_sayi) = ((long long*)H.h->anahtar)[i];
         }
     }
     return L;
 }
 
+/* ---- metin.bol / metin.birlestir ---- */
 static UppKolListe upp_metin_bol(const char* s, const char* ayirac) {
     UppKolListe L;
     size_t n, na;
-    L.id = 0;
+    L.h = NULL;
     if (!s) {
-        s = "";
+        s = UPP_LIT("");
     }
     if (!ayirac) {
-        ayirac = "";
+        ayirac = UPP_LIT("");
     }
-    n = strlen(s);
-    na = strlen(ayirac);
+    n = upp_metin_nbayt(s);
+    na = upp_metin_nbayt(ayirac);
     if (na == 0) {
         size_t i = 0;
         while (i < n) {
             long long adv = _upp_utf8_adv(s, n, i);
-            char tmp[8];
             if (adv <= 0) {
                 break;
             }
-            if ((size_t)adv > sizeof(tmp) - 1u) {
-                adv = 1;
-            }
-            memcpy(tmp, s + i, (size_t)adv);
-            tmp[adv] = 0;
-            _upp_liste_ekle_c(&L, tmp);
+            *(char**)upp_liste_ekle_ptr(&L, &upp_kt_metin) = _upp_m_bayttan(s + i, (size_t)adv);
             i += (size_t)adv;
         }
         return L;
     }
     {
-        const char* p = s;
-        const char* found;
-        while ((found = strstr(p, ayirac)) != NULL) {
-            size_t take = (size_t)(found - p);
-            char* parca = (char*)UPP_AYIR(take + 1u);
-            if (!parca) {
-                return L;
+        size_t bas = 0;
+        size_t i = 0;
+        while (i + na <= n) {
+            if (memcmp(s + i, ayirac, na) == 0) {
+                *(char**)upp_liste_ekle_ptr(&L, &upp_kt_metin) = _upp_m_bayttan(s + bas, i - bas);
+                i += na;
+                bas = i;
+            } else {
+                i++;
             }
-            if (take) {
-                memcpy(parca, p, take);
-            }
-            parca[take] = 0;
-            _upp_liste_ekle_c(&L, parca);
-            UPP_BIRAK(parca);
-            p = found + na;
         }
-        _upp_liste_ekle_c(&L, p);
+        *(char**)upp_liste_ekle_ptr(&L, &upp_kt_metin) = _upp_m_bayttan(s + bas, n - bas);
     }
     return L;
 }
 
 static char* upp_metin_liste_birlestir(UppKolListe L, const char* ayirac) {
-    _UppKolListeH* h;
+    char* o = upp_mk_bas();
     long long i;
-    size_t na, cap, used;
-    char* out;
-    if (!ayirac) {
-        ayirac = "";
+    long long n = upp_liste_uzunluk(L);
+    if (n > 0) {
+        _upp_liste_tur_dene(L.h, &upp_kt_metin, "metin.birlestir liste[metin] bekler");
     }
-    na = strlen(ayirac);
-    h = _upp_liste_hucre(L.id);
-    if (!h || h->tag != UPP_KT_METIN || h->n <= 0) {
-        out = (char*)UPP_AYIR(1u);
-        if (!out) {
-            return NULL;
+    for (i = 0; i < n; i++) {
+        if (i > 0 && ayirac) {
+            upp_metin_ekle(&o, ayirac);
         }
-        out[0] = 0;
-        return _upp_m_sahiplen(out);
+        upp_metin_ekle(&o, ((char**)L.h->veri)[i]);
     }
-    cap = 1u;
-    for (i = 0; i < h->n; i++) {
-        cap += h->s[i] ? strlen(h->s[i]) : 0u;
-        if (i + 1 < h->n) {
-            cap += na;
-        }
-    }
-    out = (char*)UPP_AYIR(cap);
-    if (!out) {
-        return NULL;
-    }
-    used = 0;
-    for (i = 0; i < h->n; i++) {
-        const char* parca = h->s[i] ? h->s[i] : "";
-        size_t np = strlen(parca);
-        memcpy(out + used, parca, np);
-        used += np;
-        if (i + 1 < h->n && na) {
-            memcpy(out + used, ayirac, na);
-            used += na;
-        }
-    }
-    out[used] = 0;
-    return _upp_m_sahiplen(out);
+    return o;
 }
+
 
 /* =====================================================================
  * u++ çalışma zamanı — BARINDIRILAN katman (işletim sistemi + libc)
@@ -5439,7 +5168,7 @@ static int upp_yol_klasor_olustur(const char* yol) {
 
 static UppKolListe upp_dosya_listele(const char* yol) {
     UppKolListe L;
-    L.id = 0;
+    L.h = NULL;
     if (!yol || !yol[0]) {
         yol = ".";
     }

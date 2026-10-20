@@ -1,0 +1,7 @@
+// Negatif: sabit sıfır bölen derleme hatasıdır
+// @icerir: Sabit sıfıra bölme
+
+fonk ana() -> sayi {
+    sayi a = 5;
+    don a % 0;
+}

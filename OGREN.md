@@ -459,8 +459,28 @@ upp.satir_yaz("Silme sonrasi yeni 1. urun: {alisveris.al(1)}"); // Yumurta
 
 // Tüm elemanları temizleme (uzunluk 0 olur):
 alisveris.temizle();
+```
 
-alisveris.bosalt(); // Liste hafızasını tamamen temizler
+Listeyi elle kapatmanız gerekmez: derleyici, kapsam bitince listeyi ve içindeki metinleri kendisi bırakır. `bosalt()` yalnızca büyük bir listenin belleğini erkenden geri vermek içindir.
+
+Listeler ve haritalar **değer** gibi davranır. Bir listeyi başka değişkene atamak O(1)'dir (içerik kopyalanmaz, paylaşılır); kopyalardan biri değiştirildiği anda ayrılırlar:
+
+```text
+liste[sayi] a;
+a.ekle(1);
+liste[sayi] b = a;   // ucuz: aynı içeriği paylaşırlar
+b.ekle(2);           // b ayrılır; a hâlâ [1]
+upp.satir_yaz("{a.uzunluk()} {b.uzunluk()}"); // 1 2
+```
+
+Eleman türü sayılar ve metinle sınırlı değildir: sınıflar, iç içe listeler ve haritalar da olur. Elemanlar yerinde güncellenebilir:
+
+```text
+liste[liste[sayi]] tablo;
+liste[Kisi] kisiler;
+tablo[0][1] = 5;
+kisiler[0].ad += "!";
+kisiler[1].yaslan();
 ```
 
 ### 3. Haritalar / Sözlükler (`harita[K, V]`)
@@ -481,9 +501,9 @@ yas_tablosu.sil("Ahmet");
 
 // Tüm haritayı sıfırlama:
 yas_tablosu.temizle();
-
-yas_tablosu.bosalt();
 ```
+
+Harita anahtarı `metin` ya da `sayi` olabilir; değer her tür olabilir (`harita[metin, liste[metin]]` gibi). Olmayan bir anahtarla `al` çağırırsanız türün sıfır değeri döner (`0`, boş metin, boş liste).
 
 ### `her` Döngüsü (Foreach)
 Koleksiyonların içindeki elemanları tek tek gezmek için `her` döngüsü biçilmiş kaftandır:
@@ -559,6 +579,45 @@ fonk vergi_hesapla(sayi tutar, ondalik oran = 0.20) -> ondalik {
 oto v1 = vergi_hesapla(100);       // oran otomatik 0.20 alinir
 oto v2 = vergi_hesapla(100, 0.10); // oran 0.10 olarak ezilir
 ```
+
+### Fonksiyonları Değer Olarak Kullanmak
+Fonksiyonlar da bir değerdir. `fonk(sayi) -> sayi` "bir `sayi` alıp `sayi` döndüren fonksiyon" türüdür. Bir fonksiyonun adını yazdığınızda (parantezsiz) o fonksiyonun kendisini elde edersiniz:
+
+```text
+fonk ikiye(sayi x) -> sayi => x * 2;
+fonk kare(sayi x) -> sayi => x * x;
+
+fonk uygula(fonk(sayi) -> sayi f, sayi x) -> sayi {
+    don f(x);
+}
+
+fonk ana() -> sayi {
+    fonk(sayi) -> sayi islem = ikiye;
+    upp.satir_yaz("{islem(7)}");          // 14
+    upp.satir_yaz("{uygula(kare, 5)}");   // 25
+    don 0;
+}
+```
+
+Fonksiyon değerlerini listelerde, haritalarda ve sınıf alanlarında saklayabilirsiniz. Komut tablosu yazmanın en temiz yolu budur:
+
+```text
+harita[metin, fonk(sayi, sayi) -> sayi] komutlar;
+komutlar.koy("carp", fonk(sayi a, sayi b) -> sayi => a * b);
+upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
+```
+
+Henüz bir fonksiyon atanmamış değer `yok`'tur. `eger (f == yok)` ile denetleyin; `yok` bir fonksiyonu çağırmak programı açık bir hata mesajıyla durdurur.
+
+### Anonim Fonksiyonlar
+Yalnızca bir yerde kullanacağınız küçük bir fonksiyona ad vermek zorunda değilsiniz:
+
+```text
+oto ikiler = esle(sayilar, fonk(sayi x) -> sayi => x * 2);
+d.tikla = fonk(sayi n) -> sayi { don n + 1; };
+```
+
+Anonim fonksiyonlar dışarıdaki yerel değişkenleri **yakalamaz**; ihtiyaç duydukları her şeyi parametre olarak almalıdır. Böylece her zaman düz bir C fonksiyon işaretçisine dönüşürler ve işletim sistemi çekirdeğinde de (kesme işleyicileri, komut tabloları) çalışırlar.
 
 ---
 

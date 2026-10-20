@@ -1,9 +1,13 @@
-// Çekirdek: işlemci istisnası Türkçe panik mesajı verir ve QEMU kapanır
-// @icerir: işlemci istisnası #0 (bölme hatası)
+// Çekirdek: işlemci istisnası (ud2) Türkçe panik mesajı verir ve QEMU kapanır
+// @icerir: işlemci istisnası #6 (geçersiz işlem kodu)
 
 fonk ana() -> sayi {
-    sayi sifir = upp.metinden_sayiya("0");
-    sayi x = 10 / sifir;
-    upp.satir_yaz("ulaşılmamalı {x}");
+    upp.satir_yaz("istisna öncesi");
+    guvensiz {
+        c_kod {
+            __asm__ volatile("ud2");
+        }
+    }
+    upp.satir_yaz("ulaşılmamalı");
     don 0;
 }

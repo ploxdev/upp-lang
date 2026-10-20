@@ -111,6 +111,15 @@ Native derleyicide C benzeri ham işaretçiler (`*`, `&`) yerine, veri odaklı v
 
 ---
 
+## ⚙️ Kod Üretimi: Koleksiyonlar ve Fonksiyon Değerleri
+
+- **Koleksiyonlar (v2):** `liste[T]` → `UppKolListe`, `harita[K,V]` → `UppKolHarita`; ikisi de refcount'lu, copy-on-write bir gövdeye işaret eden değer türüdür. Her eleman türü bir tanımlayıcıyla (`UppKolTur {boyut, kopya, birak}`) taşınır: `upp_kt_sayi/ondalik/mantik/metin/liste/harita`, düz C türleri için `UPP_KT_DUZ(T)`, sahipli sınıflar için derleyicinin ürettiği `_upp_kt_<Sınıf>`. Codegen elemanlara `upp_liste_ptr` / `upp_liste_yaz_ptr` / `upp_harita_bul` / `upp_harita_koy_ptr` ile adres üzerinden erişir (`uret_kol_oku`, `uret_kol_yaz`, `uret_lvalue`); böylece `L[i][j] = x` ve `K[0].ad += ...` yerinde çalışır.
+- **Fonksiyon türleri:** Tür adı kanoniktir: `fonk(sayi,metin)->sayi`. `ft_ref` her imza için bir kez `typedef R (*_upp_ftN)(P...);` üretir; typedef'ler sınıf ileri bildirimlerinden hemen sonraki `/* ==== u++ fonksiyon türleri ==== */` işaretine yerleştirilir (metin sabiti havuzuyla aynı yöntem).
+- **Değer ve çağrı:** Fonksiyon adı değer olarak C adına iner. `cagri_fonk_turu` çağrı hedefinin bir fonksiyon değeri olup olmadığını (yerel/küresel değişken, sınıf alanı, indis, çağrı sonucu, anonim) çözer; tür denetimi ve codegen aynı kararı kullanır. Çağrı `(*({ _upp_ftN _uf = (f); if (_uf == NULL) upp_panik(...); _uf; }))(args)` biçimindedir.
+- **Anonim fonksiyonlar:** Ayrıştırıcı `fonk(...) -> T => ifade` gövdesini gizli üst düzey `_upp_anon_N` fonksiyonuna taşır ve ifade yerine onu gösteren bir kimlik düğümü bırakır (düğümün `sayi` alanı bildirime işaret eder). Yakalama olmadığından sonuç her hedefte düz bir fonksiyon işaretçisidir.
+
+---
+
 ## 🔤 Sözcük Analizi (Lexer) ve UTF-8 Yönetimi
 
 u++, Türkçe sözdizimine ve karakter setine (ç, ğ, ı, ö, ş, ü) tam destek verir:

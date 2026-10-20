@@ -41,7 +41,7 @@ Bu proje; derleyici mühendisliği (compiler design), soyut sözdizim ağaçlar�
 - **🖥️ İşletim Sistemi Yazmaya Hazır:** `--hedef cekirdek`, u++ programını Multiboot ile açılan x86_64 çekirdeğine çevirir. libc yoktur. Çıktı seri port ve VGA'ya gider, donanım erişimi `upp.cekirdek.*` (port G/Ç, MMIO, `hlt`/`cli`/`sti`) ile yapılır. `--hedef serbest` libc'siz `.o` üretir.
 - **🧰 Proje Sistemi ve Asistan:** `uppc yeni`, `uppc derle`, `uppc calistir` ve `upp.proje` ile proje yönetilir. `uppc asistan` menülü bir derleme asistanıdır: hedef seçer, araç zincirini (gcc / WSL / QEMU) denetler, derler ve çalıştırır.
 - **🔄 Standalone Native Derleyici (Self-Hosting):** Tamamen saf u++ ile yazılmış, C çalışma zamanını içine gömen tek ikili (`uppc` / `uppc.exe`). `uppc kendini-derle` derleyiciyi yaklaşık 30 saniyede kendisiyle yeniden kurar ve sabit noktayı doğrular (Python yok).
-- **🧱 Zengin Tip Sistemi:** `sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8` (işaretli), `ubayt`/`u8`, `ondalik`, `metin`, `mantik`, `liste[T]`, `harita[K,V]`, `dizi[T, N]` ve `sinif`.
+- **🧱 Zengin Tip Sistemi:** `sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8` (işaretli), `ubayt`/`u8`, `ondalik`, `metin`, `mantik`, `liste[T]`, `harita[K,V]`, `dizi[T, N]`, `sinif` ve fonksiyon türleri `fonk(sayi) -> sayi`. Koleksiyonlar değer türüdür (O(1) kopya, yazınca ayrılır) ve sınıf, iç içe liste/harita ya da fonksiyon dahil her değeri tutar. Fonksiyonlar değişkende, koleksiyonda ve alanda saklanabilir; yakalamasız anonim fonksiyon yazılır: `fonk(sayi x) -> sayi => x * 2`.
 - **📦 Zengin Standart Kütüphane (`upp.*`):**
   - Dosya & Klasör I/O (`upp.dosya`, `upp.yol`, `upp.dosya.boyut`)
   - Gelişmiş Metin ve UTF-8 İşlemleri (`upp.metin`, `upp.metin.hex_coz`)
@@ -162,6 +162,27 @@ fonk ana() -> sayi {
     puanlar.koy("Mehmet", 80);
     puanlar.sil("Mehmet");
     upp.satir_yaz("Ahmet'in puanı: {puanlar.al(\"Ahmet\")}");
+    don 0;
+}
+```
+
+### Fonksiyon Değerleri
+```text
+fonk ikiye(sayi x) -> sayi => x * 2;
+
+fonk esle(liste[sayi] L, fonk(sayi) -> sayi f) -> liste[sayi] {
+    liste[sayi] R;
+    her (oto x in L) { R.ekle(f(x)); }
+    don R;
+}
+
+fonk ana() -> sayi {
+    liste[sayi] L;
+    L.ekle(1);
+    L.ekle(2);
+    oto a = esle(L, ikiye);
+    oto b = esle(L, fonk(sayi x) -> sayi => x * x + 1);
+    upp.satir_yaz("{a[1]} {b[1]}"); // 4 5
     don 0;
 }
 ```

@@ -37,6 +37,10 @@
 - [x] Yerleşik imza tablosu (`yerlesik.upp`): argüman sayısı ve türleri, dönüş türü, C adı, `guvensiz`, barındırılan, serbest ve platform bayrakları. Bilinmeyen adda mevcut adları önerir.
 - [x] Düz eski adlar kaldırıldı. Belgedeki ama var olmayan adlar (`metin.bul`, `matematik.sinus`, `json.indeks_al`, `yol.dosya_adi`, `sistem.cikis`…) artık gerçek.
 - [x] `upp.sistem.calistir` iki platformda da stdout ve stderr'i yakalar. `upp.sistem.kos` konsolu devralır.
+- [x] Koleksiyonlar v2: `liste`/`harita` değer türü (refcount + copy-on-write), otomatik bırakma, her değer türünü eleman olarak alır (sınıf, iç içe liste/harita, fonksiyon). `L[i][j] = x`, `K[0].ad += ...`, `K[1].metot()` yerinde çalışır. Harita anahtarı `metin`/`sayi`, eklenme sırası korunur.
+- [x] Fonksiyon değerleri: `fonk(P...) -> R` türü, adla değer alma, değişken/alan/indis/çağrı sonucu üzerinden çağrı, koleksiyonda saklama, yakalamasız anonim fonksiyon (`fonk(sayi x) -> sayi => x * 2`). `yok` çağrısı açık panik. Çekirdek hedefinde de çalışır.
+- [x] `secim` içindeki `dur` doğru döngüyü kırar ve doğru kapsamları bırakır. Tamsayı `/` ve `%` sıfıra bölmede ve `MIN / -1` taşmasında açık panik verir; sabit sıfır bölen derleme hatasıdır.
+- [ ] Sonraki: yakalamalı kapanışlar (closure), genel (generic) fonksiyonlar, `sonuc[T]` ile hata taşıma.
 
 ## Faz 3 — Freestanding / çekirdek ✅
 
@@ -57,5 +61,5 @@
 
 ## Faz 5 — Belgeler ve testler
 
-- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 81 test; Linux'ta ASan, UBSan ve LSan temiz.
+- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 97 test (QEMU çekirdek testleri dahil); Linux'ta ASan ve UBSan temiz.
 - [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.

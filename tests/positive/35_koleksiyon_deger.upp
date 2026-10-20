@@ -1,0 +1,123 @@
+// Pozitif: koleksiyonlar değer türü (O(1) kopya, yazınca ayrılır) ve her eleman türünü alır
+// @stdout
+// L=1 M=2
+// Ali 3 | Ayşe 5
+// Ali! 3 | Ayşe 6
+// 1 2 3 | 10 20 99
+// meyve: elma, armut | sebze: pırasa
+// eksik: 0
+// sınıf: Veli 7, uzunluk 2
+// kutu: 2 [5 6] kopya: 1 [5]
+// toplam=15 son=5
+// sıra: c a b
+// silindi: c b
+// boş: 0 0
+
+sinif Kisi {
+    metin ad;
+    sayi yas;
+
+    fonk yaslan() -> bos {
+        kendi.yas += 1;
+    }
+}
+
+sinif Kutu {
+    metin etiket;
+    liste[sayi] icerik;
+}
+
+fonk kisiler_yap() -> liste[Kisi] {
+    liste[Kisi] L;
+    Kisi a;
+    a.ad = "Ali";
+    a.yas = 3;
+    L.ekle(a);
+    Kisi b;
+    b.ad = "Ayşe";
+    b.yas = 5;
+    L.ekle(b);
+    don L;
+}
+
+fonk topla(liste[sayi] L) -> sayi {
+    sayi t = 0;
+    her (oto x in L) { t += x; }
+    L.ekle(1000);
+    don t;
+}
+
+fonk ana() -> sayi {
+    liste[sayi] L;
+    L.ekle(1);
+    liste[sayi] M = L;
+    M.ekle(2);
+    upp.satir_yaz("L={L.uzunluk()} M={M.uzunluk()}");
+
+    liste[Kisi] K = kisiler_yap();
+    upp.satir_yaz("{K[0].ad} {K[0].yas} | {K.al(1).ad} {K.al(1).yas}");
+    K[0].ad += "!";
+    K[1].yaslan();
+    upp.satir_yaz("{K[0].ad} {K[0].yas} | {K[1].ad} {K[1].yas}");
+
+    liste[liste[sayi]] LL;
+    liste[sayi] s1;
+    s1.ekle(1);
+    s1.ekle(2);
+    s1.ekle(3);
+    LL.ekle(s1);
+    liste[sayi] s2;
+    s2.ekle(10);
+    s2.ekle(20);
+    s2.ekle(30);
+    LL.ekle(s2);
+    LL[1][2] = 99;
+    upp.satir_yaz("{LL[0][0]} {LL[0][1]} {LL[0][2]} | {LL[1][0]} {LL[1][1]} {LL[1][2]}");
+
+    harita[metin, liste[metin]] gruplar;
+    liste[metin] meyve;
+    meyve.ekle("elma");
+    meyve.ekle("armut");
+    gruplar.koy("meyve", meyve);
+    liste[metin] sebze;
+    sebze.ekle("pırasa");
+    gruplar.koy("sebze", sebze);
+    upp.satir_yaz("meyve: {upp.metin.birlestir(gruplar.al(\"meyve\"), \", \")} | sebze: {upp.metin.birlestir(gruplar.al(\"sebze\"), \", \")}");
+    upp.satir_yaz("eksik: {gruplar.al(\"yok\").uzunluk()}");
+
+    harita[sayi, Kisi] kayit;
+    Kisi v;
+    v.ad = "Veli";
+    v.yas = 7;
+    kayit.koy(42, v);
+    kayit.koy(43, v);
+    upp.satir_yaz("sınıf: {kayit.al(42).ad} {kayit.al(42).yas}, uzunluk {kayit.uzunluk()}");
+
+    Kutu k1;
+    k1.etiket = "a";
+    k1.icerik.ekle(5);
+    Kutu k2 = k1;
+    k1.icerik.ekle(6);
+    upp.satir_yaz("kutu: {k1.icerik.uzunluk()} [{k1.icerik[0]} {k1.icerik[1]}] kopya: {k2.icerik.uzunluk()} [{k2.icerik[0]}]");
+
+    liste[sayi] sayilar;
+    dongu (sayi i = 1; i <= 5; i += 1) { sayilar.ekle(i); }
+    sayi t = topla(sayilar);
+    upp.satir_yaz("toplam={t} son={sayilar[sayilar.uzunluk() - 1]}");
+
+    harita[metin, sayi] sira;
+    sira.koy("c", 3);
+    sira.koy("a", 1);
+    sira.koy("b", 2);
+    metin s = "sıra:";
+    her (oto ad in sira) { s += " {ad}"; }
+    upp.satir_yaz(s);
+    sira.sil("a");
+    metin s3 = "silindi:";
+    her (oto ad in sira) { s3 += " {ad}"; }
+    upp.satir_yaz(s3);
+    sira.temizle();
+    L.bosalt();
+    upp.satir_yaz("boş: {sira.uzunluk()} {L.uzunluk()}");
+    don 0;
+}

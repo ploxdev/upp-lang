@@ -25,7 +25,33 @@ For classes with `metin` fields (or with fields of owned classes), the compiler 
 Zero-copy, read-only borrows: `fonk yaz(&metin v)`, `&dilim[sayi] d = arr[1..4]`. Their fields are `v.uzunluk` (UTF-8 bytes for strings) and `v.veri` (`&metin` only). A view cannot be returned, stored in a class field or top-level variable, or captured by `arkaplan`.
 
 ### Collections
-`liste[T]`, `harita[K,V]`, and `JSONDeger` are handles. Close them with `.bosalt()` / `upp.json.bosalt()`. Strings inside them are shared by refcount.
+`liste[T]` and `harita[K,V]` are value types: copies are O(1) (a refcount increment) and a shared copy is split on write (copy-on-write). After `M = L`, `M.ekle(x)` does not change `L`, and a list passed as a parameter does not change the caller's list. The compiler releases collections at scope exit too; `.bosalt()` only returns memory early and leaves the collection empty.
+
+The element type can be any value type except pointers and views: numeric types, `metin`, `sinif`, `liste[...]`, `harita[...]`, `fonk(...)`. Map keys are `metin` or `sayi`. `L[i][j] = x`, `K[0].ad += "!"`, and `K[1].yaslan()` work in place.
+
+`JSONDeger` is a handle; close it with `upp.json.bosalt()`.
+
+### Function values
+`fonk(P1, P2) -> R` is a type (`-> R` defaults to `bos`). Top-level functions become values by name and can be stored in variables, parameters, return values, class fields, and collections:
+
+```upp
+fonk ikiye(sayi x) -> sayi => x * 2;
+fonk uygula(fonk(sayi) -> sayi f, sayi x) -> sayi => f(x);
+
+fonk(sayi) -> sayi f = ikiye;
+upp.satir_yaz("{uygula(f, 5)}");
+harita[metin, fonk(sayi, sayi) -> sayi] komutlar;
+komutlar.koy("carp", fonk(sayi a, sayi b) -> sayi => a * b);
+upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
+```
+
+- Anonymous functions: `fonk(sayi x) -> sayi => x * 2` or `fonk(...) -> T { ... }`. There are no captures; touching an outer local is a compile error, so pass the value as a parameter.
+- An unassigned function value is `yok`. Test it with `f == yok`; calling `yok` stops the program with an explicit panic.
+- Signatures must match exactly. Only `==` and `!=` work on function values. Methods and `ana` cannot be taken as values.
+- In C it is a plain function pointer, so it also works on the freestanding and kernel targets (interrupt/command handler tables).
+
+### Integer division
+`/` and `%` panic explicitly on division by zero and on `MIN / -1` overflow (in the kernel too). A constant zero divisor is a compile error.
 
 ### `guvensiz`
 The following are only allowed inside `guvensiz { }`: pointers (`*`, `&`), `bellek_ayir` / `bellek_bosalt`, `c_kod { }`, process-memory access, and hardware access (`upp.cekirdek.*`). If `c_kod` stores a raw C pointer into a `metin` variable, the runtime never frees it. To store a managed value, use `upp_metin_ata(&s, UPP_LIT("..."))`.
@@ -45,7 +71,8 @@ The following are only allowed inside `guvensiz { }`: pointers (`*`, `&`), `bell
 | `mantik` | `bool` | `dogru` / `yanlis` |
 | `bos` | `void` | |
 | `dizi[T, N]` | C array | Bounds-checked |
-| `liste[T]`, `harita[K,V]` | handle | |
+| `liste[T]`, `harita[K,V]` | value (refcount + COW) | |
+| `fonk(P...) -> R` | function pointer | Function value, may be `yok` |
 | `&metin`, `&dilim[T]` | view | |
 | `sinif`, `secenek` | `struct`, `enum` | |
 
@@ -107,8 +134,8 @@ The following are only allowed inside `guvensiz { }`: pointers (`*`, `&`), `bell
 
 ## 11–13. Collections, JSON, threads
 
-- **`liste`**: `ekle`, `al`, `yaz`, `sil`, `temizle`, `uzunluk`, `bosalt`; slicing with `L[a..b]`.
-- **`harita`**: `koy`, `al`, `var_mi`, `sil`, `temizle`, `uzunluk`, `anahtarlar` (insertion order), `bosalt`.
+- **`liste`**: `ekle`, `al`, `yaz`, `sil`, `temizle`, `uzunluk`, `bosalt`; `L[i]` reads and writes (bounds-checked), slicing with `L[a..b]`, `her (oto x in L)` iterates.
+- **`harita`**: `koy`, `al` (zero value of the type when the key is missing), `var_mi`, `sil`, `temizle`, `uzunluk`, `anahtarlar` (insertion order), `bosalt`; `her (oto k in h)` iterates keys in insertion order.
 - **`upp.json`** (hosted): `ayristir`, `olustur`, `tur`, `anahtar_al`, `indeks_al`, `anahtarlar`, `metin_al` / `sayi_al` / `ondalik_al` / `mantik_al`, `uzunluk`, `var_mi`, `nesne`, `dizi`, `*_yap`, `koy`, `ekle`, `bosalt`.
 - **`arkaplan { }` / `.bekle()` and `Kilit`** (hosted). Strings are deep-copied into the thread.
 

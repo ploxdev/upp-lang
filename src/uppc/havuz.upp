@@ -52,6 +52,7 @@ metin g_kaynak_ad = "<girdi>";
 sayi g_cp_i = 0;
 sayi g_lex_satir = 1;
 sayi g_lex_sutun = 1;
+sayi g_lex_aktif = 0;
 
 metin g_tampon = "";
 metin g_bg = "";
@@ -66,6 +67,11 @@ sayi g_tmp = 0;
 sayi g_bg_id = 0;
 sayi g_cur_fn = 0;
 metin g_cur_class = "";
+liste[sayi] g_anon;
+sayi g_anon_n = 0;
+harita[metin,sayi] g_ft_id;
+metin g_ft_tanim = "";
+sayi g_ft_n = 0;
 
 liste[metin] k_ad;
 liste[sayi] k_tip;
@@ -80,6 +86,10 @@ sayi drop_n = 0;
 sayi drop_cer_cur = 0;
 liste[sayi] drop_dongu;
 sayi drop_dongu_n = 0;
+// 'dur' için kırılabilir yapılar (döngü, secim): taban çerçeve + goto etiketi ("" = break)
+liste[sayi] kir_cer;
+liste[metin] kir_etiket;
+sayi kir_n = 0;
 liste[metin] her_ad;
 sayi her_n = 0;
 sayi g_hoist_izin = 1;
@@ -746,6 +756,8 @@ fonk jeton_sayisi() -> sayi {
 
 // Düğümün kaynak dosyası: ayrıştırıcının o an baktığı jetonun dosyası.
 fonk dugum_yeni_kaynak() -> metin {
+    // Tarama sırasında jetonlar henüz yok: hata o an taranan dosyadadır.
+    eger (g_lex_aktif != 0) { don g_kaynak_ad; }
     sayi i = g_ayristir_i;
     eger (i >= j_n) { i = j_n - 1; }
     eger (i < 0 || i >= j_kaynak.uzunluk()) { don g_kaynak_ad; }
@@ -1127,6 +1139,7 @@ fonk drop_sifirla() -> bos {
     drop_n = 0;
     drop_cer_cur = 0;
     drop_dongu_n = 0;
+    kir_n = 0;
     her_n = 0;
     g_hoist_izin = 1;
 }
@@ -1197,7 +1210,35 @@ fonk drop_cerceve_pop() -> bos {
     }
 }
 
+fonk kir_it(sayi cer, metin etiket) -> bos {
+    eger (kir_n == kir_cer.uzunluk()) {
+        kir_cer.ekle(cer);
+        kir_etiket.ekle(intern(etiket));
+    } yoksa {
+        kir_cer.yaz(kir_n, cer);
+        kir_etiket.yaz(kir_n, intern(etiket));
+    }
+    kir_n = kir_n + 1;
+}
+
+fonk kir_cek() -> bos {
+    eger (kir_n > 0) { kir_n = kir_n - 1; }
+}
+
+fonk kir_var() -> mantik { don kir_n > 0; }
+
+fonk kir_cer_al() -> sayi {
+    eger (kir_n <= 0) { don 0; }
+    don kir_cer.al(kir_n - 1);
+}
+
+fonk kir_etiket_al() -> metin {
+    eger (kir_n <= 0) { don ""; }
+    don kir_etiket.al(kir_n - 1);
+}
+
 fonk drop_dongu_it(sayi cer) -> bos {
+    kir_it(cer, "");
     eger (drop_dongu_n == drop_dongu.uzunluk()) {
         drop_dongu.ekle(cer);
     } yoksa {
@@ -1207,6 +1248,7 @@ fonk drop_dongu_it(sayi cer) -> bos {
 }
 
 fonk drop_dongu_cek() -> bos {
+    kir_cek();
     eger (drop_dongu_n > 0) {
         drop_dongu_n = drop_dongu_n - 1;
     }

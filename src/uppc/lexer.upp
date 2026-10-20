@@ -282,6 +282,12 @@ fonk lex_sayi() -> sayi {
 }
 
 fonk lex_tara() -> bos {
+    g_lex_aktif = 1;
+    lex_tara_govde();
+    g_lex_aktif = 0;
+}
+
+fonk lex_tara_govde() -> bos {
     iken (!lex_bitis() && !hata_var()) {
         sayi ch = lex_cp();
         eger (ch == 32 || ch == 9 || ch == 13) {

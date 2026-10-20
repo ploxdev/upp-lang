@@ -1,0 +1,8 @@
+// Çalışma zamanı: 'yok' fonksiyon değeri çağrılırsa açık panik
+// @icerir: yok fonksiyon değeri çağrıldı
+
+fonk ana() -> sayi {
+    fonk(sayi) -> sayi f;
+    upp.satir_yaz("{f(3)}");
+    don 0;
+}

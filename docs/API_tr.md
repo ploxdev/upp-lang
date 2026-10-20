@@ -25,7 +25,33 @@ Bu belge `upp.*` yerleşiklerini, türleri, bellek modelini, hedefleri ve derley
 Kopyasız, salt okunur ödünç bakışlardır: `fonk yaz(&metin v)`, `&dilim[sayi] d = dizi[1..4]`. Alanları `v.uzunluk` (metinde UTF-8 bayt sayısı) ve `v.veri` (yalnızca `&metin`). Görünüm döndürülemez, sınıf alanı ya da üst düzey değişken olamaz, `arkaplan` içine yakalanamaz.
 
 ### Koleksiyonlar
-`liste[T]`, `harita[K,V]` ve `JSONDeger` tutamaçtır. `.bosalt()` / `upp.json.bosalt()` ile kapatılır. İçlerindeki metinler refcount ile paylaşılır.
+`liste[T]` ve `harita[K,V]` değer türüdür: kopya O(1)'dir (referans artışı), yazma anında paylaşılan kopya ayrılır (copy-on-write). `M = L` sonrası `M.ekle(x)` `L`'yi değiştirmez; parametreye geçen liste çağıranınkini değiştirmez. Derleyici koleksiyonları da kapsam sonunda bırakır; `.bosalt()` yalnızca belleği erken geri vermek içindir ve koleksiyonu boş bırakır.
+
+Eleman türü işaretçi ve görünüm dışında her değer türü olabilir: sayısal türler, `metin`, `sinif`, `liste[...]`, `harita[...]`, `fonk(...)`. Harita anahtarı `metin` ya da `sayi` olur. `L[i][j] = x`, `K[0].ad += "!"`, `K[1].yaslan()` yerinde çalışır.
+
+`JSONDeger` tutamaçtır, `upp.json.bosalt()` ile kapatılır.
+
+### Fonksiyon değerleri
+`fonk(P1, P2) -> R` bir türdür (`-> R` yazılmazsa `bos`). Üst düzey fonksiyonlar adlarıyla değer olur; değişkende, parametrede, dönüş değerinde, sınıf alanında ve koleksiyonda saklanabilir:
+
+```upp
+fonk ikiye(sayi x) -> sayi => x * 2;
+fonk uygula(fonk(sayi) -> sayi f, sayi x) -> sayi => f(x);
+
+fonk(sayi) -> sayi f = ikiye;
+upp.satir_yaz("{uygula(f, 5)}");
+harita[metin, fonk(sayi, sayi) -> sayi] komutlar;
+komutlar.koy("carp", fonk(sayi a, sayi b) -> sayi => a * b);
+upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
+```
+
+- Anonim fonksiyon: `fonk(sayi x) -> sayi => x * 2` ya da `fonk(...) -> T { ... }`. Yakalama yoktur; dış yerel değişkene erişmek derleme hatasıdır, değeri parametreyle geçin.
+- Atanmamış fonksiyon değeri `yok`'tur. `f == yok` ile denetlenir; `yok` çağrılırsa program açık bir panikle durur.
+- İmzalar birebir eşleşmelidir. Fonksiyon değerleriyle yalnızca `==` ve `!=` kullanılır. Metotlar ve `ana` değer olarak alınamaz.
+- C karşılığı düz fonksiyon işaretçisidir; serbest ve çekirdek hedeflerinde de çalışır (kesme/komut işleyici tabloları).
+
+### Tamsayı bölme
+`/` ve `%` sıfıra bölmede ve `EN_KUCUK / -1` taşmasında açık panik verir (çekirdekte de). Sabit bölen sıfırsa derleme hatasıdır.
 
 ### `guvensiz`
 Şunlar yalnızca `guvensiz { }` içinde serbesttir: işaretçiler (`*`, `&`), `bellek_ayir` / `bellek_bosalt`, `c_kod { }`, süreç belleği erişimi ve donanım erişimi (`upp.cekirdek.*`). `c_kod` ile bir `metin` değişkenine ham C işaretçisi yazılırsa runtime onu asla serbest bırakmaz. Yönetilen değer yazmak için `upp_metin_ata(&s, UPP_LIT("..."))` kullanın.
@@ -45,7 +71,8 @@ Kopyasız, salt okunur ödünç bakışlardır: `fonk yaz(&metin v)`, `&dilim[sa
 | `mantik` | `bool` | `dogru` / `yanlis` |
 | `bos` | `void` | Değer döndürmeyen fonksiyon |
 | `dizi[T, N]` | C dizisi | `sayi a[] = [1, 2]`, sınır denetimli |
-| `liste[T]`, `harita[K,V]` | tutamaç | Dinamik koleksiyon |
+| `liste[T]`, `harita[K,V]` | değer (refcount + COW) | Dinamik koleksiyon |
+| `fonk(P...) -> R` | fonksiyon işaretçisi | Fonksiyon değeri, `yok` olabilir |
 | `&metin`, `&dilim[T]` | görünüm | Kopyasız bakış |
 | `sinif`, `secenek` | `struct`, `enum` | Kullanıcı türleri |
 
@@ -162,8 +189,9 @@ Bu bölümdeki her şey, `uzunluk`/`min`/`max`/`mutlak`/`sayidan_metin`/`metinde
 
 ## 11. `liste[T]` ve `harita[K,V]`
 
-- **`liste`**: `ekle(x)`, `al(i)`, `yaz(i, x)`, `sil(i)`, `temizle()`, `uzunluk()`, `bosalt()`. `L[a..b]` (sayi/ondalik) dilim verir.
-- **`harita`**: `koy(k, v)`, `al(k)`, `var_mi(k)`, `sil(k)`, `temizle()`, `uzunluk()`, `anahtarlar()` (eklenme sırasıyla), `bosalt()`. `her (oto k in h)` anahtarları gezer.
+- **`liste`**: `ekle(x)`, `al(i)`, `yaz(i, x)`, `sil(i)`, `temizle()`, `uzunluk()`, `bosalt()`. `L[i]` okur ve yazar (sınır denetimli), `L[a..b]` (sayi/ondalik) dilim verir. `her (oto x in L)` elemanları gezer.
+- **`harita`**: `koy(k, v)`, `al(k)` (anahtar yoksa türün sıfır değeri), `var_mi(k)`, `sil(k)`, `temizle()`, `uzunluk()`, `anahtarlar()` (eklenme sırasıyla), `bosalt()`. `her (oto k in h)` anahtarları eklenme sırasıyla gezer.
+- Eleman ve anahtar türleri için bkz. [Koleksiyonlar](#koleksiyonlar).
 
 ## 12. `upp.json` (barındırılan)
 

@@ -1,0 +1,8 @@
+// Negatif: anonim fonksiyon dış yerel değişkeni yakalayamaz
+// @icerir: Anonim fonksiyonlar dış yerel değişkenleri yakalamaz
+
+fonk ana() -> sayi {
+    sayi taban = 10;
+    fonk(sayi) -> sayi f = fonk(sayi x) -> sayi => x + taban;
+    don f(1);
+}

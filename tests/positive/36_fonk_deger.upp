@@ -1,0 +1,99 @@
+// Pozitif: fonksiyon değerleri (tür, değişken, parametre, dönüş, koleksiyon, alan, anonim)
+// @stdout
+// ikiye=14 kare=49
+// uygula: 10 25
+// dizi: 2 4 6
+// adlar: [ali] [ayşe]
+// işlem: + 7 | * 12
+// sınıf: 8
+// yerel: 9 dış: 30
+// yok mu: evet hayır
+// zincir: 21
+// görünüm: 7
+// küresel: 100 14
+
+sinif Dugme {
+    metin etiket;
+    fonk(sayi) -> sayi tikla;
+}
+
+fonk(sayi) -> sayi g_islem = yok;
+fonk(sayi) -> sayi g_varsayilan = ikiye;
+
+fonk ikiye(sayi x) -> sayi => x * 2;
+fonk kare(sayi x) -> sayi => x * x;
+
+fonk uygula(fonk(sayi) -> sayi f, sayi x) -> sayi {
+    don f(x);
+}
+
+fonk esle(liste[sayi] L, fonk(sayi) -> sayi f) -> liste[sayi] {
+    liste[sayi] R;
+    her (oto x in L) { R.ekle(f(x)); }
+    don R;
+}
+
+fonk sar(metin s) -> metin => "[" + s + "]";
+
+fonk secici(mantik carp) -> fonk(sayi, sayi) -> sayi {
+    eger (carp) { don fonk(sayi a, sayi b) -> sayi => a * b; }
+    don fonk(sayi a, sayi b) -> sayi => a + b;
+}
+
+fonk uc_kat(sayi x) -> sayi {
+    sayi t = 0;
+    dongu (sayi i = 0; i < 3; i += 1) { t += x; }
+    don t;
+}
+
+fonk uzunluk_al(&metin s) -> sayi => upp.uzunluk(s);
+
+fonk ana() -> sayi {
+    fonk(sayi) -> sayi f = ikiye;
+    oto g = kare;
+    upp.satir_yaz("ikiye={f(7)} kare={g(7)}");
+    upp.satir_yaz("uygula: {uygula(ikiye, 5)} {uygula(kare, 5)}");
+
+    liste[sayi] L;
+    L.ekle(1);
+    L.ekle(2);
+    L.ekle(3);
+    liste[sayi] M = esle(L, fonk(sayi x) -> sayi => x * 2);
+    upp.satir_yaz("dizi: {M[0]} {M[1]} {M[2]}");
+
+    fonk(metin) -> metin sarici = sar;
+    upp.satir_yaz("adlar: {sarici(\"ali\")} {sarici(\"ayşe\")}");
+
+    harita[metin, fonk(sayi, sayi) -> sayi] islemler;
+    islemler.koy("+", secici(yanlis));
+    islemler.koy("*", secici(dogru));
+    upp.satir_yaz("işlem: + {islemler.al(\"+\")(3, 4)} | * {islemler.al(\"*\")(3, 4)}");
+
+    Dugme d;
+    d.etiket = "tamam";
+    d.tikla = fonk(sayi n) -> sayi { don n + 1; };
+    upp.satir_yaz("sınıf: {d.tikla(7)}");
+
+    liste[fonk(sayi) -> sayi] fs;
+    fs.ekle(ikiye);
+    fs.ekle(uc_kat);
+    sayi y = fs[0](4) + 1;
+    upp.satir_yaz("yerel: {y} dış: {fs[1](10)}");
+
+    fonk(sayi) -> sayi bos_f;
+    metin a = "hayır";
+    eger (bos_f == yok) { a = "evet"; }
+    metin b = "hayır";
+    eger (f == yok) { b = "evet"; }
+    upp.satir_yaz("yok mu: {a} {b}");
+
+    upp.satir_yaz("zincir: {uygula(fonk(sayi x) -> sayi => uc_kat(ikiye(x)) + 3, 3)}");
+
+    fonk(&metin) -> sayi u = uzunluk_al;
+    metin kelime = "merhaba";
+    upp.satir_yaz("görünüm: {u(kelime)}");
+
+    g_islem = kare;
+    upp.satir_yaz("küresel: {g_islem(10)} {g_varsayilan(7)}");
+    don 0;
+}

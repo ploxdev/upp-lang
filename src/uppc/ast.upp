@@ -350,3 +350,106 @@ fonk metot_sinif_c_ad(sayi fn) -> metin {
     eger (fn == 0 || dugum_c(fn) == 0) { don ""; }
     don c_sembol(dugum_ad(dugum_c(fn)), dugum_alias_ad(fn));
 }
+
+// Fonksiyon türü: kanonik ad "fonk(P1,P2)->R" (parametre/dönüş adları yıldızlarıyla).
+fonk fonk_tur_mi(metin n) -> mantik {
+    eger (metin_uzun(n) < 7) { don yanlis; }
+    don metin_esit(intern_dilim(n, 0, 5), "fonk(");
+}
+
+// Eşleşen ')' konumu (5'ten taranır); parçalar iç içe () ve [] içerebilir.
+fonk fonk_kapa_yer(metin n) -> sayi {
+    sayi i = 5;
+    sayi d = 0;
+    sayi L = metin_uzun(n);
+    iken (i < L) {
+        sayi c = metin_cp(n, i);
+        eger (c == 40 || c == 91) { d = d + 1; }
+        yoksa eger (c == 93) { d = d - 1; }
+        yoksa eger (c == 41) {
+            eger (d == 0) { don i; }
+            d = d - 1;
+        }
+        i = i + 1;
+    }
+    don L;
+}
+
+fonk fonk_param_say(metin n) -> sayi {
+    sayi k = fonk_kapa_yer(n);
+    eger (k == 5) { don 0; }
+    sayi i = 5;
+    sayi d = 0;
+    sayi say = 1;
+    iken (i < k) {
+        sayi c = metin_cp(n, i);
+        eger (c == 40 || c == 91) { d = d + 1; }
+        yoksa eger (c == 41 || c == 93) { d = d - 1; }
+        yoksa eger (c == 44 && d == 0) { say = say + 1; }
+        i = i + 1;
+    }
+    don say;
+}
+
+fonk fonk_param_ad(metin n, sayi idx) -> metin {
+    sayi k = fonk_kapa_yer(n);
+    sayi i = 5;
+    sayi d = 0;
+    sayi bas = 5;
+    sayi say = 0;
+    iken (i <= k) {
+        sayi c = 0;
+        eger (i < k) { c = metin_cp(n, i); }
+        eger (i < k && (c == 40 || c == 91)) { d = d + 1; }
+        yoksa eger (i < k && (c == 41 || c == 93)) { d = d - 1; }
+        yoksa eger (i == k || (c == 44 && d == 0)) {
+            eger (say == idx) { don intern_dilim(n, bas, i); }
+            say = say + 1;
+            bas = i + 1;
+        }
+        i = i + 1;
+    }
+    don "";
+}
+
+fonk fonk_donus_ad(metin n) -> metin {
+    sayi k = fonk_kapa_yer(n);
+    don intern_dilim(n, k + 3, metin_uzun(n));
+}
+
+// Kanonik parça adından tür düğümü ("sayi*" -> sayi, ptrd 1).
+fonk ad_tur_dugum(metin s) -> sayi {
+    eger (fonk_tur_mi(s)) { don tur_dugum(0, 1, s, 0, 0); }
+    sayi L = metin_uzun(s);
+    sayi p = 0;
+    iken (L > 0 && metin_cp(s, L - 1) == 42) {
+        L = L - 1;
+        p = p + 1;
+    }
+    don tur_dugum(0, 1, intern_dilim(s, 0, L), p, 0);
+}
+
+fonk tur_kanonik_ad(sayi t) -> metin {
+    eger (t == 0) { don "bos"; }
+    metin s = dugum_ad(t);
+    sayi i = 0;
+    iken (i < dugum_ptrd(t)) {
+        s = kat(s, "*");
+        i = i + 1;
+    }
+    don intern(s);
+}
+
+// Bir fonksiyon bildiriminin değer türü.
+fonk fonk_imza_tur(sayi fn) -> sayi {
+    sayi P = dugum_liste(fn);
+    metin s = "fonk(";
+    sayi i = 0;
+    iken (i < liste_uzunluk(P)) {
+        eger (i > 0) { s = kat(s, ","); }
+        s = kat(s, tur_kanonik_ad(dugum_a(liste_al(P, i))));
+        i = i + 1;
+    }
+    s = kat3(s, ")->", tur_kanonik_ad(dugum_a(fn)));
+    don tur_dugum(dugum_satir(fn), dugum_sutun(fn), intern(s), 0, 0);
+}

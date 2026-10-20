@@ -1,0 +1,9 @@
+// Negatif: fonksiyon değeri yanlış sayıda argümanla çağrılamaz
+// @icerir: Fonksiyon değeri 1 argüman bekler, 2 verildi
+
+fonk ikiye(sayi x) -> sayi => x * 2;
+
+fonk ana() -> sayi {
+    fonk(sayi) -> sayi f = ikiye;
+    don f(1, 2);
+}

@@ -3438,7 +3438,7 @@ static int upp_yol_klasor_olustur(const char* yol) {
 
 static UppKolListe upp_dosya_listele(const char* yol) {
     UppKolListe L;
-    L.id = 0;
+    L.h = NULL;
     if (!yol || !yol[0]) {
         yol = ".";
     }

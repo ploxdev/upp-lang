@@ -1,0 +1,9 @@
+// Negatif: imzası farklı fonksiyon atanamaz
+// @icerir: 'fonk(sayi)->sayi' beklenir, 'fonk(metin)->metin' verildi
+
+fonk birlestir(metin a) -> metin => a + "!";
+
+fonk ana() -> sayi {
+    fonk(sayi) -> sayi f = birlestir;
+    don f(1);
+}

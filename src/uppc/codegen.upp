@@ -23,6 +23,7 @@ fonk uret_ctur(sayi t) -> metin {
         yoksa eger (metin_esit(elem, "mantik")) { s = "upp_ref_dilim_mantik"; }
         yoksa { s = "upp_ref_dilim_sayi"; }
     }
+    yoksa eger (fonk_tur_mi(n)) { s = ft_ref(n); }
     yoksa eger (liste_tur_mi(n)) { s = "UppKolListe"; }
     yoksa eger (harita_tur_mi(n)) { s = "UppKolHarita"; }
     yoksa { s = nokta_altcizgi(n); }
@@ -32,6 +33,63 @@ fonk uret_ctur(sayi t) -> metin {
         i = i + 1;
     }
     don s;
+}
+
+// Fonksiyon türü havuzu: her imza için bir C typedef'i (_upp_ftN).
+fonk ft_ref(metin n) -> metin {
+    eger (g_ft_id.var_mi(n)) {
+        don kat("_upp_ft", sayi_metin(g_ft_id.al(n)));
+    }
+    sayi np = fonk_param_say(n);
+    metin ps = "";
+    sayi i = 0;
+    iken (i < np) {
+        eger (i > 0) { ps = kat(ps, ", "); }
+        ps = kat(ps, uret_ctur(ad_tur_dugum(fonk_param_ad(n, i))));
+        i = i + 1;
+    }
+    eger (np == 0) { ps = "void"; }
+    oto rs = uret_ctur(ad_tur_dugum(fonk_donus_ad(n)));
+    g_ft_n = g_ft_n + 1;
+    sayi id = g_ft_n;
+    g_ft_id.koy(n, id);
+    oto ad = kat("_upp_ft", sayi_metin(id));
+    g_ft_tanim += "typedef ";
+    g_ft_tanim += rs;
+    g_ft_tanim += " (*";
+    g_ft_tanim += ad;
+    g_ft_tanim += ")(";
+    g_ft_tanim += ps;
+    g_ft_tanim += ");\n";
+    don ad;
+}
+
+fonk ft_havuz_isaret() -> metin {
+    don "/* ==== u++ fonksiyon türleri ==== */";
+}
+
+// Fonksiyon değeri çağrısı: 'yok' ise açık panik.
+fonk uret_fonk_cagri(sayi ft, sayi callee, sayi args) -> metin {
+    oto n = dugum_ad(ft);
+    oto cn = ft_ref(n);
+    sayi np = fonk_param_say(n);
+    metin s = "";
+    sayi i = 0;
+    iken (i < np && i < liste_uzunluk(args)) {
+        eger (i > 0) { s = kat(s, ", "); }
+        sayi a = liste_al(args, i);
+        sayi pt = ad_tur_dugum(fonk_param_ad(n, i));
+        eger (tip_ref_metin_mi(pt)) {
+            s = kat(s, uret_gorunum_metin(a));
+        } yoksa eger (tip_ref_dilim_mi(pt)) {
+            s = kat(s, uret_gorunum_dilim(pt, a));
+        } yoksa {
+            s = kat(s, uret_ifade(a));
+        }
+        i = i + 1;
+    }
+    metin c = kat5("(*({ ", cn, " _uf = (", uret_ifade(callee), "); if (_uf == NULL) upp_panik(\"yok fonksiyon değeri çağrıldı\"); _uf; }))(");
+    don kat3(c, s, ")");
 }
 
 fonk emit_drop_ad(metin ad) -> bos {
@@ -64,6 +122,32 @@ fonk sinif_c_ad(sayi cls) -> metin {
     don c;
 }
 
+// Sahiplik türü: >0 sahipli sınıf (sınıf düğümü), -1 liste, -2 harita, 0 düz.
+fonk tur_sahip(sayi t) -> sayi {
+    eger (t == 0 || dugum_ptrd(t) != 0 || dugum_dims(t) != 0) { don 0; }
+    eger (liste_tur_mi(dugum_ad(t))) { don 0 - 1; }
+    eger (harita_tur_mi(dugum_ad(t))) { don 0 - 2; }
+    don tur_sahipli_sinif(t);
+}
+
+fonk sahip_c(sayi k) -> metin {
+    eger (k == 0 - 1) { don "UppKolListe"; }
+    eger (k == 0 - 2) { don "UppKolHarita"; }
+    don sinif_c_ad(k);
+}
+
+fonk sahip_birak(sayi k) -> metin {
+    eger (k == 0 - 1) { don "upp_liste_birak"; }
+    eger (k == 0 - 2) { don "upp_harita_birak"; }
+    don sinif_birak_fn(k);
+}
+
+fonk sahip_kopya(sayi k) -> metin {
+    eger (k == 0 - 1) { don "upp_liste_paylas"; }
+    eger (k == 0 - 2) { don "upp_harita_paylas"; }
+    don sinif_kopya_fn(k);
+}
+
 fonk sinif_sahipli_mi(sayi cls) -> mantik {
     eger (cls == 0) { don yanlis; }
     sayi F = dugum_liste(cls);
@@ -71,7 +155,7 @@ fonk sinif_sahipli_mi(sayi cls) -> mantik {
     iken (i < liste_uzunluk(F)) {
         sayi ft = dugum_a(liste_al(F, i));
         eger (tip_metin_mi(ft)) { don dogru; }
-        eger (tur_sahipli_sinif(ft) != 0) { don dogru; }
+        eger (tur_sahip(ft) != 0) { don dogru; }
         i = i + 1;
     }
     don yanlis;
@@ -86,17 +170,17 @@ fonk tur_sahipli_sinif(sayi t) -> sayi {
 }
 
 fonk sinif_birak_fn(sayi cls) -> metin {
-    don kat(sinif_c_ad(cls), "__birak");
+    don kat(sahip_c(cls), "__birak");
 }
 
 fonk sinif_kopya_fn(sayi cls) -> metin {
-    don kat(sinif_c_ad(cls), "__kopya");
+    don kat(sahip_c(cls), "__kopya");
 }
 
 fonk uret_sinif_sahiplik_prototip(sayi cls) -> bos {
-    oto cn = sinif_c_ad(cls);
-    emit(kat5("static void ", sinif_birak_fn(cls), "(", cn, "* p);"));
-    emit(kat5("static ", cn, " ", sinif_kopya_fn(cls), kat3("(", cn, " v);")));
+    oto cn = sahip_c(cls);
+    emit(kat5("static void ", sahip_birak(cls), "(", cn, "* p);"));
+    emit(kat5("static ", cn, " ", sahip_kopya(cls), kat3("(", cn, " v);")));
 }
 
 fonk uret_sinif_alan_dongu(sayi f, metin govde_i) -> bos {
@@ -105,10 +189,10 @@ fonk uret_sinif_alan_dongu(sayi f, metin govde_i) -> bos {
 }
 
 fonk uret_sinif_sahiplik_tanim(sayi cls) -> bos {
-    oto cn = sinif_c_ad(cls);
+    oto cn = sahip_c(cls);
     sayi F = dugum_liste(cls);
     sayi i = 0;
-    emit(kat5("static void ", sinif_birak_fn(cls), "(", cn, "* p) {"));
+    emit(kat5("static void ", sahip_birak(cls), "(", cn, "* p) {"));
     indent_ekle(1);
     emit("if (!p) { return; }");
     iken (i < liste_uzunluk(F)) {
@@ -123,12 +207,12 @@ fonk uret_sinif_sahiplik_tanim(sayi cls) -> bos {
                 emit(kat5("upp_metin_release(p->", ad, "); p->", ad, " = NULL;"));
             }
         } yoksa {
-            sayi icc = tur_sahipli_sinif(ft);
+            sayi icc = tur_sahip(ft);
             eger (icc != 0) {
                 eger (dizi) {
-                    uret_sinif_alan_dongu(f, kat5(sinif_birak_fn(icc), "(&p->", ad, "[_i]);", ""));
+                    uret_sinif_alan_dongu(f, kat5(sahip_birak(icc), "(&p->", ad, "[_i]);", ""));
                 } yoksa {
-                    emit(kat4(sinif_birak_fn(icc), "(&p->", ad, ");"));
+                    emit(kat4(sahip_birak(icc), "(&p->", ad, ");"));
                 }
             }
         }
@@ -136,7 +220,7 @@ fonk uret_sinif_sahiplik_tanim(sayi cls) -> bos {
     }
     indent_ekle(-1);
     emit("}");
-    emit(kat5("static ", cn, " ", sinif_kopya_fn(cls), kat3("(", cn, " v) {")));
+    emit(kat5("static ", cn, " ", sahip_kopya(cls), kat3("(", cn, " v) {")));
     indent_ekle(1);
     emit(kat3(cn, "* p = &v;", ""));
     i = 0;
@@ -152,12 +236,12 @@ fonk uret_sinif_sahiplik_tanim(sayi cls) -> bos {
                 emit(kat5("p->", ad, " = upp_metin_kopya(p->", ad, ");"));
             }
         } yoksa {
-            sayi icc = tur_sahipli_sinif(ft);
+            sayi icc = tur_sahip(ft);
             eger (icc != 0) {
                 eger (dizi) {
-                    uret_sinif_alan_dongu(f, kat(kat5("p->", ad, "[_i] = ", sinif_kopya_fn(icc), "(p->"), kat(ad, "[_i]);")));
+                    uret_sinif_alan_dongu(f, kat(kat5("p->", ad, "[_i] = ", sahip_kopya(icc), "(p->"), kat(ad, "[_i]);")));
                 } yoksa {
-                    emit(kat(kat5("p->", ad, " = ", sinif_kopya_fn(icc), "(p->"), kat(ad, ");")));
+                    emit(kat(kat5("p->", ad, " = ", sahip_kopya(icc), "(p->"), kat(ad, ");")));
                 }
             }
         }
@@ -166,6 +250,9 @@ fonk uret_sinif_sahiplik_tanim(sayi cls) -> bos {
     emit("return v;");
     indent_ekle(-1);
     emit("}");
+    emit(kat5("static void ", cn, "__ham_kopya(void* d, const void* s) { *(", cn, kat5("*)d = ", sinif_kopya_fn(cls), "(*(const ", cn, "*)s); }")));
+    emit(kat5("static void ", cn, "__ham_birak(void* p) { ", sinif_birak_fn(cls), kat3("((", cn, "*)p); }")));
+    emit(kat(kat5("static const UppKolTur _upp_kt_", cn, " = { sizeof(", cn, "), "), kat5(cn, "__ham_kopya, ", cn, "__ham_birak };", "")));
     emit("");
 }
 
@@ -173,9 +260,9 @@ fonk uret_sinif_sahiplik_tanim(sayi cls) -> bos {
 // lvalue → __kopya (ref artışı); kayıtlı geçici → taşınır ve sıfırlanır;
 // diğer taze değer (satır içi çağrı) → olduğu gibi.
 fonk uret_sinif_deger(sayi e, sayi cls) -> metin {
-    oto cn = sinif_c_ad(cls);
+    oto cn = sahip_c(cls);
     eger (lvalue_mi(e)) {
-        don kat4(sinif_kopya_fn(cls), "(", uret_ifade(e), ")");
+        don kat4(sahip_kopya(cls), "(", uret_ifade(e), ")");
     }
     eger (dugum_tur(e) == DugumTur.D_UCLU) {
         oto ad = kat("_su", sayi_metin(tmp_yeni()));
@@ -299,7 +386,7 @@ fonk uret_kurucu(sayi cls, sayi args) -> metin {
     oto tn = kat("_upp_ct", sayi_metin(id));
     emit(kat(kat3(cn, " ", tn), " = {0};"));
     eger (sinif_sahipli_mi(cls)) {
-        drop_kaydet_fn(tn, sinif_birak_fn(cls));
+        drop_kaydet_fn(tn, sahip_birak(cls));
     }
     metin cagri = kat(cn, "_olustur(&");
     cagri = kat(cagri, tn);
@@ -411,109 +498,174 @@ fonk uret_yazdir(sayi args, mantik nl, mantik hata) -> metin {
     don kat5(fn, "(", var, ", ", kat(nls, ")"));
 }
 
-fonk uret_kol_pack(metin elem, metin cval) -> metin {
-    eger (metin_esit(elem, "ondalik")) { don kat3("0LL, ", cval, ", NULL"); }
-    eger (metin_esit(elem, "metin")) { don kat("0LL, 0.0, ", cval); }
-    eger (metin_esit(elem, "bayt")) { don kat3("(long long)(int8_t)(", cval, "), 0.0, NULL"); }
-    eger (metin_esit(elem, "ubayt")) { don kat3("(long long)(uint8_t)(", cval, "), 0.0, NULL"); }
-    eger (metin_esit(elem, "s16")) { don kat3("(long long)(int16_t)(", cval, "), 0.0, NULL"); }
-    eger (metin_esit(elem, "u16")) { don kat3("(long long)(uint16_t)(", cval, "), 0.0, NULL"); }
-    eger (metin_esit(elem, "s32")) { don kat3("(long long)(int32_t)(", cval, "), 0.0, NULL"); }
-    eger (metin_esit(elem, "u32")) { don kat3("(long long)(uint32_t)(", cval, "), 0.0, NULL"); }
-    eger (metin_esit(elem, "u64")) { don kat3("(long long)(unsigned long long)(", cval, "), 0.0, NULL"); }
-    don kat3("(long long)(", cval, "), 0.0, NULL");
+fonk tn_dugum(metin tn) -> sayi {
+    don tur_dugum(0, 1, tn, 0, 0);
 }
 
-fonk uret_liste_al(metin elem, metin recv, metin idx) -> metin {
-    eger (metin_esit(elem, "ondalik")) { don kat4("upp_liste_al_d(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "metin")) { don kat4("upp_liste_al_s(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "mantik")) { don kat4("(bool)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "bayt")) { don kat4("(int8_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "ubayt")) { don kat4("(uint8_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "s16")) { don kat4("(int16_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "u16")) { don kat4("(uint16_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "s32")) { don kat4("(int32_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "u32")) { don kat4("(uint32_t)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    eger (metin_esit(elem, "u64")) { don kat4("(unsigned long long)upp_liste_al_i(", recv, ", ", kat(idx, ")")); }
-    don kat4("upp_liste_al_i(", recv, ", ", kat(idx, ")"));
+fonk tn_ctur(metin tn) -> metin {
+    don uret_ctur(tn_dugum(tn));
 }
 
-fonk uret_harita_key(metin ktur, sayi e) -> metin {
+// Eleman türünün koleksiyon tanımlayıcısı (C ifadesi).
+fonk uret_kt(metin tn) -> metin {
+    eger (metin_esit(tn, "metin")) { don "(&upp_kt_metin)"; }
+    eger (metin_esit(tn, "sayi")) { don "(&upp_kt_sayi)"; }
+    eger (metin_esit(tn, "ondalik")) { don "(&upp_kt_ondalik)"; }
+    eger (metin_esit(tn, "mantik")) { don "(&upp_kt_mantik)"; }
+    sayi k = tur_sahip(tn_dugum(tn));
+    eger (k == 0 - 1) { don "(&upp_kt_liste)"; }
+    eger (k == 0 - 2) { don "(&upp_kt_harita)"; }
+    eger (k > 0) { don kat3("(&_upp_kt_", sinif_c_ad(k), ")"); }
+    don kat3("UPP_KT_DUZ(", tn_ctur(tn), ")");
+}
+
+// p: elemanın yeri (void*). Ödünç değer: kopyalanmaz.
+fonk uret_kol_ham(metin tn, metin p) -> metin {
+    don kat5("(*(", tn_ctur(tn), "*)(", p, "))");
+}
+
+// Okuma: sahip olunan değer (metin/sahipli eleman kopyalanır).
+fonk uret_kol_oku(metin tn, metin p) -> metin {
+    oto ham = uret_kol_ham(tn, p);
+    eger (metin_esit(tn, "metin")) { don kat3("upp_metin_kopya(", ham, ")"); }
+    sayi k = tur_sahip(tn_dugum(tn));
+    eger (k != 0) { don kat4(sahip_kopya(k), "(", ham, ")"); }
+    don ham;
+}
+
+// e değerini p yerine yazar; eskiyi_birak ise önceki değer bırakılır.
+fonk uret_kol_yaz(metin tn, metin p, sayi e, mantik eskiyi_birak) -> bos {
+    oto ct = tn_ctur(tn);
+    oto v = kat("_kv", sayi_metin(tmp_yeni()));
+    eger (metin_esit(tn, "metin")) {
+        emit(kat5("const char* ", v, " = ", uret_ifade(e), ";"));
+        emit(kat5("upp_metin_ata((char**)(", p, "), ", v, ");"));
+        don;
+    }
+    sayi k = tur_sahip(tn_dugum(tn));
+    eger (k != 0) {
+        oto sd = uret_sinif_deger(e, k);
+        oto pp = kat("_kp", sayi_metin(tmp_yeni()));
+        emit(kat5(ct, " ", v, " = ", kat(sd, ";")));
+        emit(kat(kat5(ct, "* ", pp, " = (", ct), kat3("*)(", p, ");")));
+        eger (eskiyi_birak) { emit(kat4(sahip_birak(k), "(", pp, ");")); }
+        emit(kat4("*", pp, " = ", kat(v, ";")));
+        don;
+    }
+    emit(kat(kat5(ct, " ", v, " = (", ct), kat3(")(", uret_ifade(e), ");")));
+    emit(kat(kat5("*(", ct, "*)(", p, ") = "), kat(v, ";")));
+}
+
+// Harita anahtarı: işaretçi ifadesi ve tür sabiti.
+fonk uret_harita_kp(metin ktur, sayi e) -> metin {
     oto c = uret_ifade(e);
-    eger (metin_esit(ktur, "metin")) { don kat("0LL, ", c); }
-    don kat3("(long long)(", c, "), NULL");
+    eger (metin_esit(ktur, "metin")) { don kat3("(&(const char*){ ", c, " })"); }
+    don kat3("(&(long long){ (long long)(", c, ") })");
+}
+
+fonk uret_harita_kk(metin ktur) -> metin {
+    eger (metin_esit(ktur, "metin")) { don "_UPP_HK_METIN"; }
+    don "_UPP_HK_TAM";
+}
+
+// Atama hedefi: koleksiyon elemanlarına COW sonrası yazılabilir yerden erişir.
+fonk uret_lvalue(sayi e) -> metin {
+    eger (e == 0) { don ""; }
+    sayi t = dugum_tur(e);
+    eger (t == DugumTur.D_INDIS && dugum_c(e) == 0) {
+        sayi bt = tip_ifade(dugum_a(e));
+        eger (liste_tur_mi(dugum_ad(bt)) && dugum_ptrd(bt) == 0) {
+            oto tn = liste_elem_ad(dugum_ad(bt));
+            don kat(kat5("(*(", tn_ctur(tn), "*)upp_liste_yaz_ptr(&(", uret_lvalue(dugum_a(e)), "), "), kat(uret_ifade(dugum_b(e)), "))"));
+        }
+        eger (dugum_dims(bt) > 0) {
+            don kat4(uret_lvalue(dugum_a(e)), "[", uret_dizi_idx(bt, dugum_b(e)), "]");
+        }
+        don uret_ifade(e);
+    }
+    eger (t == DugumTur.D_UYE) {
+        sayi ot = tip_ifade(dugum_a(e));
+        oto on = dugum_ad(ot);
+        eger (metin_uzun(on) >= 4 && metin_esit(intern_dilim(on, 0, 4), "upp.")) { don uret_ifade(e); }
+        eger (metin_uzun(on) >= 6 && (metin_esit(intern_dilim(on, 0, 6), "modul.") || metin_esit(intern_dilim(on, 0, 6), "sinif."))) { don uret_ifade(e); }
+        eger (metin_uzun(on) >= 8 && metin_esit(intern_dilim(on, 0, 8), "secenek.")) { don uret_ifade(e); }
+        metin ok = ".";
+        eger (dugum_ptrd(ot) > 0) { ok = "->"; }
+        don kat3(uret_lvalue(dugum_a(e)), ok, dugum_ad(e));
+    }
+    don uret_ifade(e);
 }
 
 fonk uret_liste_cagri(sayi expr, metin on) -> metin {
     sayi member = dugum_a(expr);
-    oto recv = uret_ifade(dugum_a(member));
     oto elem = liste_elem_ad(on);
-    sayi tag = koleksiyon_etiket(elem);
     oto name = dugum_ad(member);
     sayi args = dugum_liste(expr);
     eger (metin_esit(name, "ekle")) {
-        don kat(kat5("upp_liste_ekle(&(", recv, "), ", sayi_metin(tag), ", "), kat(uret_kol_pack(elem, uret_ifade(liste_al(args, 0))), ")"));
-    }
-    eger (metin_esit(name, "al")) {
-        don uret_liste_al(elem, recv, uret_ifade(liste_al(args, 0)));
+        oto recv = uret_lvalue(dugum_a(member));
+        uret_kol_yaz(elem, kat5("upp_liste_ekle_ptr(&(", recv, "), ", uret_kt(elem), ")"), liste_al(args, 0), yanlis);
+        don "(void)0";
     }
     eger (metin_esit(name, "yaz")) {
-        don kat(kat5("upp_liste_yaz(&(", recv, "), ", sayi_metin(tag), ", "), kat(kat3(uret_ifade(liste_al(args, 0)), ", ", uret_kol_pack(elem, uret_ifade(liste_al(args, 1)))), ")"));
+        oto recv = uret_lvalue(dugum_a(member));
+        oto idx = uret_ifade(liste_al(args, 0));
+        uret_kol_yaz(elem, kat5("upp_liste_yaz_ptr(&(", recv, "), ", idx, ")"), liste_al(args, 1), dogru);
+        don "(void)0";
+    }
+    eger (metin_esit(name, "al")) {
+        oto recv = uret_ifade(dugum_a(member));
+        don uret_kol_oku(elem, kat5("upp_liste_ptr(", recv, ", ", uret_ifade(liste_al(args, 0)), ")"));
     }
     eger (metin_esit(name, "uzunluk")) {
-        don kat3("upp_liste_uzunluk(", recv, ")");
-    }
-    eger (metin_esit(name, "bosalt")) {
-        don kat3("upp_liste_bosalt(&(", recv, "))");
+        don kat3("upp_liste_uzunluk(", uret_ifade(dugum_a(member)), ")");
     }
     eger (metin_esit(name, "sil")) {
-        don kat(kat3("upp_liste_sil(&(", recv, "), "), kat(uret_ifade(liste_al(args, 0)), ")"));
+        don kat(kat3("upp_liste_sil(&(", uret_lvalue(dugum_a(member)), "), "), kat(uret_ifade(liste_al(args, 0)), ")"));
     }
     eger (metin_esit(name, "temizle")) {
-        don kat3("upp_liste_temizle(&(", recv, "))");
+        don kat3("upp_liste_temizle(&(", uret_lvalue(dugum_a(member)), "))");
+    }
+    eger (metin_esit(name, "bosalt")) {
+        don kat3("upp_liste_bosalt(&(", uret_lvalue(dugum_a(member)), "))");
     }
     don "0";
 }
 
-fonk uret_harita_al(metin vtur, metin recv, metin kpack) -> metin {
-    eger (metin_esit(vtur, "ondalik")) { don kat4("upp_harita_al_d(", recv, ", ", kat(kpack, ")")); }
-    eger (metin_esit(vtur, "metin")) { don kat4("upp_harita_al_s(", recv, ", ", kat(kpack, ")")); }
-    eger (metin_esit(vtur, "mantik")) { don kat4("(bool)upp_harita_al_i(", recv, ", ", kat(kpack, ")")); }
-    don kat4("upp_harita_al_i(", recv, ", ", kat(kpack, ")"));
-}
-
 fonk uret_harita_cagri(sayi expr, metin on) -> metin {
     sayi member = dugum_a(expr);
-    oto recv = uret_ifade(dugum_a(member));
     oto ktur = harita_anahtar_ad(on);
     oto vtur = harita_deger_ad(on);
-    sayi ktag = koleksiyon_etiket(ktur);
-    sayi vtag = koleksiyon_etiket(vtur);
     oto name = dugum_ad(member);
     sayi args = dugum_liste(expr);
     eger (metin_esit(name, "koy")) {
-        don kat(kat5("upp_harita_koy(&(", recv, "), ", sayi_metin(ktag), ", "), kat(kat5(sayi_metin(vtag), ", ", uret_harita_key(ktur, liste_al(args, 0)), ", ", uret_kol_pack(vtur, uret_ifade(liste_al(args, 1)))), ")"));
+        oto recv = uret_lvalue(dugum_a(member));
+        oto kp = uret_harita_kp(ktur, liste_al(args, 0));
+        uret_kol_yaz(vtur, kat(kat5("upp_harita_koy_ptr(&(", recv, "), ", uret_harita_kk(ktur), ", "), kat4(uret_kt(vtur), ", ", kp, ")")), liste_al(args, 1), dogru);
+        don "(void)0";
     }
     eger (metin_esit(name, "al")) {
-        don uret_harita_al(vtur, recv, kat3(sayi_metin(ktag), ", ", uret_harita_key(ktur, liste_al(args, 0))));
+        oto recv = uret_ifade(dugum_a(member));
+        oto kp = uret_harita_kp(ktur, liste_al(args, 0));
+        oto ct = tn_ctur(vtur);
+        don kat(kat5("({ void* _hp = upp_harita_bul(", recv, ", ", kp, "); "), kat5("_hp ? ", uret_kol_oku(vtur, "_hp"), " : (", ct, "){0}; })"));
     }
     eger (metin_esit(name, "var_mi")) {
-        don kat(kat5("(bool)upp_harita_var_mi(", recv, ", ", sayi_metin(ktag), ", "), kat(uret_harita_key(ktur, liste_al(args, 0)), ")"));
-    }
-    eger (metin_esit(name, "uzunluk")) {
-        don kat3("upp_harita_uzunluk(", recv, ")");
-    }
-    eger (metin_esit(name, "bosalt")) {
-        don kat3("upp_harita_bosalt(&(", recv, "))");
-    }
-    eger (metin_esit(name, "anahtarlar")) {
-        don kat4("upp_harita_anahtarlar(", recv, ", ", kat(sayi_metin(ktag), ")"));
+        don kat(kat3("upp_harita_var(", uret_ifade(dugum_a(member)), ", "), kat(uret_harita_kp(ktur, liste_al(args, 0)), ")"));
     }
     eger (metin_esit(name, "sil")) {
-        don kat(kat5("(bool)upp_harita_sil(&(", recv, "), ", sayi_metin(ktag), ", "), kat(uret_harita_key(ktur, liste_al(args, 0)), ")"));
+        don kat(kat3("upp_harita_kaldir(&(", uret_lvalue(dugum_a(member)), "), "), kat(uret_harita_kp(ktur, liste_al(args, 0)), ")"));
+    }
+    eger (metin_esit(name, "uzunluk")) {
+        don kat3("upp_harita_uzunluk(", uret_ifade(dugum_a(member)), ")");
+    }
+    eger (metin_esit(name, "anahtarlar")) {
+        don kat3("upp_harita_anahtar_listesi(", uret_ifade(dugum_a(member)), ")");
     }
     eger (metin_esit(name, "temizle")) {
-        don kat3("upp_harita_temizle(&(", recv, "))");
+        don kat3("upp_harita_temizle(&(", uret_lvalue(dugum_a(member)), "))");
+    }
+    eger (metin_esit(name, "bosalt")) {
+        don kat3("upp_harita_bosalt(&(", uret_lvalue(dugum_a(member)), "))");
     }
     don "0";
 }
@@ -717,7 +869,7 @@ fonk uret_metot(sayi expr) -> metin {
             mi = mi + 1;
         }
     }
-    metin s = kat5(cn, "_", dugum_ad(member), "(&(", uret_ifade(dugum_a(member)));
+    metin s = kat5(cn, "_", dugum_ad(member), "(&(", uret_lvalue(dugum_a(member)));
     s = kat(s, ")");
     eger (method != 0) {
         eger (liste_uzunluk(dugum_liste(method)) > 0) {
@@ -787,11 +939,11 @@ fonk uret_cagri_metin_son(metin c, sayi ty) -> metin {
     eger (tip_metin_mi(ty) && hoist_izin_al() != 0) {
         don uret_metin_temp(c);
     }
-    sayi cls = tur_sahipli_sinif(ty);
+    sayi cls = tur_sahip(ty);
     eger (cls != 0 && hoist_izin_al() != 0) {
         oto ad = kat("_t", sayi_metin(tmp_yeni()));
-        emit(kat5(sinif_c_ad(cls), " ", ad, " = ", kat(c, ";")));
-        drop_kaydet_fn(ad, sinif_birak_fn(cls));
+        emit(kat5(sahip_c(cls), " ", ad, " = ", kat(c, ";")));
+        drop_kaydet_fn(ad, sahip_birak(cls));
         don ad;
     }
     don c;
@@ -837,48 +989,68 @@ fonk uret_kosul(sayi e) -> metin {
     don uret_ifade(e);
 }
 
+// Tamsayı / ve %: sıfıra bölme ve LLONG_MIN / -1 taşması panik verir.
+// Bölen sıfır ve -1 dışında bir sabitse denetim atlanır.
+fonk uret_tamsayi_bol(metin op, sayi sonuc_t, metin lc, sayi be) -> metin {
+    oto rc = uret_ifade(be);
+    eger (sabit_tamsayi_mi(be)) {
+        sayi bv = sabit_tamsayi_deger(be);
+        eger (bv != 0 && bv != 0 - 1) {
+            don kat5("(", lc, kat3(" ", op, " "), rc, ")");
+        }
+    }
+    oto n = dugum_ad(sonuc_t);
+    mantik isaretsiz = metin_esit(n, "u64") || metin_esit(n, "u32") || metin_esit(n, "u16") || metin_esit(n, "ubayt");
+    metin fn = "upp_bol_s";
+    metin cast = "(long long)";
+    eger (metin_esit(op, "%")) { fn = "upp_mod_s"; }
+    eger (isaretsiz) {
+        fn = "upp_bol_u";
+        eger (metin_esit(op, "%")) { fn = "upp_mod_u"; }
+        cast = "(unsigned long long)";
+    }
+    don kat(kat5("((", uret_ctur(sonuc_t), ")", fn, "("), kat(kat5(cast, "(", lc, "), ", cast), kat3("(", rc, ")))")));
+}
+
 fonk uret_ifade(sayi e) -> metin {
     eger (e == 0) { don ""; }
     sayi t = dugum_tur(e);
     eger (t == DugumTur.D_SABIT) { don uret_sabit(e); }
-    eger (t == DugumTur.D_KIMLIK) { don dugum_ad(e); }
+    eger (t == DugumTur.D_KIMLIK) {
+        sayi fdb = fonk_deger_bildirim(e);
+        eger (fdb != 0) { don dugum_c_ad(fdb); }
+        don dugum_ad(e);
+    }
     eger (t == DugumTur.D_ATAMA) {
         oto op = dugum_ad(e);
         eger (metin_esit(op, "")) { op = "="; }
-        eger (dugum_tur(dugum_a(e)) == DugumTur.D_INDIS) {
-            sayi arr_t = tip_ifade(dugum_a(dugum_a(e)));
-            eger (liste_tur_mi(dugum_ad(arr_t))) {
-                oto elem = liste_elem_ad(dugum_ad(arr_t));
-                oto arr = uret_ifade(dugum_a(dugum_a(e)));
-                oto idx = uret_ifade(dugum_b(dugum_a(e)));
-                metin rhs = uret_ifade(dugum_b(e));
-                eger (!metin_esit(op, "=")) {
-                    oto al = uret_liste_al(elem, arr, idx);
-                    rhs = kat5("(", al, kat3(" ", intern_dilim(op, 0, 1), " "), rhs, ")");
-                }
-                don kat(kat5("upp_liste_yaz(&(", arr, "), ", sayi_metin(koleksiyon_etiket(elem)), ", "), kat(kat3(idx, ", ", uret_kol_pack(elem, rhs)), ")"));
-            }
-        }
         eger (metin_esit(op, "+=")) {
             sayi tt = tip_ifade(dugum_a(e));
-            eger (tip_metin_mi(tt) && dugum_tur(dugum_a(e)) != DugumTur.D_INDIS) {
-                don kat4("upp_metin_ekle(&(", uret_ifade(dugum_a(e)), "), ", kat(uret_ifade(dugum_b(e)), ")"));
+            eger (tip_metin_mi(tt)) {
+                oto mr = uret_ifade(dugum_b(e));
+                don kat4("upp_metin_ekle(&(", uret_lvalue(dugum_a(e)), "), ", kat(mr, ")"));
             }
         }
         eger (metin_esit(op, "=")) {
             sayi tt = tip_ifade(dugum_a(e));
-            sayi scls = tur_sahipli_sinif(tt);
+            sayi scls = tur_sahip(tt);
             eger (scls != 0) {
                 oto sdeger = uret_sinif_deger(dugum_b(e), scls);
-                oto slhs = uret_ifade(dugum_a(e));
+                oto slhs = uret_lvalue(dugum_a(e));
                 oto sas = kat("_as", sayi_metin(tmp_yeni()));
-                emit(kat5(sinif_c_ad(scls), " ", sas, " = ", kat(sdeger, ";")));
-                emit(kat4(sinif_birak_fn(scls), "(&", slhs, ");"));
+                emit(kat5(sahip_c(scls), " ", sas, " = ", kat(sdeger, ";")));
+                emit(kat4(sahip_birak(scls), "(&", slhs, ");"));
                 emit(kat4(slhs, " = ", sas, ";"));
                 don slhs;
             }
-            oto lhs = uret_ifade(dugum_a(e));
-            eger (tip_metin_mi(tt) && dugum_tur(dugum_a(e)) != DugumTur.D_INDIS) {
+            eger (tip_metin_mi(tt)) {
+                oto mrhs = dugum_b(e);
+                oto mlhs = uret_lvalue(dugum_a(e));
+                uret_metin_ata_hedef(mlhs, mrhs);
+                don mlhs;
+            }
+            oto lhs = uret_lvalue(dugum_a(e));
+            eger (yanlis) {
                 uret_metin_ata_hedef(lhs, dugum_b(e));
                 don lhs;
             }
@@ -891,7 +1063,12 @@ fonk uret_ifade(sayi e) -> metin {
                 don lhs;
             }
         }
-        don kat5("(", uret_ifade(dugum_a(e)), kat3(" ", op, " "), uret_ifade(dugum_b(e)), ")");
+        eger ((metin_esit(op, "/=") || metin_esit(op, "%=")) && tip_tam_sayi_mi(tip_ifade(dugum_a(e))) && tip_tam_sayi_mi(tip_ifade(dugum_b(e)))) {
+            oto blhs = uret_lvalue(dugum_a(e));
+            don kat5("(", blhs, " = ", uret_tamsayi_bol(intern_dilim(op, 0, 1), tip_ifade(dugum_a(e)), blhs, dugum_b(e)), ")");
+        }
+        oto grhs = uret_ifade(dugum_b(e));
+        don kat5("(", uret_lvalue(dugum_a(e)), kat3(" ", op, " "), grhs, ")");
     }
     eger (t == DugumTur.D_UCLU) {
         eger (tip_metin_mi(tip_ifade(e)) && hoist_izin_al() != 0) {
@@ -936,6 +1113,9 @@ fonk uret_ifade(sayi e) -> metin {
         eger (metin_esit(dugum_ad(e), "&&") || metin_esit(dugum_ad(e), "||")) {
             don uret_kosul(e);
         }
+        eger ((metin_esit(dugum_ad(e), "/") || metin_esit(dugum_ad(e), "%")) && tip_tam_sayi_mi(lt) && tip_tam_sayi_mi(rt)) {
+            don uret_tamsayi_bol(dugum_ad(e), tip_ifade(e), uret_ifade(dugum_a(e)), dugum_b(e));
+        }
         don kat5("(", uret_ifade(dugum_a(e)), kat3(" ", dugum_ad(e), " "), uret_ifade(dugum_b(e)), ")");
     }
     eger (t == DugumTur.D_TEKIL) {
@@ -944,7 +1124,10 @@ fonk uret_ifade(sayi e) -> metin {
     eger (t == DugumTur.D_CAGRI) {
         metin cc = "";
         sayi ct = 0;
-        eger (dugum_tur(dugum_a(e)) == DugumTur.D_UYE) {
+        sayi fdt = cagri_fonk_turu(e);
+        eger (fdt != 0) {
+            cc = uret_fonk_cagri(fdt, dugum_a(e), dugum_liste(e));
+        } yoksa eger (dugum_tur(dugum_a(e)) == DugumTur.D_UYE) {
             cc = uret_metot(e);
         } yoksa eger (dugum_tur(dugum_a(e)) == DugumTur.D_KIMLIK) {
             oto name = dugum_ad(dugum_a(e));
@@ -972,11 +1155,9 @@ fonk uret_ifade(sayi e) -> metin {
             don uret_dilim_ifade(arr_t, arr_c, uret_ifade(dugum_b(e)), uret_ifade(dugum_c(e)));
         }
         eger (liste_tur_mi(dugum_ad(arr_t))) {
-            oto al = uret_liste_al(liste_elem_ad(dugum_ad(arr_t)), uret_ifade(dugum_a(e)), uret_ifade(dugum_b(e)));
-            eger (metin_esit(liste_elem_ad(dugum_ad(arr_t)), "metin") && hoist_izin_al() != 0) {
-                don uret_metin_temp(al);
-            }
-            don al;
+            oto ietn = liste_elem_ad(dugum_ad(arr_t));
+            oto ial = uret_kol_oku(ietn, kat5("upp_liste_ptr(", uret_ifade(dugum_a(e)), ", ", uret_ifade(dugum_b(e)), ")"));
+            don uret_cagri_metin_son(ial, tn_dugum(ietn));
         }
         eger (tip_ref_dilim_mi(arr_t)) {
             oto arr_c = uret_ifade(dugum_a(e));
@@ -1393,7 +1574,7 @@ fonk uret_var(sayi d, mantik kuresel) -> bos {
     }
     mantik sahip_metin = tip_metin_mi(ty) && (dugum_bayrak(d) & 16) == 0;
     sayi scls = 0;
-    eger (!kuresel && dugum_b(d) == 0 && (dugum_bayrak(d) & 8) == 0) { scls = tur_sahipli_sinif(ty); }
+    eger (!kuresel && dugum_b(d) == 0 && (dugum_bayrak(d) & 8) == 0) { scls = tur_sahip(ty); }
     eger (scls != 0) {
         eger (dugum_c(d) != 0) {
             s = kat3(s, " = ", uret_sinif_deger(dugum_c(d), scls));
@@ -1401,7 +1582,7 @@ fonk uret_var(sayi d, mantik kuresel) -> bos {
             s = kat(s, " = {0}");
         }
         emit(kat(s, ";"));
-        drop_kaydet_fn(ad, sinif_birak_fn(scls));
+        drop_kaydet_fn(ad, sahip_birak(scls));
     } yoksa eger (sahip_metin) {
         s = kat(s, " = NULL");
         emit(kat(s, ";"));
@@ -1423,7 +1604,7 @@ fonk uret_var(sayi d, mantik kuresel) -> bos {
             s = kat(s, uret_ifade(dugum_c(d)));
         }
         emit(kat(s, ";"));
-    } yoksa eger (dugum_ptrd(ty) > 0 || tip_metin_mi(ty)) {
+    } yoksa eger (dugum_ptrd(ty) > 0 || tip_metin_mi(ty) || tip_fonk_mi(ty)) {
         s = kat(s, " = NULL");
         emit(kat(s, ";"));
     } yoksa eger (tip_gorunum_mi(ty) || liste_tur_mi(dugum_ad(ty)) || harita_tur_mi(dugum_ad(ty))) {
@@ -1573,6 +1754,8 @@ fonk uret_cumle(sayi stmt) -> bos {
             emit("{");
             indent_ekle(1);
             drop_cerceve_ac();
+            oto sw_son = kat("_upp_secim_son", sayi_metin(swid));
+            kir_it(drop_cer_cur_al(), sw_son);
             emit(kat3("char* ", swv, " = NULL;"));
             drop_kaydet(swv);
             emit(kat(kat3("upp_metin_ata(&(", swv, "), "), kat(uret_ifade(dugum_a(stmt)), ");")));
@@ -1610,6 +1793,8 @@ fonk uret_cumle(sayi stmt) -> bos {
                 emit("}");
                 i = i + 1;
             }
+            emit(kat(sw_son, ": ;"));
+            kir_cek();
             emit_drop_cerceve();
             drop_cerceve_pop();
             indent_ekle(-1);
@@ -1617,6 +1802,7 @@ fonk uret_cumle(sayi stmt) -> bos {
             don;
         }
         emit(kat3("switch (", uret_ifade(dugum_a(stmt)), ") {"));
+        kir_it(drop_cer_cur_al(), "");
         indent_ekle(1);
         sayi L = dugum_liste(stmt);
         sayi i = 0;
@@ -1632,11 +1818,7 @@ fonk uret_cumle(sayi stmt) -> bos {
             sayi sl = dugum_liste(c);
             sayi j = 0;
             iken (j < liste_uzunluk(sl)) {
-                sayi s = liste_al(sl, j);
-                eger (dugum_tur(s) == DugumTur.D_DUR) {
-                    emit_drop_cerceve();
-                }
-                uret_cumle(s);
+                uret_cumle(liste_al(sl, j));
                 j = j + 1;
             }
             emit_drop_cerceve();
@@ -1645,6 +1827,7 @@ fonk uret_cumle(sayi stmt) -> bos {
             emit("}");
             i = i + 1;
         }
+        kir_cek();
         indent_ekle(-1);
         emit("}");
         don;
@@ -1678,23 +1861,25 @@ fonk uret_cumle(sayi stmt) -> bos {
             s = uret_ctur(dugum_a(stmt));
             s = kat(s, " ");
             s = kat(s, dugum_ad(stmt));
+            oto hetn = liste_elem_ad(dugum_ad(it_t));
+            oto hp = kat5("upp_liste_ptr(", arr, ", ", ix, ")");
+            sayi hk = tur_sahip(tn_dugum(hetn));
             eger (tip_metin_mi(dugum_a(stmt))) {
                 s = kat(s, " = NULL;");
                 emit(s);
                 drop_kaydet(dugum_ad(stmt));
-                emit(kat(kat3("upp_metin_ata(&(", dugum_ad(stmt), "), "), kat(uret_liste_al(liste_elem_ad(dugum_ad(it_t)), arr, ix), ");")));
+                emit(kat(kat3("upp_metin_ata(&(", dugum_ad(stmt), "), "), kat(uret_kol_ham(hetn, hp), ");")));
+            } yoksa eger (hk != 0) {
+                emit(kat(kat3(s, " = ", uret_kol_oku(hetn, hp)), ";"));
+                drop_kaydet_fn(dugum_ad(stmt), sahip_birak(hk));
             } yoksa {
-                s = kat(s, " = ");
-                s = kat(s, uret_liste_al(liste_elem_ad(dugum_ad(it_t)), arr, ix));
-                s = kat(s, ";");
-                emit(s);
+                emit(kat(kat3(s, " = ", uret_kol_ham(hetn, hp)), ";"));
             }
         } yoksa eger (harita_tur_mi(dugum_ad(it_t))) {
             oto ktur = harita_anahtar_ad(dugum_ad(it_t));
-            sayi ktag = koleksiyon_etiket(ktur);
             sayi kid = tmp_yeni();
             oto keys = kat("_upp_hk", sayi_metin(kid));
-            emit(kat(kat5("UppKolListe ", keys, " = upp_harita_anahtarlar(", arr, ", "), kat(sayi_metin(ktag), ");")));
+            emit(kat5("UppKolListe ", keys, " = upp_harita_anahtar_listesi(", arr, ");"));
             her_kaydet(keys);
             s = "for (";
             s = kat(s, ix);
@@ -1707,14 +1892,18 @@ fonk uret_cumle(sayi stmt) -> bos {
             s = kat(s, "++) {");
             emit(s);
             indent_ekle(1);
-            s = uret_ctur(dugum_a(stmt));
-            s = kat(s, " ");
-            s = kat(s, dugum_ad(stmt));
-            s = kat(s, " = ");
-            s = kat(s, uret_liste_al(ktur, keys, ix));
-            s = kat(s, ";");
-            emit(s);
+            drop_cerceve_ac();
+            oto hkp = kat5("upp_liste_ptr(", keys, ", ", ix, ")");
+            eger (metin_esit(ktur, "metin")) {
+                emit(kat3("char* ", dugum_ad(stmt), " = NULL;"));
+                drop_kaydet(dugum_ad(stmt));
+                emit(kat(kat3("upp_metin_ata(&(", dugum_ad(stmt), "), "), kat(uret_kol_ham("metin", hkp), ");")));
+            } yoksa {
+                emit(kat(kat5(uret_ctur(dugum_a(stmt)), " ", dugum_ad(stmt), " = ", uret_kol_ham("sayi", hkp)), ";"));
+            }
             uret_govde(dugum_c(stmt));
+            emit_drop_cerceve();
+            drop_cerceve_pop();
             indent_ekle(-1);
             emit("}");
             emit(kat3("upp_liste_bosalt(&(", keys, "));"));
@@ -1807,9 +1996,9 @@ fonk uret_cumle(sayi stmt) -> bos {
             }
             emit_don_temizlik();
             emit("return _retval;");
-        } yoksa eger (tur_sahipli_sinif(rt) != 0) {
-            sayi rcls = tur_sahipli_sinif(rt);
-            oto rcn = sinif_c_ad(rcls);
+        } yoksa eger (tur_sahip(rt) != 0) {
+            sayi rcls = tur_sahip(rt);
+            oto rcn = sahip_c(rcls);
             oto rvt = kat("_rv", sayi_metin(tmp_yeni()));
             sayi re = dugum_a(stmt);
             eger (dugum_tur(re) == DugumTur.D_KIMLIK && drop_ad_var(dugum_ad(re)) && tablo_bul(3, dugum_ad(re)) == 0) {
@@ -1830,11 +2019,15 @@ fonk uret_cumle(sayi stmt) -> bos {
         don;
     }
     eger (t == DugumTur.D_DUR) {
-        sayi dc = drop_dongu_al();
-        eger (dc > 0) {
-            emit_drop_min(dc + 1);
+        eger (kir_var()) {
+            emit_drop_min(kir_cer_al() + 1);
         }
-        emit("break;");
+        oto ke = kir_etiket_al();
+        eger (metin_esit(ke, "")) {
+            emit("break;");
+        } yoksa {
+            emit(kat3("goto ", ke, ";"));
+        }
         don;
     }
     eger (t == DugumTur.D_DEVAM) {
@@ -1934,11 +2127,11 @@ fonk uret_fonksiyon(sayi decl) -> bos {
             emit(kat(kat3(pad, " = upp_metin_kopya(", pad), ");"));
             drop_kaydet(pad);
         } yoksa {
-            sayi pcls = tur_sahipli_sinif(dugum_a(p));
+            sayi pcls = tur_sahip(dugum_a(p));
             eger (pcls != 0) {
                 oto pad = dugum_ad(p);
-                emit(kat5(pad, " = ", sinif_kopya_fn(pcls), "(", kat(pad, ");")));
-                drop_kaydet_fn(pad, sinif_birak_fn(pcls));
+                emit(kat5(pad, " = ", sahip_kopya(pcls), "(", kat(pad, ");")));
+                drop_kaydet_fn(pad, sahip_birak(pcls));
             }
         }
         pi = pi + 1;
@@ -2002,6 +2195,9 @@ fonk uret_program(sayi program) -> bos {
     tampon_sifirla();
     tmp_sifirla();
     lit_havuz_sifirla();
+    g_ft_id.temizle();
+    g_ft_tanim = metin_kopya_yeni("");
+    g_ft_n = 0;
     eger (serbest_mi()) {
         emit("/* u++ serbest (freestanding) hedef */");
     } yoksa eger (linux_mi()) {
@@ -2093,6 +2289,7 @@ fonk uret_program(sayi program) -> bos {
         }
         i = i + 1;
     }
+    emit(ft_havuz_isaret());
     emit("");
     i = 0;
     iken (i < liste_uzunluk(decls)) {
@@ -2249,5 +2446,6 @@ fonk uret_program(sayi program) -> bos {
         emit("    _upp_sonsuz_dur();");
         emit("}");
     }
+    tampon_degistir(ft_havuz_isaret(), g_ft_tanim);
     tampon_degistir(lit_havuz_isaret(), lit_havuz_tanim());
 }
