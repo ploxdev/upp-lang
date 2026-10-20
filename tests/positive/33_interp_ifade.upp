@@ -1,0 +1,44 @@
+// Pozitif: interpolasyonda tam ifadeler; upp.satir_yaz her yazdırılabilir türü alır
+// @stdout
+// ilk=85 uzunluk=4 toplam=7
+// Ali (3 yaş) kare=9
+// parantez=3 mantik=dogru u=18446744073709551615
+// süslü: {kaçış} { boşluk } {0}
+// 42
+// 2.5
+// yanlis
+// sonuc: Merhaba Ayşe!
+
+sinif Kisi {
+    metin ad;
+    sayi yas;
+}
+
+fonk kare(sayi x) -> sayi {
+    don x * x;
+}
+
+fonk selam(metin ad) -> metin {
+    don "Merhaba {ad}!";
+}
+
+fonk ana() -> sayi {
+    sayi puanlar[] = [85, 90];
+    metin s = "Ağaç";
+    sayi a = 3;
+    sayi b = 2;
+    Kisi k;
+    k.ad = "Ali";
+    k.yas = a;
+    u64 m = 18446744073709551615u64;
+    upp.satir_yaz("ilk={puanlar[0]} uzunluk={upp.uzunluk(s)} toplam={a + b * 2}");
+    upp.satir_yaz("{k.ad} ({k.yas} yaş) kare={kare(a)}");
+    upp.satir_yaz("parantez={(1 + 2)} mantik={a > b} u={m}");
+    upp.satir_yaz("süslü: {{kaçış}} { boşluk } {0}");
+    upp.satir_yaz(42);
+    upp.satir_yaz(2.5);
+    upp.satir_yaz(a < b);
+    metin r = "sonuc: {selam(\"Ayşe\")}";
+    upp.satir_yaz(r);
+    don 0;
+}

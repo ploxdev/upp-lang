@@ -1,0 +1,9 @@
+// Negatif: upp.bellek kısayolu kaldırıldı
+// @icerir: upp.windows.bellek.sayioku
+
+fonk ana() -> sayi {
+    guvensiz {
+        sayi v = upp.bellek.sayioku(0);
+    }
+    don 0;
+}

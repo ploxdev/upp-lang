@@ -186,8 +186,8 @@
     "body": [
       "SurecCikti ${1:r} = upp.sistem.calistir(\"${2:echo ok}\");",
       "upp.satir_yaz(\"{${1:r}.kod}\");",
-      "eger (${1:r}.cikti != yok) {",
-      "    upp.metin_bosalt(${1:r}.cikti);",
+      "eger (${1:r}.basarili) {",
+      "    upp.satir_yaz(${1:r}.cikti);",
       "}"
     ],
     "description": "SurecCikti / calistir"

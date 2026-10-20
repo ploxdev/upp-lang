@@ -1,0 +1,7 @@
+// Negatif: yerleşik argüman sayısı tablodan denetlenir
+// @icerir: 3 argüman bekler, 2 verildi
+
+fonk ana() -> sayi {
+    metin s = upp.metin.kes("merhaba", 1);
+    don 0;
+}

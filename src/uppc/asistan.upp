@@ -1,0 +1,213 @@
+// Derleme asistanı: upp.proje + uppc yeni / derle / calistir / asistan.
+//
+// upp.proje biçimi (satır başına 'anahtar = değer', '#' yorum):
+//     ad = merhaba
+//     giris = kaynak/ana.upp
+//     hedef = yerel | windows | linux | serbest | cekirdek
+//     cikti = derleme/merhaba
+//     bayraklar = --json-hata        (isteğe bağlı, ek uppc bayrakları)
+
+harita[metin, metin] g_proje;
+metin g_proje_dizin = "";
+
+fonk pj_renk(metin kod, metin s) -> metin {
+    don "\e[" + kod + "m" + s + "\u001b[0m";
+}
+
+fonk pj_oku(metin dizin) -> mantik {
+    g_proje.temizle();
+    g_proje_dizin = dizin;
+    oto icerik = upp.dosya.oku(upp.yol.birlestir(dizin, "upp.proje"));
+    eger (icerik == yok) { don yanlis; }
+    liste[metin] satirlar = upp.metin.bol(kaynak_lf(icerik), "\n");
+    sayi i = 0;
+    iken (i < satirlar.uzunluk()) {
+        oto st = upp.metin.kirp(satirlar.al(i));
+        sayi esit = upp.metin.bul(st, "=");
+        eger (!metin_esit(st, "") && !upp.metin.baslar(st, "#") && esit > 0) {
+            oto k = upp.metin.kirp(upp.metin.kes(st, 0, esit));
+            oto d = upp.metin.kirp(upp.metin.kes(st, esit + 1, upp.uzunluk(st) - esit - 1));
+            g_proje.koy(k, d);
+        }
+        i = i + 1;
+    }
+    don dogru;
+}
+
+fonk pj_al(metin k, metin yedek) -> metin {
+    eger (g_proje.var_mi(k)) { don g_proje.al(k); }
+    don yedek;
+}
+
+fonk pj_yaz() -> mantik {
+    metin o = "# u++ projesi (uppc asistan)\n";
+    liste[metin] anahtarlar = g_proje.anahtarlar();
+    sayi i = 0;
+    iken (i < anahtarlar.uzunluk()) {
+        oto k = anahtarlar.al(i);
+        o += k + " = " + g_proje.al(k) + "\n";
+        i = i + 1;
+    }
+    don os_dosya_yaz(upp.yol.birlestir(g_proje_dizin, "upp.proje"), o);
+}
+
+fonk pj_kendi_exe() -> metin {
+    oto e = os_yol_gercek(upp.arguman(0));
+    eger (!upp.dosya.var_mi(e) && os_host_linux() == 0) { e = os_yol_gercek(upp.arguman(0) + ".exe"); }
+    don e;
+}
+
+fonk pj_sablon(metin ad, mantik cekirdek) -> metin {
+    eger (cekirdek) {
+        metin o = "// " + ad + " — u++ çekirdeği (uppc calistir ile QEMU'da açılır)\n\n";
+        o += "fonk qemu_cik(sayi kod) -> bos {\n    guvensiz {\n        upp.cekirdek.port_yaz32(0xf4, kod);\n    }\n}\n\n";
+        o += "fonk ana() -> sayi {\n    upp.satir_yaz(\"Merhaba, çekirdek!\");\n    qemu_cik(0);\n    don 0;\n}\n";
+        don o;
+    }
+    metin o = "// " + ad + " — u++ programı\n\n";
+    o += "fonk ana() -> sayi {\n    metin ad = \"" + ad + "\";\n    upp.satir_yaz(\"Merhaba, {{ad}}!\");\n    don 0;\n}\n";
+    don o;
+}
+
+// uppc yeni <ad> [--hedef h]
+fonk pj_yeni(metin ad, metin hedef) -> sayi {
+    eger (metin_esit(ad, "")) {
+        upp.satir_yaz("[u++ HATA] proje adı gerekli: uppc yeni <ad> [--hedef cekirdek]");
+        don 1;
+    }
+    eger (upp.dosya.var_mi(upp.yol.birlestir(ad, "upp.proje"))) {
+        upp.yaz("[u++ HATA] zaten bir proje var: ");
+        upp.satir_yaz(ad);
+        don 1;
+    }
+    upp.yol.dizin_olustur(upp.yol.birlestir(ad, "kaynak"));
+    g_proje.temizle();
+    g_proje_dizin = ad;
+    g_proje.koy("ad", upp.yol.dosya_adi(ad));
+    g_proje.koy("giris", "kaynak/ana.upp");
+    g_proje.koy("hedef", hedef);
+    g_proje.koy("cikti", "derleme/" + upp.yol.dosya_adi(ad));
+    eger (!pj_yaz()) { don 1; }
+    os_dosya_yaz(upp.yol.birlestir(ad, "kaynak/ana.upp"), pj_sablon(upp.yol.dosya_adi(ad), metin_esit(hedef, "cekirdek")));
+    upp.yaz(pj_renk("32", "[u++] proje oluşturuldu: "));
+    upp.satir_yaz(ad);
+    upp.satir_yaz("        cd " + ad + " && uppc calistir");
+    don 0;
+}
+
+// uppc derle / calistir [dizin]
+fonk pj_derle(metin dizin, mantik calistir) -> sayi {
+    eger (!pj_oku(dizin)) {
+        upp.yaz("[u++ HATA] upp.proje bulunamadı: ");
+        upp.satir_yaz(upp.yol.birlestir(dizin, "upp.proje"));
+        don 1;
+    }
+    oto giris = upp.yol.birlestir(dizin, pj_al("giris", "kaynak/ana.upp"));
+    oto cikti = upp.yol.birlestir(dizin, pj_al("cikti", "derleme/" + pj_al("ad", "program")));
+    oto hedef = pj_al("hedef", "yerel");
+    upp.yol.dizin_olustur(upp.yol.dizin(cikti));
+    metin cmd = os_cmd_parca(pj_kendi_exe()) + " " + os_cmd_parca(giris) + " -o " + os_cmd_parca(cikti);
+    eger (!metin_esit(hedef, "yerel") && !metin_esit(hedef, "")) { cmd += " --hedef " + hedef; }
+    eger (!calistir) { cmd += " --sadece-derle"; }
+    oto ek = pj_al("bayraklar", "");
+    eger (!metin_esit(ek, "")) { cmd += " " + ek; }
+    upp.satir_yaz(pj_renk("36", "[u++] " + pj_al("ad", "?") + " → " + hedef));
+    don upp.sistem.kos(cmd);
+}
+
+fonk pj_arac_durum(metin ad) -> metin {
+    oto p = upp.sistem.komut_bul(ad);
+    eger (p != yok && !metin_esit(p, "")) { don pj_renk("32", "var") + "  " + p; }
+    don pj_renk("31", "yok");
+}
+
+fonk pj_baslik() -> bos {
+    upp.satir_yaz("");
+    upp.satir_yaz(pj_renk("1;36", "╔══════════════════════════════════════════════╗"));
+    upp.satir_yaz(pj_renk("1;36", "║            u++ derleme asistanı              ║"));
+    upp.satir_yaz(pj_renk("1;36", "╚══════════════════════════════════════════════╝"));
+    eger (pj_oku(g_proje_dizin)) {
+        upp.satir_yaz("  Proje : " + pj_renk("1", pj_al("ad", "?")) + "   (" + upp.yol.gercek(g_proje_dizin) + ")");
+        upp.satir_yaz("  Giriş : " + pj_al("giris", "?") + "   Hedef: " + pj_renk("33", pj_al("hedef", "yerel")) + "   Çıktı: " + pj_al("cikti", "?"));
+    } yoksa {
+        upp.satir_yaz(pj_renk("33", "  Bu dizinde upp.proje yok — 1 ile yeni proje açın."));
+    }
+    upp.satir_yaz("");
+    upp.satir_yaz("  1) Yeni proje        2) Derle             3) Derle ve çalıştır");
+    upp.satir_yaz("  4) Hedef seç         5) Araç zinciri      6) Derleyiciyi kendisiyle derle");
+    upp.satir_yaz("  0) Çıkış");
+    upp.yaz(pj_renk("1", "\n  Seçim: "));
+}
+
+fonk pj_sor(metin soru) -> metin {
+    upp.yaz("  " + soru);
+    oto g = upp.giris();
+    eger (g == yok) { don ""; }
+    don upp.metin.kirp(g);
+}
+
+fonk pj_hedef_sec() -> bos {
+    upp.satir_yaz("  1) yerel (bu işletim sistemi)  2) windows  3) linux  4) serbest (.o)  5) cekirdek (x86_64 + QEMU)");
+    oto s = pj_sor("Hedef: ");
+    metin h = "";
+    eger (metin_esit(s, "1")) { h = "yerel"; }
+    yoksa eger (metin_esit(s, "2")) { h = "windows"; }
+    yoksa eger (metin_esit(s, "3")) { h = "linux"; }
+    yoksa eger (metin_esit(s, "4")) { h = "serbest"; }
+    yoksa eger (metin_esit(s, "5")) { h = "cekirdek"; }
+    eger (metin_esit(h, "")) { don; }
+    g_proje.koy("hedef", h);
+    eger (pj_yaz()) { upp.satir_yaz(pj_renk("32", "  Hedef kaydedildi: " + h)); }
+}
+
+fonk pj_araclar() -> bos {
+    upp.satir_yaz("  gcc                : " + pj_arac_durum("gcc"));
+    upp.satir_yaz("  x86_64-elf-gcc     : " + pj_arac_durum("x86_64-elf-gcc"));
+    upp.satir_yaz("  wsl                : " + pj_arac_durum("wsl"));
+    upp.satir_yaz("  qemu-system-x86_64 : " + pj_arac_durum("qemu-system-x86_64"));
+    eger (ck_arac_bul()) {
+        metin yol = "yerel";
+        eger (g_ck_wsl) { yol = "WSL"; }
+        upp.satir_yaz("  Çekirdek derleme   : " + pj_renk("32", "hazır (" + yol + " " + g_ck_gcc + ")"));
+    } yoksa {
+        upp.satir_yaz("  Çekirdek derleme   : " + pj_renk("31", "x86_64 ELF araç zinciri yok"));
+    }
+    oto q = ck_qemu_komut();
+    eger (metin_esit(q, "")) {
+        upp.satir_yaz("  Çekirdek çalıştırma: " + pj_renk("31", "QEMU yok") + " (sudo apt install qemu-system-x86)");
+    } yoksa {
+        upp.satir_yaz("  Çekirdek çalıştırma: " + pj_renk("32", q));
+    }
+}
+
+fonk pj_asistan(metin dizin) -> sayi {
+    g_proje_dizin = dizin;
+    iken (dogru) {
+        pj_baslik();
+        oto g = upp.giris();
+        eger (g == yok) { don 0; }
+        oto s = upp.metin.kirp(g);
+        eger (metin_esit(s, "0") || metin_esit(s, "q")) { don 0; }
+        eger (metin_esit(s, "1")) {
+            oto ad = pj_sor("Proje adı: ");
+            upp.satir_yaz("  1) yerel program   2) x86_64 çekirdek");
+            oto t = pj_sor("Tür: ");
+            metin h = "yerel";
+            eger (metin_esit(t, "2")) { h = "cekirdek"; }
+            eger (pj_yeni(upp.yol.birlestir(dizin, ad), h) == 0) {
+                g_proje_dizin = upp.yol.birlestir(dizin, ad);
+            }
+        } yoksa eger (metin_esit(s, "2")) {
+            pj_derle(g_proje_dizin, yanlis);
+        } yoksa eger (metin_esit(s, "3")) {
+            pj_derle(g_proje_dizin, dogru);
+        } yoksa eger (metin_esit(s, "4")) {
+            eger (pj_oku(g_proje_dizin)) { pj_hedef_sec(); }
+        } yoksa eger (metin_esit(s, "5")) {
+            pj_araclar();
+        } yoksa eger (metin_esit(s, "6")) {
+            upp.sistem.kos(os_cmd_parca(pj_kendi_exe()) + " kendini-derle");
+        }
+    }
+    don 0;
+}

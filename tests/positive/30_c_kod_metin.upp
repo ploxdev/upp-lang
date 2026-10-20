@@ -1,0 +1,16 @@
+// Pozitif: c_kod ile metne yazılan ham C sabiti serbest bırakılmaz (çökme yok)
+// @stdout
+// c_sabiti
+// son
+
+fonk ana() -> sayi {
+    metin s = "a";
+    guvensiz {
+        c_kod {
+            s = "c_sabiti";
+        }
+    }
+    upp.satir_yaz(s);
+    upp.satir_yaz("son");
+    don 0;
+}

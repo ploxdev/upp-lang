@@ -1,0 +1,928 @@
+// Sınır Savaşları — tur tabanlı strateji
+// Harita, arazi, şehir, sis, dört birim türü, kaynak, muharebe, yapay zekâ.
+//
+// Oynanış:  derleme\sinir_savaslari.exe
+// Demo:     derleme\sinir_savaslari.exe demo
+//
+// Komutlar: yardim | harita | birimler | sec x y | git x y | saldir x y
+//           asker tur | bitir | durum | cik
+// Kisa:     h m b s g a u e d q
+
+sabit sayi EN = 12;
+sabit sayi BOY = 8;
+
+sabit sayi Z_OVA = 0;
+sabit sayi Z_ORMAN = 1;
+sabit sayi Z_TEPE = 2;
+sabit sayi Z_SU = 3;
+sabit sayi Z_SEHIR = 4;
+
+sabit sayi T_PIYADE = 0;
+sabit sayi T_OKCU = 1;
+sabit sayi T_SUVARI = 2;
+sabit sayi T_MANCER = 3;
+
+sabit sayi TAKIM_OYUNCU = 0;
+sabit sayi TAKIM_DUSMAN = 1;
+sabit sayi TAKIM_YOK = 2;
+
+liste[sayi] zemin;
+liste[sayi] sehir_x;
+liste[sayi] sehir_y;
+liste[sayi] sehir_sahip;
+
+liste[sayi] b_x;
+liste[sayi] b_y;
+liste[sayi] b_tur;
+liste[sayi] b_hp;
+liste[sayi] b_takim;
+liste[sayi] b_mp;
+
+liste[metin] gunluk;
+
+sayi altin_oyuncu = 90;
+sayi altin_dusman = 90;
+sayi yiyecek_oyuncu = 24;
+sayi yiyecek_dusman = 24;
+sayi tur_no = 1;
+sayi secili = -1;
+sayi kazanan = -1;
+mantik demo_mod = yanlis;
+
+fonk idx(sayi x, sayi y) -> sayi {
+    don y * EN + x;
+}
+
+fonk icerde_mi(sayi x, sayi y) -> mantik {
+    don x >= 0 && x < EN && y >= 0 && y < BOY;
+}
+
+fonk uzaklik(sayi x1, sayi y1, sayi x2, sayi y2) -> sayi {
+    don upp.mutlak(x1 - x2) + upp.mutlak(y1 - y2);
+}
+
+fonk tur_ad(sayi t) -> metin {
+    eger (t == T_PIYADE) { don "piyade"; }
+    eger (t == T_OKCU) { don "okcu"; }
+    eger (t == T_SUVARI) { don "suvari"; }
+    don "mancer";
+}
+
+fonk tur_sembol(sayi t, sayi takim) -> metin {
+    eger (takim == TAKIM_OYUNCU) {
+        eger (t == T_PIYADE) { don "p"; }
+        eger (t == T_OKCU) { don "o"; }
+        eger (t == T_SUVARI) { don "s"; }
+        don "m";
+    }
+    eger (t == T_PIYADE) { don "P"; }
+    eger (t == T_OKCU) { don "O"; }
+    eger (t == T_SUVARI) { don "S"; }
+    don "M";
+}
+
+fonk zemin_sembol(sayi z) -> metin {
+    eger (z == Z_OVA) { don "."; }
+    eger (z == Z_ORMAN) { don "*"; }
+    eger (z == Z_TEPE) { don "^"; }
+    eger (z == Z_SU) { don "~"; }
+    don "#";
+}
+
+fonk can_max(sayi t) -> sayi {
+    eger (t == T_PIYADE) { don 12; }
+    eger (t == T_OKCU) { don 8; }
+    eger (t == T_SUVARI) { don 10; }
+    don 9;
+}
+
+fonk saldiri_gucu(sayi t) -> sayi {
+    eger (t == T_PIYADE) { don 4; }
+    eger (t == T_OKCU) { don 5; }
+    eger (t == T_SUVARI) { don 5; }
+    don 6;
+}
+
+fonk menzil_al(sayi t) -> sayi {
+    eger (t == T_OKCU) { don 2; }
+    don 1;
+}
+
+fonk mp_max(sayi t) -> sayi {
+    eger (t == T_PIYADE) { don 2; }
+    eger (t == T_OKCU) { don 2; }
+    eger (t == T_SUVARI) { don 4; }
+    don 1;
+}
+
+fonk ucret(sayi t) -> sayi {
+    eger (t == T_PIYADE) { don 40; }
+    eger (t == T_OKCU) { don 55; }
+    eger (t == T_SUVARI) { don 70; }
+    don 80;
+}
+
+fonk hareket_maliyeti(sayi z) -> sayi {
+    eger (z == Z_SU) { don 99; }
+    eger (z == Z_ORMAN) { don 2; }
+    eger (z == Z_TEPE) { don 2; }
+    don 1;
+}
+
+fonk log_ekle(metin s) -> bos {
+    gunluk.ekle(s);
+    eger (gunluk.uzunluk() > 8) {
+        gunluk.sil(0);
+    }
+}
+
+fonk birim_bul(sayi x, sayi y) -> sayi {
+    sayi i = 0;
+    iken (i < b_x.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_x.al(i) == x && b_y.al(i) == y) {
+            don i;
+        }
+        i = i + 1;
+    }
+    don -1;
+}
+
+fonk sehir_bul(sayi x, sayi y) -> sayi {
+    sayi i = 0;
+    iken (i < sehir_x.uzunluk()) {
+        eger (sehir_x.al(i) == x && sehir_y.al(i) == y) {
+            don i;
+        }
+        i = i + 1;
+    }
+    don -1;
+}
+
+fonk birim_ekle(sayi x, sayi y, sayi t, sayi takim) -> bos {
+    b_x.ekle(x);
+    b_y.ekle(y);
+    b_tur.ekle(t);
+    b_hp.ekle(can_max(t));
+    b_takim.ekle(takim);
+    b_mp.ekle(mp_max(t));
+}
+
+fonk sehir_ekle(sayi x, sayi y, sayi sahip) -> bos {
+    zemin.yaz(idx(x, y), Z_SEHIR);
+    sehir_x.ekle(x);
+    sehir_y.ekle(y);
+    sehir_sahip.ekle(sahip);
+}
+
+fonk harita_kur() -> bos {
+    zemin.temizle();
+    sehir_x.temizle();
+    sehir_y.temizle();
+    sehir_sahip.temizle();
+    sayi n = EN * BOY;
+    sayi i = 0;
+    iken (i < n) {
+        zemin.ekle(Z_OVA);
+        i = i + 1;
+    }
+    sayi y = 0;
+    iken (y < BOY) {
+        sayi nehir = 5 + (y % 2);
+        eger (icerde_mi(nehir, y)) {
+            zemin.yaz(idx(nehir, y), Z_SU);
+        }
+        y = y + 1;
+    }
+    i = 0;
+    iken (i < 18) {
+        sayi x = upp.rastgele(0, EN - 1);
+        y = upp.rastgele(0, BOY - 1);
+        eger (zemin.al(idx(x, y)) == Z_OVA) {
+            eger (i % 2 == 0) {
+                zemin.yaz(idx(x, y), Z_ORMAN);
+            } yoksa {
+                zemin.yaz(idx(x, y), Z_TEPE);
+            }
+        }
+        i = i + 1;
+    }
+    sehir_ekle(1, 1, TAKIM_OYUNCU);
+    sehir_ekle(2, 6, TAKIM_OYUNCU);
+    sehir_ekle(10, 1, TAKIM_DUSMAN);
+    sehir_ekle(9, 6, TAKIM_DUSMAN);
+    sehir_ekle(6, 3, TAKIM_YOK);
+}
+
+fonk gorunur_mu(sayi x, sayi y) -> mantik {
+    eger (demo_mod) { don dogru; }
+    sayi i = 0;
+    iken (i < b_x.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_takim.al(i) == TAKIM_OYUNCU) {
+            eger (uzaklik(x, y, b_x.al(i), b_y.al(i)) <= 3) { don dogru; }
+        }
+        i = i + 1;
+    }
+    i = 0;
+    iken (i < sehir_x.uzunluk()) {
+        eger (sehir_sahip.al(i) == TAKIM_OYUNCU) {
+            eger (uzaklik(x, y, sehir_x.al(i), sehir_y.al(i)) <= 2) { don dogru; }
+        }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+fonk sehir_say(sayi takim) -> sayi {
+    sayi n = 0;
+    sayi i = 0;
+    iken (i < sehir_sahip.uzunluk()) {
+        eger (sehir_sahip.al(i) == takim) { n = n + 1; }
+        i = i + 1;
+    }
+    don n;
+}
+
+fonk canli_say(sayi takim) -> sayi {
+    sayi n = 0;
+    sayi i = 0;
+    iken (i < b_hp.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_takim.al(i) == takim) { n = n + 1; }
+        i = i + 1;
+    }
+    don n;
+}
+
+fonk harita_ciz() -> bos {
+    upp.satir_yaz("");
+    upp.satir_yaz("    0 1 2 3 4 5 6 7 8 9 a b");
+    upp.satir_yaz("    ------------------------");
+    sayi y = 0;
+    iken (y < BOY) {
+        metin satir = "{y} |";
+        eger (y < 10) {
+            satir = " {y} |";
+        }
+        sayi x = 0;
+        iken (x < EN) {
+            eger (!gorunur_mu(x, y)) {
+                satir = satir + " ?";
+            } yoksa {
+                sayi bi = birim_bul(x, y);
+                eger (bi >= 0) {
+                    metin sm = tur_sembol(b_tur.al(bi), b_takim.al(bi));
+                    eger (bi == secili) {
+                        satir = satir + "*" + sm;
+                    } yoksa {
+                        satir = satir + " " + sm;
+                    }
+                } yoksa {
+                    sayi si = sehir_bul(x, y);
+                    eger (si >= 0) {
+                        sayi sp = sehir_sahip.al(si);
+                        eger (sp == TAKIM_OYUNCU) { satir = satir + " A"; }
+                        yoksa eger (sp == TAKIM_DUSMAN) { satir = satir + " K"; }
+                        yoksa { satir = satir + " @"; }
+                    } yoksa {
+                        satir = satir + " " + zemin_sembol(zemin.al(idx(x, y)));
+                    }
+                }
+            }
+            x = x + 1;
+        }
+        upp.satir_yaz(satir);
+        y = y + 1;
+    }
+    upp.satir_yaz("    -------------------------");
+    upp.satir_yaz("Arazi .ova *orman ^tepe ~su   Sehir A=sen K=kuzey @=bagimsiz");
+    upp.satir_yaz("Birim p/o/s/m senin   P/O/S/M Kuzey Hanligi   *p secili");
+}
+
+fonk durum_yaz() -> bos {
+    sayi so = sehir_say(TAKIM_OYUNCU);
+    sayi sk = sehir_say(TAKIM_DUSMAN);
+    sayi bo = canli_say(TAKIM_OYUNCU);
+    sayi bk = canli_say(TAKIM_DUSMAN);
+    upp.satir_yaz("");
+    upp.satir_yaz("=== SINIR SAVASLARI  tur {tur_no}/30 ===");
+    upp.satir_yaz("Sen    altin={altin_oyuncu} yiyecek={yiyecek_oyuncu} sehir={so} birim={bo}");
+    upp.satir_yaz("Kuzey  altin={altin_dusman} yiyecek={yiyecek_dusman} sehir={sk} birim={bk}");
+    eger (secili >= 0 && secili < b_hp.uzunluk() && b_hp.al(secili) > 0) {
+        metin ad = tur_ad(b_tur.al(secili));
+        sayi hx = b_x.al(secili);
+        sayi hy = b_y.al(secili);
+        sayi hp = b_hp.al(secili);
+        sayi hm = can_max(b_tur.al(secili));
+        sayi mp = b_mp.al(secili);
+        upp.satir_yaz("Secili #{secili} {ad} ({hx},{hy}) can {hp}/{hm} hareket {mp}");
+    } yoksa {
+        upp.satir_yaz("Secili birim yok.  ornek: sec 1 1");
+    }
+    eger (gunluk.uzunluk() > 0) {
+        upp.satir_yaz("-- son olaylar --");
+        sayi i = 0;
+        iken (i < gunluk.uzunluk()) {
+            metin g = gunluk.al(i);
+            upp.satir_yaz("  {g}");
+            i = i + 1;
+        }
+    }
+}
+
+fonk yardim_yaz() -> bos {
+    upp.satir_yaz("");
+    upp.satir_yaz("Hedef: Kuzey Hanligi'nin sehirlerini dusur veya ordusunu yok et.");
+    upp.satir_yaz("Her sehir +28 altin +10 yiyecek. Her birim 3 yiyecek yer.");
+    upp.satir_yaz("Yiyecek eksiye duserse ac kalan birimler 2 can kaybeder.");
+    upp.satir_yaz("");
+    upp.satir_yaz("Komutlar:");
+    upp.satir_yaz("  harita / m          haritayi ciz");
+    upp.satir_yaz("  durum / d           kaynak ve secim");
+    upp.satir_yaz("  birimler            senin birimlerin");
+    upp.satir_yaz("  sec x y             hucredeki birimini sec");
+    upp.satir_yaz("  git x y             seciliyi yurut (4 yon, MP kadar)");
+    upp.satir_yaz("  saldir x y          seciliyle saldir");
+    upp.satir_yaz("  asker piyade|okcu|suvari|mancer");
+    upp.satir_yaz("                      secili sehirde asker yaz (bos hucre)");
+    upp.satir_yaz("  bitir / e           turu bitir, Kuzey oynar");
+    upp.satir_yaz("  cik / q             oyundan cik");
+    upp.satir_yaz("");
+    upp.satir_yaz("Piyade can12 atk4 mp2 menzil1 ucret40");
+    upp.satir_yaz("Okcu   can8  atk5 mp2 menzil2 ucret55  (tepede +2 atk)");
+    upp.satir_yaz("Suvari can10 atk5 mp4 menzil1 ucret70");
+    upp.satir_yaz("Mancer can9  atk6 mp1 menzil1 ucret80  (sehre +3 atk)");
+    upp.satir_yaz("Orman savunma +2, sehir savunma +3. Su gecilmez.");
+}
+
+fonk birimleri_listele(sayi takim) -> bos {
+    upp.satir_yaz("-- birimler --");
+    sayi i = 0;
+    sayi n = 0;
+    iken (i < b_x.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_takim.al(i) == takim) {
+            metin ad = tur_ad(b_tur.al(i));
+            sayi x = b_x.al(i);
+            sayi y = b_y.al(i);
+            sayi hp = b_hp.al(i);
+            sayi hm = can_max(b_tur.al(i));
+            sayi mp = b_mp.al(i);
+            upp.satir_yaz("  #{i} {ad} ({x},{y}) can {hp}/{hm} mp {mp}");
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    eger (n == 0) {
+        upp.satir_yaz("  (yok)");
+    }
+}
+
+fonk savunma_bonus(sayi x, sayi y) -> sayi {
+    sayi z = zemin.al(idx(x, y));
+    sayi b = 0;
+    eger (z == Z_ORMAN) { b = b + 2; }
+    eger (z == Z_TEPE) { b = b + 1; }
+    eger (sehir_bul(x, y) >= 0) { b = b + 3; }
+    don b;
+}
+
+fonk yan_dost(sayi kim, sayi x, sayi y) -> sayi {
+    sayi takim = b_takim.al(kim);
+    sayi n = 0;
+    sayi i = 0;
+    iken (i < b_x.uzunluk()) {
+        eger (i != kim && b_hp.al(i) > 0 && b_takim.al(i) == takim) {
+            eger (uzaklik(x, y, b_x.al(i), b_y.al(i)) == 1) { n = n + 1; }
+        }
+        i = i + 1;
+    }
+    don n;
+}
+
+fonk kazanma_kontrol() -> bos {
+    eger (kazanan >= 0) { don; }
+    sayi so = sehir_say(TAKIM_OYUNCU);
+    sayi sk = sehir_say(TAKIM_DUSMAN);
+    sayi bo = canli_say(TAKIM_OYUNCU);
+    sayi bk = canli_say(TAKIM_DUSMAN);
+    eger (sk == 0 || bk == 0) {
+        kazanan = TAKIM_OYUNCU;
+        log_ekle("Zafer! Kuzey cekildi.");
+    } yoksa eger (so == 0 || bo == 0) {
+        kazanan = TAKIM_DUSMAN;
+        log_ekle("Yenilgi. Hanlik surlarini asti.");
+    } yoksa eger (tur_no > 30) {
+        eger (so > sk) { kazanan = TAKIM_OYUNCU; log_ekle("Sure bitti: sen onde, zafer."); }
+        yoksa eger (sk > so) { kazanan = TAKIM_DUSMAN; log_ekle("Sure bitti: Kuzey onde."); }
+        yoksa {
+            eger (bo >= bk) { kazanan = TAKIM_OYUNCU; log_ekle("Sure bitti: berabere kirildi, sen."); }
+            yoksa { kazanan = TAKIM_DUSMAN; log_ekle("Sure bitti: Kuzey kirilma ustun."); }
+        }
+    }
+}
+
+fonk sehir_ele_gecir(sayi kim) -> bos {
+    sayi x = b_x.al(kim);
+    sayi y = b_y.al(kim);
+    sayi si = sehir_bul(x, y);
+    eger (si < 0) { don; }
+    sayi eski = sehir_sahip.al(si);
+    sayi takim = b_takim.al(kim);
+    eger (eski == takim) { don; }
+    sehir_sahip.yaz(si, takim);
+    eger (takim == TAKIM_OYUNCU) {
+        log_ekle("Sehir ({x},{y}) ele gecirildi.");
+        altin_oyuncu = altin_oyuncu + 15;
+    } yoksa {
+        log_ekle("Kuzey ({x},{y}) sehrini aldi.");
+        altin_dusman = altin_dusman + 15;
+    }
+    kazanma_kontrol();
+}
+
+fonk saldir_yap(sayi saldiran, sayi hedef) -> bos {
+    eger (saldiran < 0 || hedef < 0) { don; }
+    eger (b_hp.al(saldiran) <= 0 || b_hp.al(hedef) <= 0) { don; }
+    eger (b_takim.al(saldiran) == b_takim.al(hedef)) {
+        log_ekle("Dost atese izin yok.");
+        don;
+    }
+    sayi sx = b_x.al(saldiran);
+    sayi sy = b_y.al(saldiran);
+    sayi hx = b_x.al(hedef);
+    sayi hy = b_y.al(hedef);
+    sayi d = uzaklik(sx, sy, hx, hy);
+    sayi menzil = menzil_al(b_tur.al(saldiran));
+    eger (d > menzil || d < 1) {
+        log_ekle("Hedef menzil disi.");
+        don;
+    }
+    eger (b_mp.al(saldiran) < 1) {
+        log_ekle("Hareket puani yok, saldirilamaz.");
+        don;
+    }
+    sayi atk = saldiri_gucu(b_tur.al(saldiran));
+    eger (b_tur.al(saldiran) == T_OKCU && zemin.al(idx(sx, sy)) == Z_TEPE) {
+        atk = atk + 2;
+    }
+    eger (b_tur.al(saldiran) == T_MANCER && sehir_bul(hx, hy) >= 0) {
+        atk = atk + 3;
+    }
+    atk = atk + yan_dost(saldiran, sx, sy);
+    sayi def = savunma_bonus(hx, hy);
+    sayi hasar = atk - (def / 2) + upp.rastgele(0, 2);
+    eger (hasar < 1) { hasar = 1; }
+    b_hp.yaz(hedef, b_hp.al(hedef) - hasar);
+    b_mp.yaz(saldiran, 0);
+    metin ad1 = tur_ad(b_tur.al(saldiran));
+    metin ad2 = tur_ad(b_tur.al(hedef));
+    log_ekle("{ad1} {ad2} birimine {hasar} vurdu.");
+    eger (b_hp.al(hedef) <= 0) {
+        b_hp.yaz(hedef, 0);
+        log_ekle("{ad2} dustu.");
+        eger (secili == hedef) { secili = -1; }
+        kazanma_kontrol();
+        don;
+    }
+    eger (menzil_al(b_tur.al(hedef)) >= d && d == 1) {
+        sayi catk = saldiri_gucu(b_tur.al(hedef)) / 2;
+        eger (catk < 1) { catk = 1; }
+        b_hp.yaz(saldiran, b_hp.al(saldiran) - catk);
+        log_ekle("Karsi darbe {catk}.");
+        eger (b_hp.al(saldiran) <= 0) {
+            b_hp.yaz(saldiran, 0);
+            log_ekle("{ad1} karsi darbeyle dustu.");
+            eger (secili == saldiran) { secili = -1; }
+            kazanma_kontrol();
+        }
+    }
+}
+
+fonk adim_at(sayi kim, sayi nx, sayi ny) -> mantik {
+    eger (!icerde_mi(nx, ny)) { don yanlis; }
+    sayi z = zemin.al(idx(nx, ny));
+    sayi mal = hareket_maliyeti(z);
+    eger (mal >= 90) { don yanlis; }
+    eger (b_mp.al(kim) < mal) { don yanlis; }
+    sayi orada = birim_bul(nx, ny);
+    eger (orada >= 0) { don yanlis; }
+    b_x.yaz(kim, nx);
+    b_y.yaz(kim, ny);
+    b_mp.yaz(kim, b_mp.al(kim) - mal);
+    sehir_ele_gecir(kim);
+    don dogru;
+}
+
+fonk yuru_hedefe(sayi kim, sayi tx, sayi ty) -> bos {
+    eger (kim < 0 || b_hp.al(kim) <= 0) { don; }
+    sayi guvenlik = 0;
+    iken (guvenlik < 12 && b_mp.al(kim) > 0) {
+        sayi x = b_x.al(kim);
+        sayi y = b_y.al(kim);
+        eger (x == tx && y == ty) { dur; }
+        sayi dx = 0;
+        sayi dy = 0;
+        eger (upp.mutlak(tx - x) >= upp.mutlak(ty - y)) {
+            eger (tx > x) { dx = 1; } yoksa eger (tx < x) { dx = -1; }
+        } yoksa {
+            eger (ty > y) { dy = 1; } yoksa eger (ty < y) { dy = -1; }
+        }
+        eger (!adim_at(kim, x + dx, y + dy)) {
+            eger (dx != 0) {
+                eger (!adim_at(kim, x, y + 1)) {
+                    eger (!adim_at(kim, x, y - 1)) { dur; }
+                }
+            } yoksa {
+                eger (!adim_at(kim, x + 1, y)) {
+                    eger (!adim_at(kim, x - 1, y)) { dur; }
+                }
+            }
+        }
+        guvenlik = guvenlik + 1;
+    }
+}
+
+fonk en_yakin_dusman(sayi kim) -> sayi {
+    sayi takim = b_takim.al(kim);
+    sayi en = -1;
+    sayi en_d = 999;
+    sayi i = 0;
+    iken (i < b_x.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_takim.al(i) != takim) {
+            sayi d = uzaklik(b_x.al(kim), b_y.al(kim), b_x.al(i), b_y.al(i));
+            eger (d < en_d) {
+                en_d = d;
+                en = i;
+            }
+        }
+        i = i + 1;
+    }
+    don en;
+}
+
+fonk en_yakin_sehir(sayi kim, sayi hedef_takim) -> sayi {
+    sayi en = -1;
+    sayi en_d = 999;
+    sayi i = 0;
+    iken (i < sehir_x.uzunluk()) {
+        eger (sehir_sahip.al(i) == hedef_takim || sehir_sahip.al(i) == TAKIM_YOK) {
+            sayi d = uzaklik(b_x.al(kim), b_y.al(kim), sehir_x.al(i), sehir_y.al(i));
+            eger (d < en_d) {
+                en_d = d;
+                en = i;
+            }
+        }
+        i = i + 1;
+    }
+    don en;
+}
+
+fonk komsu_bos_bul(sayi x, sayi y) -> sayi {
+    sayi dx = 0;
+    iken (dx <= 1) {
+        sayi sx = 1 - (dx * 2);
+        eger (icerde_mi(x + sx, y) && birim_bul(x + sx, y) < 0 && hareket_maliyeti(zemin.al(idx(x + sx, y))) < 90) {
+            don idx(x + sx, y);
+        }
+        eger (icerde_mi(x, y + sx) && birim_bul(x, y + sx) < 0 && hareket_maliyeti(zemin.al(idx(x, y + sx))) < 90) {
+            don idx(x, y + sx);
+        }
+        dx = dx + 1;
+    }
+    don -1;
+}
+
+fonk asker_yaz(sayi takim, sayi t, sayi x, sayi y) -> mantik {
+    eger (t < 0 || t > 3) { don yanlis; }
+    eger (!icerde_mi(x, y)) { don yanlis; }
+    sayi si = sehir_bul(x, y);
+    eger (si < 0 || sehir_sahip.al(si) != takim) {
+        log_ekle("Asker yalniz kendi sehrinde yazilir.");
+        don yanlis;
+    }
+    sayi hx = x;
+    sayi hy = y;
+    eger (birim_bul(x, y) >= 0) {
+        sayi kb = komsu_bos_bul(x, y);
+        eger (kb < 0) {
+            log_ekle("Sehir ve cevresi dolu.");
+            don yanlis;
+        }
+        hy = kb / EN;
+        hx = kb - hy * EN;
+    }
+    sayi u = ucret(t);
+    eger (takim == TAKIM_OYUNCU) {
+        eger (altin_oyuncu < u) {
+            log_ekle("Altin yetmiyor.");
+            don yanlis;
+        }
+        altin_oyuncu = altin_oyuncu - u;
+    } yoksa {
+        eger (altin_dusman < u) {
+            don yanlis;
+        }
+        altin_dusman = altin_dusman - u;
+    }
+    birim_ekle(hx, hy, t, takim);
+    metin ad = tur_ad(t);
+    log_ekle("Yeni {ad} ({hx},{hy}).");
+    don dogru;
+}
+
+fonk mp_yenile(sayi takim) -> bos {
+    sayi i = 0;
+    iken (i < b_tur.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_takim.al(i) == takim) {
+            b_mp.yaz(i, mp_max(b_tur.al(i)));
+        }
+        i = i + 1;
+    }
+}
+
+fonk gelir_ve_upkeep(sayi takim) -> bos {
+    sayi sehir_n = sehir_say(takim);
+    sayi birim_n = canli_say(takim);
+    sayi gelir_a = sehir_n * 28;
+    sayi gelir_y = sehir_n * 10;
+    sayi upkeep = birim_n * 3;
+    eger (takim == TAKIM_OYUNCU) {
+        altin_oyuncu = altin_oyuncu + gelir_a;
+        yiyecek_oyuncu = yiyecek_oyuncu + gelir_y - upkeep;
+        eger (yiyecek_oyuncu < 0) {
+            log_ekle("Kitalik: birimler 2 can kaybediyor.");
+            sayi i = 0;
+            iken (i < b_hp.uzunluk()) {
+                eger (b_hp.al(i) > 0 && b_takim.al(i) == TAKIM_OYUNCU) {
+                    b_hp.yaz(i, b_hp.al(i) - 2);
+                    eger (b_hp.al(i) <= 0) {
+                        b_hp.yaz(i, 0);
+                        log_ekle("Bir birim acliktan dustu.");
+                    }
+                }
+                i = i + 1;
+            }
+        }
+    } yoksa {
+        altin_dusman = altin_dusman + gelir_a;
+        yiyecek_dusman = yiyecek_dusman + gelir_y - upkeep;
+        eger (yiyecek_dusman < 0) {
+            sayi i = 0;
+            iken (i < b_hp.uzunluk()) {
+                eger (b_hp.al(i) > 0 && b_takim.al(i) == TAKIM_DUSMAN) {
+                    b_hp.yaz(i, b_hp.al(i) - 2);
+                    eger (b_hp.al(i) <= 0) { b_hp.yaz(i, 0); }
+                }
+                i = i + 1;
+            }
+        }
+    }
+}
+
+fonk yapay_zeka() -> bos {
+    log_ekle("Kuzey Hanligi hamle yapiyor...");
+    mp_yenile(TAKIM_DUSMAN);
+    sayi i = 0;
+    iken (i < b_x.uzunluk()) {
+        eger (b_hp.al(i) > 0 && b_takim.al(i) == TAKIM_DUSMAN) {
+            sayi hedef = en_yakin_dusman(i);
+            eger (hedef >= 0) {
+                sayi d = uzaklik(b_x.al(i), b_y.al(i), b_x.al(hedef), b_y.al(hedef));
+                eger (d <= menzil_al(b_tur.al(i))) {
+                    saldir_yap(i, hedef);
+                } yoksa {
+                    yuru_hedefe(i, b_x.al(hedef), b_y.al(hedef));
+                    hedef = en_yakin_dusman(i);
+                    eger (hedef >= 0) {
+                        d = uzaklik(b_x.al(i), b_y.al(i), b_x.al(hedef), b_y.al(hedef));
+                        eger (d <= menzil_al(b_tur.al(i))) {
+                            saldir_yap(i, hedef);
+                        }
+                    }
+                }
+            } yoksa {
+                sayi sh = en_yakin_sehir(i, TAKIM_OYUNCU);
+                eger (sh >= 0) {
+                    yuru_hedefe(i, sehir_x.al(sh), sehir_y.al(sh));
+                }
+            }
+        }
+        i = i + 1;
+        eger (kazanan >= 0) { don; }
+    }
+    eger (altin_dusman >= 40) {
+        sayi s = 0;
+        iken (s < sehir_x.uzunluk()) {
+            eger (sehir_sahip.al(s) == TAKIM_DUSMAN) {
+                sayi sx = sehir_x.al(s);
+                sayi sy = sehir_y.al(s);
+                eger (birim_bul(sx, sy) < 0) {
+                    sayi t = T_PIYADE;
+                    eger (altin_dusman >= 70 && upp.rastgele(0, 2) == 0) { t = T_SUVARI; }
+                    yoksa eger (altin_dusman >= 55 && upp.rastgele(0, 1) == 1) { t = T_OKCU; }
+                    asker_yaz(TAKIM_DUSMAN, t, sx, sy);
+                }
+            }
+            s = s + 1;
+        }
+    }
+    gelir_ve_upkeep(TAKIM_DUSMAN);
+}
+
+fonk tur_bitir() -> bos {
+    eger (kazanan >= 0) { don; }
+    yapay_zeka();
+    eger (kazanan >= 0) { don; }
+    tur_no = tur_no + 1;
+    gelir_ve_upkeep(TAKIM_OYUNCU);
+    mp_yenile(TAKIM_OYUNCU);
+    kazanma_kontrol();
+    log_ekle("Tur {tur_no} basladi.");
+}
+
+fonk sayi_parca(liste[metin] p, sayi i) -> sayi {
+    eger (i < 0 || i >= p.uzunluk()) { don 0; }
+    don upp.metinden_sayiya(p.al(i));
+}
+
+fonk tur_oku(metin s) -> sayi {
+    eger (s == "piyade" || s == "p") { don T_PIYADE; }
+    eger (s == "okcu" || s == "o") { don T_OKCU; }
+    eger (s == "suvari" || s == "s") { don T_SUVARI; }
+    eger (s == "mancer" || s == "m") { don T_MANCER; }
+    don -1;
+}
+
+fonk komut_isle(metin ham) -> mantik {
+    metin s = upp.metin.kirp(ham);
+    metin k = upp.metin.kucuk(s);
+    eger (k == "") { don dogru; }
+    liste[metin] p = upp.metin.bol(k, " ");
+    eger (p.uzunluk() == 0) { don dogru; }
+    metin c = p.al(0);
+    eger (c == "cik" || c == "q" || c == "quit") {
+        p.bosalt();
+        don yanlis;
+    }
+    eger (c == "yardim" || c == "h" || c == "help") {
+        yardim_yaz();
+    } yoksa eger (c == "harita" || c == "m" || c == "map") {
+        harita_ciz();
+    } yoksa eger (c == "durum" || c == "d") {
+        durum_yaz();
+    } yoksa eger (c == "birimler" || c == "b" || c == "list") {
+        birimleri_listele(TAKIM_OYUNCU);
+    } yoksa eger (c == "sec" || c == "select") {
+        sayi x = sayi_parca(p, 1);
+        sayi y = sayi_parca(p, 2);
+        sayi bi = birim_bul(x, y);
+        eger (bi < 0 || b_takim.al(bi) != TAKIM_OYUNCU) {
+            log_ekle("Orada senin birimin yok.");
+        } yoksa {
+            secili = bi;
+            log_ekle("Birim #{bi} secildi.");
+        }
+    } yoksa eger (c == "git" || c == "g" || c == "move") {
+        eger (secili < 0 || b_hp.al(secili) <= 0) {
+            log_ekle("Once birim sec.");
+        } yoksa {
+            yuru_hedefe(secili, sayi_parca(p, 1), sayi_parca(p, 2));
+        }
+    } yoksa eger (c == "saldir" || c == "a" || c == "atk") {
+        eger (secili < 0 || b_hp.al(secili) <= 0) {
+            log_ekle("Once birim sec.");
+        } yoksa {
+            sayi hedef = birim_bul(sayi_parca(p, 1), sayi_parca(p, 2));
+            eger (hedef < 0) {
+                log_ekle("Hedefte birim yok.");
+            } yoksa {
+                saldir_yap(secili, hedef);
+            }
+        }
+    } yoksa eger (c == "asker" || c == "u" || c == "recruit") {
+        eger (p.uzunluk() < 2) {
+            log_ekle("Kullanim: asker piyade|okcu|suvari|mancer");
+        } yoksa {
+            sayi t = tur_oku(p.al(1));
+            sayi sx = -1;
+            sayi sy = -1;
+            eger (secili >= 0 && b_hp.al(secili) > 0) {
+                sx = b_x.al(secili);
+                sy = b_y.al(secili);
+            }
+            eger (sehir_bul(sx, sy) < 0 || sehir_sahip.al(sehir_bul(sx, sy)) != TAKIM_OYUNCU) {
+                sayi si = 0;
+                iken (si < sehir_x.uzunluk()) {
+                    eger (sehir_sahip.al(si) == TAKIM_OYUNCU) {
+                        sx = sehir_x.al(si);
+                        sy = sehir_y.al(si);
+                        dur;
+                    }
+                    si = si + 1;
+                }
+            }
+            asker_yaz(TAKIM_OYUNCU, t, sx, sy);
+        }
+    } yoksa eger (c == "bitir" || c == "e" || c == "end") {
+        tur_bitir();
+        harita_ciz();
+        durum_yaz();
+    } yoksa {
+        log_ekle("Bilinmeyen komut. yardim yaz.");
+    }
+    p.bosalt();
+    don dogru;
+}
+
+fonk baslangic_ordusu() -> bos {
+    b_x.temizle();
+    b_y.temizle();
+    b_tur.temizle();
+    b_hp.temizle();
+    b_takim.temizle();
+    b_mp.temizle();
+    birim_ekle(1, 2, T_PIYADE, TAKIM_OYUNCU);
+    birim_ekle(2, 1, T_PIYADE, TAKIM_OYUNCU);
+    birim_ekle(1, 6, T_OKCU, TAKIM_OYUNCU);
+    birim_ekle(10, 2, T_PIYADE, TAKIM_DUSMAN);
+    birim_ekle(9, 1, T_PIYADE, TAKIM_DUSMAN);
+    birim_ekle(10, 6, T_OKCU, TAKIM_DUSMAN);
+}
+
+fonk demo_oyna() -> bos {
+    demo_mod = dogru;
+    upp.satir_yaz("=== SINIR SAVASLARI demo (iki taraf da yapay zeka) ===");
+    harita_ciz();
+    durum_yaz();
+    sayi k = 0;
+    iken (k < 8 && kazanan < 0) {
+        mp_yenile(TAKIM_OYUNCU);
+        sayi i = 0;
+        iken (i < b_x.uzunluk()) {
+            eger (b_hp.al(i) > 0 && b_takim.al(i) == TAKIM_OYUNCU) {
+                sayi hedef = en_yakin_dusman(i);
+                eger (hedef >= 0) {
+                    sayi d = uzaklik(b_x.al(i), b_y.al(i), b_x.al(hedef), b_y.al(hedef));
+                    eger (d <= menzil_al(b_tur.al(i))) {
+                        saldir_yap(i, hedef);
+                    } yoksa {
+                        yuru_hedefe(i, b_x.al(hedef), b_y.al(hedef));
+                    }
+                }
+            }
+            i = i + 1;
+        }
+        eger (kazanan >= 0) { dur; }
+        tur_bitir();
+        k = k + 1;
+    }
+    harita_ciz();
+    durum_yaz();
+    eger (kazanan == TAKIM_OYUNCU) {
+        upp.satir_yaz("SONUC: sen kazandin (demo).");
+    } yoksa eger (kazanan == TAKIM_DUSMAN) {
+        upp.satir_yaz("SONUC: Kuzey kazandi (demo).");
+    } yoksa {
+        upp.satir_yaz("SONUC: 8 tur doldu, savas suruyor.");
+    }
+}
+
+fonk ana() -> sayi {
+    harita_kur();
+    baslangic_ordusu();
+    log_ekle("Iki nehir arasinda savas basladi.");
+    log_ekle("yardim yazarak komutlari gor.");
+
+    eger (upp.arguman_sayisi() > 1) {
+        metin a1 = upp.arguman(1);
+        eger (a1 == "demo") {
+            demo_oyna();
+            don 0;
+        }
+    }
+
+    harita_ciz();
+    durum_yaz();
+    yardim_yaz();
+    mantik calis = dogru;
+    iken (calis && kazanan < 0) {
+        upp.yaz("> ");
+        oto satir = upp.giris();
+        eger (satir == yok) {
+            calis = yanlis;
+        } yoksa {
+            calis = komut_isle(satir);
+            eger (calis && kazanan < 0) {
+                durum_yaz();
+            }
+        }
+    }
+    eger (kazanan == TAKIM_OYUNCU) {
+        upp.satir_yaz("");
+        upp.satir_yaz("ZAFER. Sinir senin.");
+        harita_ciz();
+    } yoksa eger (kazanan == TAKIM_DUSMAN) {
+        upp.satir_yaz("");
+        upp.satir_yaz("YENILGI. Hanlik gecti.");
+        harita_ciz();
+    }
+    don 0;
+}

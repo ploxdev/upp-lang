@@ -5,14 +5,12 @@ on:
     paths:
       - "src/**"
       - "tests/**"
-      - "araclar/**"
       - "bootstrap/**"
       - ".github/workflows/derleyici.yml"
   pull_request:
     paths:
       - "src/**"
       - "tests/**"
-      - "araclar/**"
       - "bootstrap/**"
       - ".github/workflows/derleyici.yml"
 
@@ -41,6 +39,11 @@ jobs:
           mkdir -p derleyici
           gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
           ./derleyici/uppc --surum
+      - name: Self-host sabit noktası (Linux)
+        if: runner.os != 'Windows'
+        run: |
+          ./derleyici/uppc kendini-derle
+          git diff --exit-code -- bootstrap/uppc.c src/uppc/gomulu_runtime.upp
       - name: Bootstrap uppc (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}

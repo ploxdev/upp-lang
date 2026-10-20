@@ -12,6 +12,8 @@ Kaynak yorumları:
   // @stdout          sonraki // satırlar beklenen çıktı
   // @icerir: METİN   derleyici/çalıştırma çıktısında bulunması gereken alt dize
   // @cikis: N        runtime kategorisinde beklenen süreç çıkış kodu (varsayılan 1)
+  // @bayrak: ...      derleyiciye eklenecek bayraklar (ör. --hedef serbest)
+  derleme/  yalnızca C üretimi başarılı olmalı (serbest/çekirdek hedefleri için)
 
 Kullanım:
   python tests/run_tests.py
@@ -32,12 +34,13 @@ from typing import List, Optional, Tuple
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.dirname(os.path.abspath(__file__))
 
-KATEGORILER = ("positive", "negative", "safety", "runtime", "ozel")
+KATEGORILER = ("positive", "negative", "safety", "runtime", "derleme", "ozel")
 KATEGORI_BASLIK = {
     "positive": "Pozitif / E2E",
     "negative": "Negatif / derleyici hataları",
     "safety": "Güvenlik ihlalleri",
     "runtime": "Çalışma zamanı / güvenli hata",
+    "derleme": "Derleme / serbest hedef",
     "ozel": "Özel / Beta Özellikleri",
 }
 
@@ -103,6 +106,7 @@ class Meta:
     stdout: Optional[str] = None
     icerir: List[str] = field(default_factory=list)
     cikis: Optional[int] = None
+    bayrak: List[str] = field(default_factory=list)
 
 
 def meta_oku(kaynak: str, yol: str) -> Meta:
@@ -125,6 +129,10 @@ def meta_oku(kaynak: str, yol: str) -> Meta:
             parca = s.split(":", 1)[1].strip()
             if parca:
                 meta.icerir.append(parca)
+            continue
+        if s.startswith("// @bayrak:"):
+            stdout_mod = False
+            meta.bayrak += s.split(":", 1)[1].split()
             continue
         if s.startswith("// @cikis:"):
             stdout_mod = False
@@ -197,7 +205,7 @@ def calistir_pozitif(uppc: str, yol: str, kaynak: str, meta: Meta, cikti_dir: st
     stem = os.path.join(cikti_dir, kok)
     try:
         der = subprocess.run(
-            [uppc, yol, "--sadece-derle", "--cikti", stem],
+            [uppc, yol, "--sadece-derle", "--cikti", stem] + meta.bayrak,
             cwd=ROOT,
             capture_output=True,
             timeout=max(timeout, 60.0),
@@ -264,12 +272,14 @@ def calistir_hata(
     kategori: str,
     varsayilan_icerir: str,
     timeout: float = 30.0,
+    cikti_dir: str = "",
+    basari_bekle: bool = False,
 ) -> Sonuc:
     ad = os.path.relpath(yol, TESTS)
-    aranan = list(meta.icerir) if meta.icerir else [varsayilan_icerir]
+    aranan = list(meta.icerir) if meta.icerir else ([] if basari_bekle else [varsayilan_icerir])
     try:
         der = subprocess.run(
-            [uppc, yol, "--sadece-c"],
+            [uppc, yol, "--sadece-c", "--cikti", os.path.join(cikti_dir, os.path.splitext(os.path.basename(yol))[0])] + meta.bayrak,
             cwd=ROOT,
             capture_output=True,
             timeout=timeout,
@@ -282,7 +292,9 @@ def calistir_hata(
         return Sonuc(kategori, ad, False, str(err))
 
     metin = (der.stderr or "") + "\n" + (der.stdout or "")
-    if der.returncode == 0:
+    if basari_bekle and der.returncode != 0:
+        return Sonuc(kategori, ad, False, "derleme başarısız:\n" + metin)
+    if not basari_bekle and der.returncode == 0:
         return Sonuc(kategori, ad, False, "derleme başarılı oldu; hata bekleniyordu")
 
     eksik = [p for p in aranan if p not in metin]
@@ -304,7 +316,7 @@ def calistir_runtime(uppc: str, yol: str, kaynak: str, meta: Meta, cikti_dir: st
     stem = os.path.join(cikti_dir, kok)
     try:
         der = subprocess.run(
-            [uppc, yol, "--sadece-derle", "--cikti", stem],
+            [uppc, yol, "--sadece-derle", "--cikti", stem] + meta.bayrak,
             cwd=ROOT,
             capture_output=True,
             timeout=max(timeout, 60.0),
@@ -368,9 +380,11 @@ def dosya_calistir(uppc: str, yol: str, kategori: str, cikti_dir: str, timeout: 
     if kategori in ("positive", "ozel"):
         return calistir_pozitif(uppc, yol, kaynak, meta, cikti_dir, timeout)
     if kategori == "negative":
-        return calistir_hata(uppc, yol, kaynak, meta, kategori, "[u++ HATA]", timeout)
+        return calistir_hata(uppc, yol, kaynak, meta, kategori, "[u++ HATA]", timeout, cikti_dir)
+    if kategori == "derleme":
+        return calistir_hata(uppc, yol, kaynak, meta, kategori, "", timeout, cikti_dir, basari_bekle=True)
     if kategori == "safety":
-        return calistir_hata(uppc, yol, kaynak, meta, kategori, "BELLEK GÜVENLİĞİ", timeout)
+        return calistir_hata(uppc, yol, kaynak, meta, kategori, "BELLEK GÜVENLİĞİ", timeout, cikti_dir)
     if kategori == "runtime":
         return calistir_runtime(uppc, yol, kaynak, meta, cikti_dir, timeout)
     return Sonuc(kategori, yol, False, f"bilinmeyen kategori: {kategori}")
@@ -424,7 +438,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="u++ tests/ native test runner")
     parser.add_argument(
         "--kategori",
-        choices=["positive", "negative", "safety", "runtime", "ozel", "hepsi"],
+        choices=["positive", "negative", "safety", "runtime", "derleme", "ozel", "hepsi"],
         default="hepsi",
         help="yalnız bu kategoriyi çalıştır (varsayılan: hepsi)",
     )
@@ -454,7 +468,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return raporla([dosya_calistir(uppc, yol, kat, cikti_dir, args.timeout)])
 
     secilen = (
-        ["positive", "negative", "safety", "runtime", "ozel"]
+        ["positive", "negative", "safety", "runtime", "derleme", "ozel"]
         if args.kategori == "hepsi"
         else [args.kategori]
     )

@@ -1,0 +1,10 @@
+// Negatif: serbest hedefte arkaplan yok
+// @bayrak: --hedef serbest
+// @icerir: serbest/çekirdek hedefinde yok
+
+fonk ana() -> sayi {
+    arkaplan {
+        upp.satir_yaz("x");
+    }
+    don 0;
+}

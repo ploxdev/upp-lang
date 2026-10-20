@@ -1,0 +1,11 @@
+// Negatif: arkaplan görünüm yakalayamaz
+// @icerir: görünüm
+
+fonk ana() -> sayi {
+    metin s = "x";
+    &metin v = s;
+    arkaplan {
+        upp.satir_yaz(v);
+    }
+    don 0;
+}

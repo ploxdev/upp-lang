@@ -1,0 +1,8 @@
+// Negatif: bayt artık işaretli; 255 sığmaz.
+// @icerir: [u++ HATA]
+// @icerir: Atama türü uyumsuz
+
+fonk ana() -> sayi {
+    bayt b = 255;
+    don b;
+}

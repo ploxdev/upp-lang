@@ -6,7 +6,6 @@ secenek JetonTur {
     J_SAYI,
     J_ONDALIK,
     J_C_GOMMU,
-    J_ASM_GOMMU,
     J_YAG_OK,
     J_OK,
     J_ESIT_ESIT,
@@ -72,7 +71,6 @@ secenek DugumTur {
     D_IFADE_CUMLE,
     D_BOS_CUMLE,
     D_C_GOMMU,
-    D_ASM_GOMMU,
     D_DEGISKEN,
     D_ATAMA,
     D_IKIL,
@@ -151,8 +149,7 @@ fonk anahtar_mi(metin s) -> mantik {
     eger (metin_esit(s, "dongu")) { don dogru; }
     eger (metin_esit(s, "dur")) { don dogru; }
     eger (metin_esit(s, "devam")) { don dogru; }
-    eger (metin_esit(s, "sayi")) { don dogru; }
-    eger (metin_esit(s, "bayt")) { don dogru; }
+    eger (tamsayi_yazim_mi(s)) { don dogru; }
     eger (metin_esit(s, "ondalik")) { don dogru; }
     eger (metin_esit(s, "metin")) { don dogru; }
     eger (metin_esit(s, "mantik")) { don dogru; }
@@ -182,9 +179,26 @@ fonk anahtar_mi(metin s) -> mantik {
     don yanlis;
 }
 
+fonk tamsayi_yazim_mi(metin s) -> mantik {
+    eger (metin_esit(s, "sayi") || metin_esit(s, "s64")) { don dogru; }
+    eger (metin_esit(s, "bayt") || metin_esit(s, "s8")) { don dogru; }
+    eger (metin_esit(s, "ubayt") || metin_esit(s, "u8")) { don dogru; }
+    eger (metin_esit(s, "s16") || metin_esit(s, "u16")) { don dogru; }
+    eger (metin_esit(s, "s32") || metin_esit(s, "u32")) { don dogru; }
+    eger (metin_esit(s, "u64") || metin_esit(s, "usayi")) { don dogru; }
+    don yanlis;
+}
+
+fonk kanonik_tur(metin s) -> metin {
+    eger (metin_esit(s, "s8") || metin_esit(s, "bayt")) { don "bayt"; }
+    eger (metin_esit(s, "u8") || metin_esit(s, "ubayt")) { don "ubayt"; }
+    eger (metin_esit(s, "s64") || metin_esit(s, "sayi")) { don "sayi"; }
+    eger (metin_esit(s, "usayi") || metin_esit(s, "u64")) { don "u64"; }
+    don s;
+}
+
 fonk tur_adi_mi(metin s) -> mantik {
-    eger (metin_esit(s, "sayi")) { don dogru; }
-    eger (metin_esit(s, "bayt")) { don dogru; }
+    eger (tamsayi_yazim_mi(s)) { don dogru; }
     eger (metin_esit(s, "ondalik")) { don dogru; }
     eger (metin_esit(s, "metin")) { don dogru; }
     eger (metin_esit(s, "mantik")) { don dogru; }
@@ -196,8 +210,7 @@ fonk tur_adi_mi(metin s) -> mantik {
 }
 
 fonk koleksiyon_elem_mi(metin s) -> mantik {
-    eger (metin_esit(s, "sayi")) { don dogru; }
-    eger (metin_esit(s, "bayt")) { don dogru; }
+    eger (tamsayi_yazim_mi(s)) { don dogru; }
     eger (metin_esit(s, "ondalik")) { don dogru; }
     eger (metin_esit(s, "mantik")) { don dogru; }
     eger (metin_esit(s, "metin")) { don dogru; }
@@ -277,27 +290,6 @@ fonk dilim_ref_elem_ad(metin n) -> metin {
     sayi L = metin_uzun(n);
     eger (L < 10) { don ""; }
     don intern_dilim(n, 7, L - 1);
-}
-
-fonk interp_ad_mi(metin name) -> mantik {
-    sayi n = metin_uzun(name);
-    sayi i = 0;
-    eger (n == 0) { don yanlis; }
-    eger (!ident_bas(metin_cp(name, 0))) { don yanlis; }
-    i = metin_adv(name, 0);
-    iken (i < n) {
-        sayi c = metin_cp(name, i);
-        sayi adv = metin_adv(name, i);
-        eger (c == 46) {
-            i = i + adv;
-            eger (i >= n || !ident_bas(metin_cp(name, i))) { don yanlis; }
-            i = i + metin_adv(name, i);
-            devam;
-        }
-        eger (!ident_devam(c)) { don yanlis; }
-        i = i + adv;
-    }
-    don dogru;
 }
 
 fonk yerlesik_sinif_mi(metin s) -> mantik {

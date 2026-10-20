@@ -1,0 +1,13 @@
+// Pozitif: iken + && içinde geçici metin; kısa devre
+// @stdout
+// 3
+
+fonk ana() -> sayi {
+    sayi i = 0;
+    metin s = "a";
+    iken (s + "b" != "xxx" && i < 3) {
+        i += 1;
+    }
+    upp.satir_yaz("{i}");
+    don 0;
+}

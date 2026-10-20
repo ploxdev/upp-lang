@@ -1,0 +1,8 @@
+// Güvenlik: donanım erişimi guvensiz ister
+// @bayrak: --hedef serbest
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    upp.cekirdek.port_yaz8(0x3f8, 65);
+    don 0;
+}

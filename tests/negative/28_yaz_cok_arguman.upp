@@ -1,0 +1,8 @@
+// Negatif: upp.yaz printf değildir; en fazla bir argüman
+// @icerir: en fazla bir argüman
+
+fonk ana() -> sayi {
+    sayi x = 5;
+    upp.yaz("%d", x);
+    don 0;
+}

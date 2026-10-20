@@ -1,0 +1,26 @@
+// Pozitif: metin kopyası paylaşılır, += yazınca ayrılır (copy-on-write)
+// @stdout
+// Ağaç
+// Ağaç dalı
+// 4 9
+// İSTANBUL ışık
+
+fonk ekle_don(metin m) -> metin {
+    m += " dalı";
+    don m;
+}
+
+fonk ana() -> sayi {
+    metin a = "Ağaç";
+    metin b = a;
+    metin c = ekle_don(b);
+    upp.satir_yaz(a);
+    upp.satir_yaz(c);
+    sayi na = upp.uzunluk(a);
+    sayi nc = upp.uzunluk(c);
+    upp.satir_yaz("{na} {nc}");
+    metin u = upp.metin.buyuk("istanbul");
+    metin k = upp.metin.kucuk("IŞIK");
+    upp.satir_yaz(u + " " + k);
+    don 0;
+}

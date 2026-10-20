@@ -45,28 +45,27 @@ fonk lex_bosluk_at() -> bos {
 }
 
 fonk lex_sonraki_bosluksuz_suslu() -> mantik {
-    metin s = lex_kaynak_metin();
-    sayi i = lex_pos();
-    sayi n = upp.uzunluk(s);
-    iken (i < n) {
-        sayi cp = upp.metin.kod(s, i);
+    sayi i = 0;
+    iken (1) {
+        sayi cp = lex_cp_ileri(i);
+        eger (cp < 0) { don yanlis; }
         eger (cp == 32 || cp == 9 || cp == 13 || cp == 10) {
             i = i + 1;
             devam;
         }
-        eger (cp == 47 && i + 1 < n) {
-            sayi n1 = upp.metin.kod(s, i + 1);
+        eger (cp == 47) {
+            sayi n1 = lex_cp_ileri(i + 1);
             eger (n1 == 47) {
                 i = i + 2;
-                iken (i < n && upp.metin.kod(s, i) != 10) { i = i + 1; }
+                iken (lex_cp_ileri(i) >= 0 && lex_cp_ileri(i) != 10) { i = i + 1; }
                 devam;
             }
             eger (n1 == 42) {
                 i = i + 2;
-                iken (i + 1 < n && !(upp.metin.kod(s, i) == 42 && upp.metin.kod(s, i + 1) == 47)) {
+                iken (lex_cp_ileri(i) >= 0 && !(lex_cp_ileri(i) == 42 && lex_cp_ileri(i + 1) == 47)) {
                     i = i + 1;
                 }
-                eger (i + 1 < n) { i = i + 2; }
+                eger (lex_cp_ileri(i) == 42 && lex_cp_ileri(i + 1) == 47) { i = i + 2; }
                 devam;
             }
         }
@@ -78,7 +77,7 @@ fonk lex_sonraki_bosluksuz_suslu() -> mantik {
 fonk lex_gomulu(sayi tur, sayi satir, sayi sutun) -> sayi {
     lex_bosluk_at();
     eger (lex_cp() != 123) {
-        hata_ver(satir, sutun, "Gömülü C/asm bloğu '{' ile başlamalı.");
+        hata_ver(satir, sutun, "Gömülü C bloğu '{' ile başlamalı.");
         don 0;
     }
     lex_ilerle();
@@ -159,7 +158,7 @@ fonk lex_gomulu(sayi tur, sayi satir, sayi sutun) -> sayi {
         lex_ilerle();
     }
     eger (derinlik != 0) {
-        hata_ver(satir, sutun, "Kapatılmamış gömülü C/asm bloğu.");
+        hata_ver(satir, sutun, "Kapatılmamış gömülü C bloğu.");
         don 0;
     }
     oto inner = lex_dilim(inner_bas, lex_pos() - 1);
@@ -209,20 +208,28 @@ fonk lex_metin() -> sayi {
     don 0;
 }
 
+fonk lex_harf_mi(sayi ch) -> mantik {
+    don (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95;
+}
+
 fonk lex_sayi() -> sayi {
     sayi satir = lex_satir();
     sayi sutun = lex_sutun();
     sayi bas = lex_pos();
+    mantik tasti = yanlis;
+    mantik hex = yanlis;
+    sayi v = 0;
     eger (lex_cp() == 48 && (lex_cp_ileri(1) == 120 || lex_cp_ileri(1) == 88)) {
+        hex = dogru;
         lex_ilerle();
         lex_ilerle();
         sayi digits = 0;
         iken (!lex_bitis()) {
             sayi ch = lex_cp();
-            mantik hex = (ch >= 48 && ch <= 57) || (ch >= 97 && ch <= 102) || (ch >= 65 && ch <= 70);
-            eger (!hex) {
-                dur;
-            }
+            sayi h = hex_hane_deger(ch);
+            eger (h < 0) { dur; }
+            eger (v > 576460752303423487) { tasti = dogru; }
+            yoksa { v = v * 16 + h; }
             lex_ilerle();
             digits = digits + 1;
         }
@@ -230,23 +237,48 @@ fonk lex_sayi() -> sayi {
             hata_ver(satir, sutun, "'0x' sonrası onaltılık basamak bekleniyordu.");
             don 0;
         }
-        oto lex = lex_dilim(bas, lex_pos());
-        don jeton_yeni(JetonTur.J_SAYI, sayi_metin(hex_deger(lex)), satir, sutun);
-    }
-    iken (!lex_bitis() && lex_cp() >= 48 && lex_cp() <= 57) {
-        lex_ilerle();
-    }
-    eger (!lex_bitis() && lex_cp() == 46) {
-        sayi nxt = lex_cp_ileri(1);
-        eger (nxt >= 48 && nxt <= 57) {
+    } yoksa {
+        iken (!lex_bitis() && lex_cp() >= 48 && lex_cp() <= 57) {
+            sayi d = lex_cp() - 48;
+            eger (v > 922337203685477580 || (v == 922337203685477580 && d > 7)) { tasti = dogru; }
+            yoksa { v = v * 10 + d; }
             lex_ilerle();
-            iken (!lex_bitis() && lex_cp() >= 48 && lex_cp() <= 57) {
+        }
+        eger (!lex_bitis() && lex_cp() == 46) {
+            sayi nxt = lex_cp_ileri(1);
+            eger (nxt >= 48 && nxt <= 57) {
                 lex_ilerle();
+                iken (!lex_bitis() && lex_cp() >= 48 && lex_cp() <= 57) {
+                    lex_ilerle();
+                }
+                don jeton_yeni(JetonTur.J_ONDALIK, lex_dilim(bas, lex_pos()), satir, sutun);
             }
-            don jeton_yeni(JetonTur.J_ONDALIK, lex_dilim(bas, lex_pos()), satir, sutun);
         }
     }
-    don jeton_yeni(JetonTur.J_SAYI, lex_dilim(bas, lex_pos()), satir, sutun);
+    sayi sayi_son = lex_pos();
+    metin sonek = "";
+    eger (!lex_bitis() && lex_harf_mi(lex_cp())) {
+        sayi sb = lex_pos();
+        iken (!lex_bitis() && (lex_harf_mi(lex_cp()) || (lex_cp() >= 48 && lex_cp() <= 57))) {
+            lex_ilerle();
+        }
+        sonek = lex_dilim(sb, lex_pos());
+        eger (!tamsayi_yazim_mi(sonek)) {
+            hata_ver(satir, sutun, "Bilinmeyen tamsayı soneki.");
+            don 0;
+        }
+        sonek = kanonik_tur(sonek);
+    }
+    eger (tasti && !metin_esit(sonek, "u64")) {
+        hata_ver(satir, sutun, "Tamsayı sabiti işaretli aralığın dışında.");
+        don 0;
+    }
+    metin govde = "";
+    eger (tasti) { govde = kat("@", lex_dilim(bas, sayi_son)); }
+    yoksa eger (hex) { govde = sayi_metin(v); }
+    yoksa { govde = lex_dilim(bas, sayi_son); }
+    eger (!metin_esit(sonek, "")) { govde = kat3(govde, "#", sonek); }
+    don jeton_yeni(JetonTur.J_SAYI, govde, satir, sutun);
 }
 
 fonk lex_tara() -> bos {
@@ -385,12 +417,8 @@ fonk lex_tara() -> bos {
                 lex_ilerle();
             }
             oto deger = lex_dilim(bas, lex_pos());
-            eger ((metin_esit(deger, "c_kod") || metin_esit(deger, "asm_kod")) && lex_sonraki_bosluksuz_suslu()) {
-                sayi tur = JetonTur.J_C_GOMMU;
-                eger (metin_esit(deger, "asm_kod")) {
-                    tur = JetonTur.J_ASM_GOMMU;
-                }
-                lex_gomulu(tur, satir, sutun);
+            eger (metin_esit(deger, "c_kod")) {
+                lex_gomulu(JetonTur.J_C_GOMMU, satir, sutun);
                 devam;
             }
             sayi tur = JetonTur.J_KIMLIK;

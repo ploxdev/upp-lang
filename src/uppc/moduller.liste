@@ -1,0 +1,16 @@
+# Derleyici modülleri — birleştirme sırası (uppc kendini-derle okur)
+havuz.upp
+hata.upp
+ast.upp
+yerlesik.upp
+lexer.upp
+parser.upp
+tur.upp
+guvenlik.upp
+codegen.upp
+gomulu_runtime.upp
+gomulu_serbest.upp
+kendini.upp
+cekirdek.upp
+asistan.upp
+surucu.upp

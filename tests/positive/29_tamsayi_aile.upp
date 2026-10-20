@@ -1,0 +1,30 @@
+// Pozitif: tamsayı ailesi, eşanlamlılar ve soneksiz sabit uyarlaması.
+// @stdout
+// ubayt=255
+// bayt=-1
+// adim=1
+// ayni=7
+// genis=9
+
+fonk ana() -> sayi {
+    ubayt u = 255;
+    u8 ayni_u = u;
+    bayt b = -1;
+    s8 ayni_b = b;
+    u16 adim = 0;
+    adim = adim + 1;
+    s16 kisa = -300;
+    s64 a = 7;
+    sayi c = a;
+    u64 g = 9;
+    usayi h = g;
+    upp.satir_yaz("ubayt={u}");
+    upp.satir_yaz("bayt={b}");
+    upp.satir_yaz("adim={adim}");
+    upp.satir_yaz("ayni={c}");
+    upp.satir_yaz("genis={h}");
+    eger (ayni_u == 255 && ayni_b == -1 && kisa == -300 && h == 9) {
+        don 0;
+    }
+    don 1;
+}

@@ -1,0 +1,7 @@
+// Negatif: düz eski adlar kaldırıldı; yeni ad önerilir
+// @icerir: Yerine 'upp.dosya.oku' yazın
+
+fonk ana() -> sayi {
+    metin s = upp.dosya_oku("x.txt");
+    don 0;
+}

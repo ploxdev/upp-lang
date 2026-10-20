@@ -1,0 +1,8 @@
+// Negatif: liste interpolasyonda yazdırılamaz
+// @icerir: yazdırılamayan tür
+
+fonk ana() -> sayi {
+    liste[sayi] L;
+    upp.satir_yaz("L = {L}");
+    don 0;
+}

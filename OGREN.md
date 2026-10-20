@@ -25,6 +25,7 @@ Daha önce hiç kod yazmamış olsanız bile endişelenmeyin. Bu dokümanda değ
 15. [Bellek Yönetimi ve `guvensiz` Kapısı](#15-bellek-yönetimi-ve-guvensiz-kapısı)
 16. [Geliştirici Araçları ve VS Code / Cursor Entegrasyonu](#16-geliştirici-araçları-ve-vs-code--cursor-entegrasyonu)
 17. [Kapsamlı Bir Proje: Konsol Not Defteri](#17-kapsamlı-bir-proje-konsol-not-defteri)
+18. [Projeler, Asistan ve İlk Çekirdeğiniz](#18-projeler-asistan-ve-ilk-çekirdeğiniz)
 
 ---
 
@@ -43,20 +44,18 @@ Pek çok dilden farklı olarak u++ bir "yorumlayıcı" (interpreter) kullanmaz. 
 
 ---
 
-## 2. Kurulum ve İki Derleyicili Mimari
+## 2. Kurulum ve İlk Derleme
 
-u++ ile çalışabilmek için bilgisayarınızda iki temel araca ihtiyaç vardır:
-1. **Python 3.8 veya üzeri:** u++ derleyicisini çalıştırmak için kullanılır. (Ekstra hiçbir kütüphane/paket yüklemeniz gerekmez).
-2. **GCC Derleyicisi:** Üretilen C kodlarını çalıştırılabilir ikili dosyalara dönüştürmek için gereklidir.
+u++ ile çalışabilmek için bilgisayarınızda yalnızca **GCC** gerekir:
+- **GCC Derleyicisi:** Üretilen C kodlarını çalıştırılabilir ikili dosyalara dönüştürmek için gereklidir.
    - **Windows:** [MSYS2](https://www.msys2.org/) kurup MinGW-w64 (`C:\msys64\ucrt64\bin`) yolunu sistem ortam değişkenlerindeki `PATH`'e eklemeniz yeterlidir.
    - **Linux (Ubuntu/Debian):** Terminalden `sudo apt install build-essential` komutu ile kurulabilir.
 
 Kurulumları doğrulamak için terminalinizi (PowerShell veya Bash) açıp şu komutları deneyin:
 ```bash
-python --version
 gcc --version
 ```
-Her iki komut da sürüm numarası veriyorsa hazırsınız!
+Sürüm numarası görüyorsanız hazırsınız!
 
 ---
 
@@ -90,11 +89,10 @@ Temiz klonda önce aşama-0 C derlenir, sonra dil kendi kaynaklarıyla yenilenir
 
 ```bash
 gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
-py araclar/birlestir.py
-derleyici\uppc.exe derleyici/uppc_birlesik.upp --sadece-c --cikti derleyici/uppc_yeni.c
-py araclar/bootstrap.py hazirla
-gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+derleyici\uppc.exe kendini-derle
 ```
+
+`kendini-derle` derleyicinin kaynaklarını (`src/uppc/`) birleştirir, kendini üç aşamada derler, aşama 2 ile aşama 3'ün ürettiği C kodunun aynı olduğunu doğrular, yeni derleyiciyi kurar ve `bootstrap/uppc.c`'yi günceller. Python gerekmez.
 
 ---
 
@@ -161,9 +159,13 @@ u++ dilinde her bilginin bir türü (tipi) vardır:
 
 | u++ Tipi | Açıklama | Örnek |
 |---|---|---|
-| `sayi` | 64-bit tam sayılar (negatif veya pozitif) | `10`, `-42`, `0`, `0xFF` (onaltılık) |
+| `sayi` / `s64` | İşaretli 64-bit tam sayı. İki yazım aynı tiptir | `10`, `-42`, `0`, `0xFF` |
+| `u64` / `usayi` | İşaretsiz 64-bit tam sayı. İki yazım aynı tiptir | `0`, `255u64` |
+| `s32` / `u32` | İşaretli / işaretsiz 32-bit | `-1`, `4000000000u32` |
+| `s16` / `u16` | İşaretli / işaretsiz 16-bit | `-300`, `u16 x = 0; x = x + 1` |
+| `bayt` / `s8` | İşaretli 8-bit (−128 .. 127). İki yazım aynı tiptir | `-1`, `127` |
+| `ubayt` / `u8` | İşaretsiz 8-bit (0 .. 255). İki yazım aynı tiptir | `0`, `255` |
 | `ondalik` | Küsurlu / ondalıklı sayılar (çift duyarlıklı - double) | `3.14`, `-0.5`, `100.0` |
-| `bayt` | 8-bit işaretsiz tam sayı (0 - 255 arası) | `0`, `255`, `128` |
 | `metin` | Yazılar, karakter dizileri | `"Arda"`, `"u++ ile gelecege"` |
 | `mantik` | Mantıksal doğruluk (Boolean) | `dogru` veya `yanlis` |
 | `bos` | Değersizlik, hiçbir şey döndürmeme (`void`) | Genellikle fonksiyon dönüşlerinde kullanılır |
@@ -175,6 +177,11 @@ Bir değişken oluştururken önce türünü yazarız, sonra adını belirler ve
 ```text
 fonk ana() -> sayi {
     sayi yas = 25;
+    s64 ayni = yas;
+    ubayt seviye = 255;
+    bayt fark = -3;
+    u16 adim = 0;
+    adim = adim + 1;
     ondalik boy = 1.82;
     metin ad = "Ahmet";
     mantik ogrenci_mi = dogru;
@@ -718,19 +725,17 @@ Kullanıcının klavyeden yazdığı bir satırı okumak için `upp.giris()` kul
 upp.yaz("Adinizi girin: ");
 oto kullanici_adi = upp.giris();
 upp.satir_yaz("Hos geldiniz, {kullanici_adi}!");
-upp.metin_bosalt(kullanici_adi); // Kullanılan belleği serbest bırak
 ```
 
 ### Dosya Okuma ve Yazma
 ```text
 // Dosyaya metin yazma:
-upp.dosya_yaz("notlar.txt", "1. u++ ogren\n2. Harika projeler yap\n");
+upp.dosya.yaz("notlar.txt", "1. u++ ogren\n2. Harika projeler yap\n");
 
 // Dosya var mı kontrolü:
-eger (upp.dosya_var_mi("notlar.txt")) {
-    oto icerik = upp.dosya_oku("notlar.txt");
+eger (upp.dosya.var_mi("notlar.txt")) {
+    oto icerik = upp.dosya.oku("notlar.txt");
     upp.satir_yaz("Dosya icerigi:\n{icerik}");
-    upp.metin_bosalt(icerik);
 }
 ```
 
@@ -739,9 +744,8 @@ eger (upp.dosya_var_mi("notlar.txt")) {
 oto calisma_yeri = upp.yol.calisma();
 oto tam_yol = upp.yol.birlestir(calisma_yeri, "veriler");
 
-upp.yol.klasor_olustur(tam_yol); // Klasör yoksa oluşturur
-upp.metin_bosalt(calisma_yeri);
-upp.metin_bosalt(tam_yol);
+upp.yol.dizin_olustur(tam_yol); // Klasör yoksa oluşturur
+upp.satir_yaz(upp.yol.dosya_adi("notlar/2026.txt")); // 2026.txt
 ```
 
 ### Rastgele Sayı Üretme ve Zaman
@@ -762,13 +766,12 @@ upp.satir_yaz("Gecen sure: {gecen_sure} ms");
 ```text
 // Platform ve süreç bilgisi:
 upp.satir_yaz("Isletim sistemi: {upp.platform()}"); // "windows" veya "linux"
-upp.satir_yaz("Surec ID: {upp.sayidan_metin(upp.sistem.pid())}");
+upp.satir_yaz("Surec ID: {upp.sistem.pid()}");
 
 // Sistem komutu yürütme:
 SurecCikti sonuc = upp.sistem.calistir("echo Merhaba");
 eger (sonuc.basarili) {
     upp.satir_yaz("Komut basariyla calisti, cikti: {sonuc.cikti}");
-    upp.metin_bosalt(sonuc.cikti);
 }
 ```
 
@@ -776,10 +779,58 @@ eger (sonuc.basarili) {
 
 ## 15. Bellek Yönetimi ve `guvensiz` Kapısı
 
-### Bellek Sahipliği ve `upp.metin_bosalt`
-u++, C diline derlendiği için dinamik olarak işletim sisteminden ayrılan (heap) belleklerin işi bittiğinde sisteme geri verilmesi gerekir.
-* `upp.giris()`, `upp.dosya.oku()`, `upp.sistem.calistir` veya `+` ile oluşturulan dinamik metinler hafıza kaplar.
-* İşi bittiğinde `upp.metin_bosalt(degisken);` çağırmak, programınızın arka planda şişmesini (bellek sızıntısı - memory leak) önler.
+### Metinler Kendini Temizler (Otomatik Drop)
+u++ C'ye derlenir. Yine de metinlerin belleğini sizin yönetmeniz gerekmez, bu işi derleyici yapar.
+
+* Her `metin` değişkeni kendi kopyasının sahibidir.
+* `upp.giris()`, `upp.dosya.oku()`, `+` birleştirmesi ya da `{...}` interpolasyonu ile oluşan metinler değişkenin kapsamı bittiğinde otomatik olarak serbest bırakılır.
+* Bu bırakma blok sonunda, `dur` / `devam` ile döngüden çıkarken ve `don` ile fonksiyondan dönerken de yapılır.
+* `don` ile döndürdüğünüz metnin sahipliği çağırana geçer, kopyalanmaz.
+* Bellek sızıntısı (memory leak) için ayrıca bir şey yazmanıza gerek yoktur.
+
+```text
+fonk selam(metin ad) -> metin {
+    don "Merhaba " + ad;      // Sonuç çağırana taşınır
+}
+
+fonk ana() -> sayi {
+    dongu (sayi i = 0; i < 3; i += 1) {
+        metin satir = upp.giris();
+        metin s = selam(satir);
+        upp.satir_yaz(s);
+    }                         // satir ve s her turda burada bırakılır
+    don 0;
+}
+```
+
+> **Not:** Bu kural yalnızca metinler için geçerlidir. `liste`, `harita` ve `upp.json` ağaçları hâlâ `.bosalt()` / `upp.json.bosalt()` ile kapatılır.
+
+### Kopyasız Bakış: `&metin` ve `&dilim[T]`
+Büyük bir metni ya da diziyi sadece okumak istiyorsanız kopyalamak yerine ona bir **görünüm** (ödünç bakış) açabilirsiniz:
+
+```text
+fonk yazdir(&metin v) -> bos {
+    upp.satir_yaz(v);                     // Kopya yok, doğrudan okunur
+}
+
+fonk ana() -> sayi {
+    metin s = "Ağaç";
+    yazdir(s);
+    &metin v = s;
+    upp.satir_yaz("{v.uzunluk}");          // 6 (UTF-8 bayt sayısı)
+
+    sayi arr[] = [10, 20, 30, 40, 50];
+    &dilim[sayi] d = arr[1..4];           // 20, 30, 40
+    sayi ilk = d[0];
+    upp.satir_yaz("{ilk} / {d.uzunluk}");  // 20 / 3
+    don 0;
+}
+```
+
+Görünüm kaynağından uzun yaşayamaz. Bu yüzden derleyici şunlara izin vermez:
+* fonksiyondan görünüm döndürmek,
+* görünümü sınıf alanı ya da üst düzey değişken yapmak,
+* görünümü `arkaplan` içine yakalamak.
 
 ### u++ Bellek Güvenliği Felsefesi
 C ve C++ dillerinde en çok karşılaşılan kabus, yanlış bellek adreslerine erişerek programın çökmesi (Segmentation Fault) veya güvenlik açığı oluşturmasıdır.
@@ -865,7 +916,6 @@ fonk ana() -> sayi {
                     upp.satir_yaz("\n--- NOTLARINIZ ---");
                     upp.satir_yaz(icerik);
                     upp.satir_yaz("------------------");
-                    upp.metin_bosalt(icerik);
                 } yoksa {
                     upp.satir_yaz("\nHenuz kaydedilmis bir not yok.");
                 }
@@ -876,7 +926,6 @@ fonk ana() -> sayi {
                 oto yeni_not = upp.giris();
                 upp.dosya.ekle(DOSYA_ADI, yeni_not + "\n");
                 upp.satir_yaz("Notunuz basariyla kaydedildi!");
-                upp.metin_bosalt(yeni_not);
                 dur;
 
             durum "3":
@@ -896,8 +945,6 @@ fonk ana() -> sayi {
             varsayilan:
                 upp.satir_yaz("Gecersiz secim, lutfen 1-4 arasinda bir sayi girin.");
         }
-
-        upp.metin_bosalt(secim);
     }
 
     don 0;
@@ -905,6 +952,40 @@ fonk ana() -> sayi {
 ```
 
 Bu kodu `notluk.upp` dosyasına kaydedip `derleyici\uppc.exe notluk.upp` komutuyla çalıştırabilirsiniz.
+
+---
+
+## 18. Projeler, Asistan ve İlk Çekirdeğiniz
+
+### Proje dosyası
+Tek dosyalık denemelerin ötesinde `uppc yeni` ile bir proje açın:
+
+```bash
+uppc yeni hesap
+cd hesap
+uppc calistir        # upp.proje'deki girişi derler ve çalıştırır
+```
+
+`uppc asistan` aynı işleri menüden yapar: yeni proje açar, hedef seçer, araç zincirini denetler, derler ve çalıştırır.
+
+### İşletim sistemi olmadan çalışan program
+u++ programı bir **çekirdek** olarak da derlenebilir. Bu durumda altında Windows ya da Linux yoktur, programı doğrudan işlemci çalıştırır:
+
+```text
+fonk ana() -> sayi {
+    upp.satir_yaz("Merhaba, donanım!");
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, 0); // QEMU'yu kapat
+    }
+    don 0;
+}
+```
+
+```bash
+uppc cekirdek.upp --hedef cekirdek     # cekirdek.elf + cekirdek32.elf; QEMU kuruluysa çalıştırır
+```
+
+Bu hedefte dosya, süreç ve iş parçacığı gibi işletim sistemi hizmetleri yoktur; bunları kullanmaya çalışırsanız derleyici açıkça söyler. Metinler, listeler, sınıflar ve interpolasyon ise aynen çalışır. Donanıma `upp.cekirdek.*` ile, yalnızca `guvensiz` içinde erişilir.
 
 ---
 

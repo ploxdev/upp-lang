@@ -22,7 +22,6 @@ fonk ondalik_oku(metin etiket) -> ondalik {
     upp.yaz(etiket);
     oto satir = upp.giris();
     oto v = upp.metinden_ondalik(satir);
-    upp.metin_bosalt(satir);
     don v;
 }
 
@@ -30,7 +29,6 @@ fonk sayi_oku(metin etiket) -> sayi {
     upp.yaz(etiket);
     oto satir = upp.giris();
     oto v = upp.metinden_sayiya(satir);
-    upp.metin_bosalt(satir);
     don v;
 }
 
@@ -54,7 +52,6 @@ fonk temel_islem() -> bos {
     upp.yaz("İşlem (+, -, *, /): ");
     oto op_ham = upp.giris();
     oto op = upp.metin.kirp(op_ham);
-    upp.metin_bosalt(op_ham);
     oto b = ondalik_oku("İkinci sayı: ");
 
     ondalik sonuc = 0.0;
@@ -83,9 +80,7 @@ fonk temel_islem() -> bos {
         upp.satir_yaz("Sonuç: {sonuc_metin}");
         metin kayit = upp.ondalikdan_metin(a) + " " + op + " " + upp.ondalikdan_metin(b) + " = " + sonuc_metin;
         gecmise_ekle(kayit);
-        upp.metin_bosalt(sonuc_metin);
     }
-    upp.metin_bosalt(op);
 }
 
 fonk mod_islem() -> bos {
@@ -117,7 +112,6 @@ fonk bilimsel_menu() -> bos {
         oto rm = upp.ondalikdan_metin(r);
         upp.satir_yaz("karekök({x}) = {rm}");
         gecmise_ekle("karekok(" + upp.ondalikdan_metin(x) + ") = " + rm);
-        upp.metin_bosalt(rm);
     } yoksa eger (sec == 2) {
         oto x = ondalik_oku("Taban: ");
         oto y = ondalik_oku("Üs: ");
@@ -125,23 +119,20 @@ fonk bilimsel_menu() -> bos {
         oto rm = upp.ondalikdan_metin(r);
         upp.satir_yaz("{x} üzeri {y} = {rm}");
         gecmise_ekle(upp.ondalikdan_metin(x) + "^" + upp.ondalikdan_metin(y) + " = " + rm);
-        upp.metin_bosalt(rm);
     } yoksa eger (sec == 3 || sec == 4 || sec == 5) {
         oto derece = ondalik_oku("Derece: ");
         oto radyan = derece * upp.matematik.pi() / 180.0;
         ondalik r = 0.0;
         metin ad = "";
-        eger (sec == 3) { r = upp.matematik.sin(radyan); ad = "sin"; }
-        yoksa eger (sec == 4) { r = upp.matematik.cos(radyan); ad = "cos"; }
-        yoksa { r = upp.matematik.tan(radyan); ad = "tan"; }
+        eger (sec == 3) { r = upp.matematik.sinus(radyan); ad = "sin"; }
+        yoksa eger (sec == 4) { r = upp.matematik.kosinus(radyan); ad = "cos"; }
+        yoksa { r = upp.matematik.tanjant(radyan); ad = "tan"; }
         oto rm = upp.ondalikdan_metin(r);
         upp.satir_yaz("{ad}({derece} derece) = {rm}");
         gecmise_ekle(ad + "(" + upp.ondalikdan_metin(derece) + " derece) = " + rm);
-        upp.metin_bosalt(rm);
     } yoksa eger (sec == 6) {
         oto pi_m = upp.ondalikdan_metin(upp.matematik.pi());
         upp.satir_yaz("pi = {pi_m}");
-        upp.metin_bosalt(pi_m);
     } yoksa {
         upp.hata_satir_yaz("HATA: Geçersiz bilimsel işlem seçimi.");
     }
@@ -158,17 +149,14 @@ fonk bellek_menu() -> bos {
         bellek += x;
         oto bm = upp.ondalikdan_metin(bellek);
         upp.satir_yaz("Bellek = {bm}");
-        upp.metin_bosalt(bm);
     } yoksa eger (sec == 2) {
         oto x = ondalik_oku("Çıkarılacak değer: ");
         bellek -= x;
         oto bm = upp.ondalikdan_metin(bellek);
         upp.satir_yaz("Bellek = {bm}");
-        upp.metin_bosalt(bm);
     } yoksa eger (sec == 3) {
         oto bm = upp.ondalikdan_metin(bellek);
         upp.satir_yaz("Bellek = {bm}");
-        upp.metin_bosalt(bm);
     } yoksa eger (sec == 4) {
         bellek = 0.0;
         upp.satir_yaz("Bellek temizlendi.");

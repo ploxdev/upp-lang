@@ -1,0 +1,8 @@
+// Negatif: bilinmeyen yerleşik; ad alanının mevcut adları listelenir
+// @icerir: 'upp.metin.ters' yerleşik bir fonksiyon değil
+// @icerir: buyuk
+
+fonk ana() -> sayi {
+    metin s = upp.metin.ters("abc");
+    don 0;
+}

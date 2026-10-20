@@ -27,7 +27,6 @@ fonk ana() -> sayi {
         varsayilan:
             upp.satir_yaz("no");
     }
-    upp.metin_bosalt(k);
 
     Kutu t = Kutu(10);
     upp.satir_yaz("{Kutu.N}");

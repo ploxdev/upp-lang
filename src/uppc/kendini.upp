@@ -1,0 +1,277 @@
+// uppc kendini-derle — Python'sız self-host.
+// Modülleri birleştirir, runtime'ı gömer, aşamaları derler, sabit noktayı
+// doğrular, yeni derleyiciyi kurar ve bootstrap/uppc.c'yi yazar.
+// Not: aşama 1'i bir önceki derleyici derler; bu dosya yalnızca onun da
+// bildiği yerleşikleri kullanmalı.
+
+// Modül sırası src/uppc/moduller.liste dosyasından okunur ('#' yorum).
+fonk kd_moduller(metin kok) -> liste[metin] {
+    liste[metin] m;
+    oto icerik = upp.dosya.oku(kd_yol(kok, "src/uppc/moduller.liste"));
+    eger (icerik == yok) { don m; }
+    liste[metin] satirlar = upp.metin.bol(kaynak_lf(icerik), "\n");
+    sayi i = 0;
+    iken (i < satirlar.uzunluk()) {
+        oto st = upp.metin.kirp(satirlar.al(i));
+        eger (!metin_esit(st, "") && !upp.metin.baslar(st, "#")) { m.ekle(st); }
+        i = i + 1;
+    }
+    don m;
+}
+
+fonk kd_yol(metin kok, metin rel) -> metin {
+    don upp.yol.birlestir(kok, rel);
+}
+
+// Kod noktası → UTF-8 baytlarının onaltılığı.
+fonk kd_gomulu_runtime(metin runtime, metin fn_adi, metin kaynak_adi) -> metin {
+    metin o = "// Otomatik üretilmiştir (uppc kendini-derle) — src/runtime/";
+    o += kaynak_adi;
+    o += " gömülü kopyası\n";
+    o += "fonk ";
+    o += fn_adi;
+    o += "() -> bos {\n";
+    oto hex = upp.metin.hex_kodla(runtime);
+    sayi n = upp.uzunluk(hex);
+    sayi i = 0;
+    iken (i < n) {
+        sayi parca = 2048;
+        eger (i + parca > n) { parca = n - i; }
+        o += "    tampon_yaz(upp.metin.hex_coz(\"";
+        o += upp.metin.kes(hex, i, parca);
+        o += "\"));\n";
+        i = i + parca;
+    }
+    o += "}\n";
+    don o;
+}
+
+// Çalışma zamanı paketi: ön dosya + çekirdek + platform katmanı (LF'e normalleştirilmiş).
+fonk kd_paket(metin kok, metin on, metin platform) -> metin {
+    metin o = "/* OTOMATİK ÜRETİLDİ (uppc kendini-derle) — düzenlemeyin.\n * Kaynak: ";
+    o += on;
+    o += " + upp_cekirdek.c + ";
+    o += platform;
+    o += " */\n";
+    liste[metin] parcalar;
+    parcalar.ekle(on);
+    parcalar.ekle("upp_cekirdek.c");
+    parcalar.ekle(platform);
+    sayi i = 0;
+    iken (i < parcalar.uzunluk()) {
+        oto icerik = upp.dosya.oku(kd_yol(kok, "src/runtime/" + parcalar.al(i)));
+        eger (icerik == yok) {
+            upp.yaz("[kendini-derle] runtime parçası okunamadı: ");
+            upp.satir_yaz(parcalar.al(i));
+            don "";
+        }
+        o += kaynak_lf(icerik);
+        i = i + 1;
+    }
+    don o;
+}
+
+fonk kd_degisirse_yaz(metin yol, metin icerik) -> bos {
+    oto eski = upp.dosya.oku(yol);
+    eger (eski == yok || !metin_esit(kaynak_lf(eski), icerik)) {
+        os_dosya_yaz(yol, icerik);
+    }
+}
+
+fonk kd_exe_uzanti() -> metin {
+    eger (os_host_linux() != 0) { don ""; }
+    don ".exe";
+}
+
+fonk kd_sistem(metin cmd) -> sayi {
+    SurecCikti r = upp.sistem.calistir(cmd);
+    eger (r.kod != 0 && r.cikti != yok) {
+        upp.yaz(r.cikti);
+    }
+    don r.kod;
+}
+
+fonk kd_yerel_yol(metin p) -> metin {
+    eger (os_host_linux() != 0) { don p; }
+    don upp.metin.degistir(p, "/", "\\");
+}
+
+fonk kd_tasi(metin a, metin b) -> sayi {
+    eger (os_host_linux() != 0) {
+        don kd_sistem("mv -f " + os_tirnak(a) + " " + os_tirnak(b));
+    }
+    don kd_sistem("cmd /c move /y " + os_tirnak(kd_yerel_yol(a)) + " " + os_tirnak(kd_yerel_yol(b)) + " >nul");
+}
+
+fonk kd_gcc(metin gcc, metin c_yol, metin exe_yol, metin opt) -> sayi {
+    metin cmd = os_cmd_parca(gcc) + " -std=gnu11 " + opt + " " + os_cmd_parca(c_yol) + " -o " + os_cmd_parca(exe_yol);
+    eger (os_host_linux() != 0) {
+        cmd += " -pthread -lm";
+    } yoksa {
+        cmd += " -luser32 -lwinmm -lgdi32";
+    }
+    don kd_sistem(cmd);
+}
+
+fonk kd_bootstrap_baslik() -> metin {
+    metin o = "/* u++ bootstrap derleyici — kalıcı C (uppc kendini-derle üretir).\n";
+    o += " * Temiz klon: gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc[.exe] ...\n";
+    o += " * Çalışma zamanı src/runtime/upp_runtime.c; derleyici gövdesi src/uppc/*.upp karşılığıdır.\n";
+    o += " */\n";
+    o += "#if defined(_WIN32)\n#define UPP_HEDEF_WINDOWS 1\n#else\n";
+    o += "#ifndef UPP_HEDEF_LINUX\n#define UPP_HEDEF_LINUX 1\n#endif\n";
+    o += "#ifndef _FILE_OFFSET_BITS\n#define _FILE_OFFSET_BITS 64\n#endif\n";
+    o += "#ifndef _DEFAULT_SOURCE\n#define _DEFAULT_SOURCE 1\n#endif\n";
+    o += "#ifndef _POSIX_C_SOURCE\n#define _POSIX_C_SOURCE 200809L\n#endif\n";
+    o += "#endif\n\n#include \"../src/runtime/upp_runtime.c\"\n\n";
+    don o;
+}
+
+fonk kd_runtime_sonu_isaret() -> metin {
+    don "/* ==== u++ runtime sonu ==== */";
+}
+
+fonk kd_bootstrap_yaz(metin kok, metin c_kaynak) -> mantik {
+    sayi i = upp.metin.bul(c_kaynak, kd_runtime_sonu_isaret());
+    eger (i < 0) {
+        upp.satir_yaz("[kendini-derle] runtime sonu işareti bulunamadı; bootstrap yazılmadı.");
+        don yanlis;
+    }
+    oto govde = upp.metin.kes(c_kaynak, i, upp.uzunluk(c_kaynak) - i);
+    don os_dosya_yaz(kd_yol(kok, "bootstrap/uppc.c"), kd_bootstrap_baslik() + govde);
+}
+
+fonk kendini_derle(metin kok, mantik hizli) -> sayi {
+    oto t0 = upp.zaman();
+    eger (!upp.dosya.var_mi(kd_yol(kok, "src/uppc/surucu.upp"))) {
+        upp.yaz("[kendini-derle] derleyici kaynağı yok: ");
+        upp.satir_yaz(kd_yol(kok, "src/uppc"));
+        don 1;
+    }
+    oto gcc = os_gcc_bul();
+    eger (metin_esit(gcc, "")) {
+        upp.satir_yaz("[kendini-derle] gcc bulunamadı.");
+        don 1;
+    }
+    // 1. runtime paketleri ve gömülü modülleri
+    oto paket_b = kd_paket(kok, "upp_on_barindirilan.c", "upp_barindirilan.c");
+    oto paket_s = kd_paket(kok, "upp_on_serbest.c", "upp_serbest.c");
+    eger (metin_esit(paket_b, "") || metin_esit(paket_s, "")) { don 1; }
+    kd_degisirse_yaz(kd_yol(kok, "src/runtime/upp_runtime.c"), paket_b);
+    kd_degisirse_yaz(kd_yol(kok, "src/runtime/upp_runtime_serbest.c"), paket_s);
+    kd_degisirse_yaz(kd_yol(kok, "src/uppc/gomulu_runtime.upp"), kd_gomulu_runtime(paket_b, "os_runtime_gomulu_yay", "upp_runtime.c"));
+    kd_degisirse_yaz(kd_yol(kok, "src/uppc/gomulu_serbest.upp"), kd_gomulu_runtime(paket_s, "os_runtime_serbest_yay", "upp_runtime_serbest.c"));
+    // 2. birleştir
+    liste[metin] mods = kd_moduller(kok);
+    eger (mods.uzunluk() == 0) {
+        upp.satir_yaz("[kendini-derle] src/uppc/moduller.liste okunamadı ya da boş.");
+        don 1;
+    }
+    metin birlesik = "";
+    sayi mi = 0;
+    iken (mi < mods.uzunluk()) {
+        oto ad = mods.al(mi);
+        oto icerik = upp.dosya.oku(kd_yol(kok, "src/uppc/" + ad));
+        eger (icerik == yok) {
+            upp.yaz("[kendini-derle] eksik modül: ");
+            upp.satir_yaz(ad);
+            don 1;
+        }
+        birlesik += "// @upp-kaynak " + ad + "\n";
+        birlesik += kaynak_lf(icerik);
+        birlesik += "\n";
+        mi = mi + 1;
+    }
+    oto dizin = kd_yol(kok, "derleyici");
+    oto birlesik_yol = kd_yol(dizin, "uppc_birlesik.upp");
+    eger (!os_dosya_yaz(birlesik_yol, birlesik)) {
+        upp.satir_yaz("[kendini-derle] uppc_birlesik.upp yazılamadı.");
+        don 1;
+    }
+    // 3. aşamalar
+    oto uz = kd_exe_uzanti();
+    metin onceki = os_yol_gercek(upp.arguman(0));
+    eger (!upp.dosya.var_mi(onceki) && !metin_esit(uz, "")) {
+        onceki = os_yol_gercek(upp.arguman(0) + uz);
+    }
+    sayi son_asama = 3;
+    eger (hizli) { son_asama = 2; }
+    sayi n = 1;
+    iken (n <= son_asama) {
+        oto ad = "uppc_asama" + upp.sayidan_metin(n);
+        oto c_kok = kd_yol(dizin, ad);
+        oto exe = c_kok + uz;
+        oto t = upp.zaman();
+        upp.yaz("[kendini-derle] aşama ");
+        upp.yaz(upp.sayidan_metin(n));
+        upp.yaz(": transpile... ");
+        eger (kd_sistem(os_cmd_parca(onceki) + " " + os_cmd_parca(birlesik_yol) + " --sadece-c --cikti " + os_cmd_parca(c_kok)) != 0) {
+            upp.satir_yaz("");
+            upp.satir_yaz("[kendini-derle] transpile başarısız; mevcut derleyici değişmedi.");
+            don 1;
+        }
+        upp.yaz("gcc... ");
+        metin opt = "-O0";
+        eger (n == son_asama) { opt = "-O2"; }
+        eger (kd_gcc(gcc, c_kok + ".c", exe, opt) != 0) {
+            upp.satir_yaz("");
+            upp.satir_yaz("[kendini-derle] gcc başarısız; mevcut derleyici değişmedi.");
+            don 1;
+        }
+        upp.yaz(upp.sayidan_metin(upp.zaman() - t));
+        upp.satir_yaz(" ms");
+        onceki = exe;
+        n = n + 1;
+    }
+    oto son_c = upp.dosya.oku(kd_yol(dizin, "uppc_asama" + upp.sayidan_metin(son_asama) + ".c"));
+    eger (!hizli) {
+        oto c2 = upp.dosya.oku(kd_yol(dizin, "uppc_asama2.c"));
+        eger (c2 == yok || son_c == yok || !metin_esit(c2, son_c)) {
+            upp.satir_yaz("[kendini-derle] sabit nokta YOK: aşama2 ve aşama3 C çıktıları farklı. Kurulum yapılmadı.");
+            don 1;
+        }
+        upp.satir_yaz("[kendini-derle] sabit nokta: aşama2 == aşama3");
+    }
+    // 4. duman testi: yeni derleyici kendi kaynağını analiz edebilmeli ve hata raporlayabilmeli
+    eger (kd_sistem(os_cmd_parca(onceki) + " " + os_cmd_parca(birlesik_yol) + " --analiz") != 0) {
+        upp.satir_yaz("[kendini-derle] duman testi başarısız (--analiz); kurulum yapılmadı.");
+        don 1;
+    }
+    oto duman_yol = kd_yol(dizin, "duman.upp");
+    os_dosya_yaz(duman_yol, "fonk ana() -> sayi {\n    sayi x = \"metin\";\n    don x;\n}\n");
+    SurecCikti dr = upp.sistem.calistir(os_cmd_parca(onceki) + " " + os_cmd_parca(duman_yol) + " --sadece-c --cikti " + os_cmd_parca(kd_yol(dizin, "duman")));
+    eger (dr.kod == 0 || dr.cikti == yok || upp.metin.bul(dr.cikti, "Atama türü uyumsuz") < 0) {
+        upp.satir_yaz("[kendini-derle] duman testi başarısız (hata raporu); kurulum yapılmadı.");
+        don 1;
+    }
+    upp.dosya.sil(duman_yol);
+    // 5. kurulum
+    oto hedef = kd_yol(dizin, "uppc" + uz);
+    oto yedek = kd_yol(dizin, "uppc_onceki" + uz);
+    eger (upp.dosya.var_mi(yedek)) { upp.dosya.sil(yedek); }
+    eger (upp.dosya.var_mi(hedef)) {
+        eger (kd_tasi(hedef, yedek) != 0) {
+            upp.satir_yaz("[kendini-derle] mevcut derleyici yedeklenemedi.");
+            don 1;
+        }
+    }
+    eger (kd_tasi(onceki, hedef) != 0) {
+        upp.satir_yaz("[kendini-derle] yeni derleyici kurulamadı.");
+        don 1;
+    }
+    eger (!kd_bootstrap_yaz(kok, son_c)) { don 1; }
+    sayi k = 1;
+    iken (k < son_asama) {
+        oto ara = kd_yol(dizin, "uppc_asama" + upp.sayidan_metin(k) + uz);
+        eger (upp.dosya.var_mi(ara)) { upp.dosya.sil(ara); }
+        k = k + 1;
+    }
+    upp.yaz("[kendini-derle] kuruldu: ");
+    upp.yaz(hedef);
+    upp.yaz(" (yedek: uppc_onceki");
+    upp.yaz(uz);
+    upp.yaz(") — bootstrap/uppc.c güncellendi, toplam ");
+    upp.yaz(upp.sayidan_metin((upp.zaman() - t0) / 1000));
+    upp.satir_yaz(" sn");
+    don 0;
+}

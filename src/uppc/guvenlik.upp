@@ -1,4 +1,5 @@
 fonk guven_yuru(sayi node, mantik unsafe) -> bos {
+    hata_dosya_yaz(dugum_kaynak(node));
     eger (node == 0) { don; }
     eger (hata_var() && !hata_analiz_mi()) { don; }
     sayi t = dugum_tur(node);
@@ -24,12 +25,6 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
         }
         don;
     }
-    eger (t == DugumTur.D_ASM_GOMMU) {
-        eger (!unsafe) {
-            hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Ham asm gömme ('asm_kod') yalnızca 'guvensiz' blokta kullanılabilir.");
-        }
-        don;
-    }
     eger (t == DugumTur.D_TEKIL) {
         oto op = dugum_ad(node);
         eger ((metin_esit(op, "*") || metin_esit(op, "&")) && !unsafe) {
@@ -46,16 +41,21 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
         }
         eger (dugum_tur(cal) == DugumTur.D_UYE) {
             sayi yol = upp_yol(cal);
-            eger (yol != 0 && liste_uzunluk(yol) >= 2) {
+            eger (yol != 0 && liste_uzunluk(yol) >= 2 && !unsafe) {
+                metin ns = "";
                 sayi yi = 1;
-                iken (yi < liste_uzunluk(yol)) {
-                    sayi adim = liste_al(yol, yi);
-                    oto anm = dugum_ad(adim);
-                    eger ((metin_esit(anm, "bellek") || metin_esit(anm, "sayi_oku") || metin_esit(anm, "sayi_yaz")) && !unsafe) {
-                        hata_guvenlik(dugum_satir(node), dugum_sutun(node), "Süreç belleği erişimi ('upp.windows.bellek' / 'upp.linux.sayi_oku/yaz') yalnızca 'guvensiz' blokta çağrılabilir.");
-                        dur;
-                    }
+                iken (yi < liste_uzunluk(yol) - 1) {
+                    eger (!metin_esit(ns, "")) { ns += "."; }
+                    ns += dugum_ad(liste_al(yol, yi));
                     yi = yi + 1;
+                }
+                oto ad = dugum_ad(liste_al(yol, liste_uzunluk(yol) - 1));
+                eger (yerlesik_guvensiz_mi(yerlesik_bul(ns, ad)) || (metin_esit(ns, "windows.bellek") && metin_esit(ad, "zincir_oku"))) {
+                    hata_fmt_basla();
+                    hata_fmt_yaz("'upp.");
+                    hata_fmt_yaz(yerlesik_anahtar(ns, ad));
+                    hata_fmt_yaz("' süreç belleğine erişir; yalnızca 'guvensiz' blokta çağrılabilir.");
+                    hata_fmt_guvenlik(dugum_satir(node), dugum_sutun(node));
                 }
             }
         }

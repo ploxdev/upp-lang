@@ -13,7 +13,6 @@ fonk ana() -> sayi {
     s += "b";
     s += "c";
     upp.satir_yaz(s);
-    upp.metin_bosalt(s);
 
     metin t = "ç";
     sayi cp = t[0];
@@ -24,6 +23,5 @@ fonk ana() -> sayi {
     eger (adv != 2) {
         don 2;
     }
-    upp.metin_bosalt(t);
     don 0;
 }

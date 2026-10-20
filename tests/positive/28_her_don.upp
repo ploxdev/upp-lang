@@ -1,0 +1,19 @@
+// Pozitif: her(harita) içinden don; anahtar listesi sızmaz
+// @stdout
+// 7
+
+fonk erken() -> sayi {
+    harita[metin,sayi] h;
+    h.koy("a", 1);
+    h.koy("b", 2);
+    her (oto k in h) {
+        don 7;
+    }
+    don 0;
+}
+
+fonk ana() -> sayi {
+    oto r = erken();
+    upp.satir_yaz("{r}");
+    don 0;
+}

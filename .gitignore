@@ -12,7 +12,7 @@ __pycache__/
 
 # Derleyici çıktıları ve ara dosyalar
 *.c
-!src/runtime/upp_runtime.c
+!src/runtime/*.c
 !bootstrap/uppc.c
 *.o
 *.obj
@@ -22,6 +22,7 @@ __pycache__/
 *.so
 *.dylib
 derleme/
+!tests/derleme/
 derleyici/
 tests/_cikti/
 cikti.c
@@ -51,3 +52,8 @@ eklenti/out-test/
 *~
 .DS_Store
 Thumbs.db
+
+# Çekirdek derleme çıktıları
+*.elf
+upp_boot.S
+upp_cekirdek.ld

@@ -1,0 +1,7 @@
+// Negatif: yerleşik argüman türü tablodan denetlenir
+// @icerir: 1. argüman 'metin' bekler
+
+fonk ana() -> sayi {
+    mantik v = upp.dosya.var_mi(42);
+    don 0;
+}

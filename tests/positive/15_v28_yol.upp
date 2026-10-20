@@ -10,12 +10,10 @@ fonk ana() -> sayi {
     } yoksa {
         upp.satir_yaz("0");
     }
-    upp.metin_bosalt(cwd);
 
     SurecCikti r = upp.sistem.calistir("echo ok");
     upp.satir_yaz("{r.kod}");
     eger (r.cikti != yok) {
-        upp.metin_bosalt(r.cikti);
     }
     don 0;
 }

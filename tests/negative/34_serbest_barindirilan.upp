@@ -1,0 +1,8 @@
+// Negatif: serbest hedefte işletim sistemi isteyen yerleşik yok
+// @bayrak: --hedef serbest
+// @icerir: işletim sistemi gerektirir
+
+fonk ana() -> sayi {
+    metin s = upp.dosya.oku("x");
+    don 0;
+}

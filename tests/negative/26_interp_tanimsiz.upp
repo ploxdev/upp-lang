@@ -1,0 +1,7 @@
+// Negatif: interpolasyondaki ad tanımlı olmalı
+// @icerir: yok_boyle
+
+fonk ana() -> sayi {
+    upp.satir_yaz("deger: {yok_boyle}");
+    don 0;
+}

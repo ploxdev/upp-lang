@@ -1,7 +1,8 @@
 // Beta sürümü yeni özellikler testi
 // @stdout
 // === BETA TESTLERI BASLIYOR ===
-// bayt degeri: 255
+// ubayt degeri: 255
+// isaretli bayt: -1
 // bliste uzunluk: 3
 // bliste[1]: 20
 // bliste.sil(1) sonrasi uzunluk: 2
@@ -19,9 +20,12 @@
 // === TUM TESTLER GECTI ===
 
 fonk test_bayt() -> bos {
-    bayt b = 255;
-    upp.yaz("bayt degeri: ");
+    ubayt b = 255;
+    bayt s = -1;
+    upp.yaz("ubayt degeri: ");
     upp.satir_yaz(upp.sayidan_metin(b));
+    upp.yaz("isaretli bayt: ");
+    upp.satir_yaz(upp.sayidan_metin(s));
 
     liste[bayt] bliste;
     bliste.ekle(10);
@@ -74,11 +78,11 @@ fonk test_sistem_ve_platform() -> bos {
     upp.yaz("PID: ");
     upp.satir_yaz(my_pid > 0 ? "Gecerli" : "Gecersiz");
 
-    mantik ortam_ok = upp.ortam_yaz("UPP_BETA_TEST", "basarili");
+    mantik ortam_ok = upp.sistem.ortam_yaz("UPP_BETA_TEST", "basarili");
     upp.yaz("Ortam yazildi mi: ");
     upp.satir_yaz(ortam_ok ? "evet" : "hayir");
     upp.yaz("Ortam degeri: ");
-    upp.satir_yaz(upp.ortam_al("UPP_BETA_TEST"));
+    upp.satir_yaz(upp.sistem.ortam_al("UPP_BETA_TEST"));
 
     SurecCikti r = upp.sistem.calistir("echo test");
     upp.yaz("SurecCikti.basarili: ");

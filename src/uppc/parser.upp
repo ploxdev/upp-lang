@@ -156,6 +156,12 @@ fonk metin_coz(metin raw) -> metin {
             yoksa eger (nxt == 114) { s = kat(s, "\r"); }
             yoksa eger (nxt == 92) { s = kat(s, "\\"); }
             yoksa eger (nxt == 34) { s = kat(s, "\""); }
+            yoksa eger (nxt == 101) { s = kat(s, upp.metin.hex_coz("1b")); }
+            yoksa eger (nxt == 120 && i + adv + nadv + 1 < n - 1 && hex_hane_deger(metin_cp(raw, i + adv + nadv)) >= 0 && hex_hane_deger(metin_cp(raw, i + adv + nadv + 1)) >= 0) {
+                s = kat(s, upp.metin.hex_coz(intern_dilim(raw, i + adv + nadv, i + adv + nadv + 2)));
+                i = i + adv + nadv + 2;
+                devam;
+            }
             yoksa {
                 s = kat(s, intern_dilim(raw, i + adv, i + adv + nadv));
             }
@@ -166,6 +172,153 @@ fonk metin_coz(metin raw) -> metin {
         i = i + adv;
     }
     don s;
+}
+
+// ---- interpolasyon: "...{ifade}..." ayrıştırma anında AST'ye çözülür ----
+// '{' hemen ardından harf/_ ya da '(' gelirse ifade başlar; '{{' ve '}}' kaçıştır.
+// Parçalar dugum_liste(n)'de: ptrd 7 olan D_SABIT ham metin, diğerleri ifade.
+fonk interp_baslar_mi(sayi c) -> mantik {
+    don ident_bas(c) || c == 40;
+}
+
+fonk interp_aday_var(metin text) -> mantik {
+    sayi n = metin_uzun(text);
+    sayi i = 0;
+    iken (i + 1 < n) {
+        eger (metin_cp(text, i) == 123) {
+            sayi c2 = metin_cp(text, i + 1);
+            eger (c2 == 123) {
+                i = i + 2;
+                devam;
+            }
+            eger (interp_baslar_mi(c2)) { don dogru; }
+        }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+fonk interp_parca_ekle(sayi L, metin parca, sayi satir, sutun) -> bos {
+    eger (metin_esit(parca, "")) { don; }
+    sayi p = dugum_yeni(DugumTur.D_SABIT, satir, sutun);
+    dugum_yaz_ad(p, intern(parca));
+    dugum_yaz_ptrd(p, 7);
+    liste_ekle(L, p);
+}
+
+// İfade metnini ana jeton akışının sonuna lex'leyip ayrıştırır; lexer/ayrıştırıcı durumu geri yüklenir.
+fonk interp_ifade_ayristir(metin src, sayi satir, sayi sutun) -> sayi {
+    oto k_kaynak = g_kaynak;
+    sayi k_cp = g_cp_i;
+    sayi k_satir = g_lex_satir;
+    sayi k_sutun = g_lex_sutun;
+    sayi k_i = ayristir_i_al();
+    sayi bas = j_n;
+    g_kaynak = intern(src);
+    g_cp_i = 0;
+    g_lex_satir = satir;
+    g_lex_sutun = sutun;
+    lex_tara();
+    sayi e = 0;
+    eger (!hata_var()) {
+        ayristir_i_yaz(bas);
+        e = ayristir_ifade();
+        eger (!hata_var() && bak_tur() != JetonTur.J_EOF) {
+            hata_ver(satir, sutun, "İnterpolasyon ifadesi ayrıştırılamadı. Düz '{{' yazmak için '{{{{' kullanın.");
+            e = 0;
+        }
+    }
+    g_kaynak = k_kaynak;
+    g_cp_i = k_cp;
+    g_lex_satir = k_satir;
+    g_lex_sutun = k_sutun;
+    ayristir_i_yaz(k_i);
+    don e;
+}
+
+fonk kacis_var(metin text) -> mantik {
+    sayi m = metin_uzun(text);
+    sayi i = 0;
+    iken (i + 1 < m) {
+        sayi c = metin_cp(text, i);
+        eger ((c == 123 || c == 125) && metin_cp(text, i + 1) == c) { don dogru; }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+fonk interp_ayristir(sayi n) -> bos {
+    oto text = metin_coz(dugum_ad(n));
+    mantik aday = interp_aday_var(text);
+    eger (!aday && !kacis_var(text)) { don; }
+    sayi satir = dugum_satir(n);
+    sayi sutun = dugum_sutun(n);
+    sayi L = liste_yeni();
+    metin parca = "";
+    sayi m = metin_uzun(text);
+    sayi i = 0;
+    iken (i < m && !hata_var()) {
+        sayi c = metin_cp(text, i);
+        sayi c2 = -1;
+        eger (i + 1 < m) { c2 = metin_cp(text, i + 1); }
+        eger (c == 123 && c2 == 123) {
+            parca += "{";
+            i = i + 2;
+            devam;
+        }
+        eger (c == 125 && c2 == 125) {
+            parca += "}";
+            i = i + 2;
+            devam;
+        }
+        eger (c == 123 && interp_baslar_mi(c2)) {
+            sayi j = i + 1;
+            sayi derin = 0;
+            mantik tirnak = yanlis;
+            iken (j < m) {
+                sayi d = metin_cp(text, j);
+                eger (tirnak) {
+                    eger (d == 92) { j = j + 1; }
+                    yoksa eger (d == 34) { tirnak = yanlis; }
+                } yoksa eger (d == 34) {
+                    tirnak = dogru;
+                } yoksa eger (d == 40 || d == 91 || d == 123) {
+                    derin = derin + 1;
+                } yoksa eger (d == 41 || d == 93) {
+                    derin = derin - 1;
+                } yoksa eger (d == 125) {
+                    eger (derin == 0) { dur; }
+                    derin = derin - 1;
+                }
+                j = j + 1;
+            }
+            eger (j >= m) {
+                hata_ver(satir, sutun, "Kapatılmamış interpolasyon '{'. Düz '{{' yazmak için '{{{{' kullanın.");
+                don;
+            }
+            interp_parca_ekle(L, parca, satir, sutun);
+            parca = "";
+            sayi e = interp_ifade_ayristir(intern_dilim(text, i + 1, j), satir, sutun);
+            eger (e == 0) { don; }
+            liste_ekle(L, e);
+            i = j + 1;
+            devam;
+        }
+        parca += intern_dilim(text, i, i + 1);
+        i = i + 1;
+    }
+    eger (!aday) {
+        // yalnızca {{ / }} kaçışı: çözülmüş metni ham sabit olarak geri yaz
+        dugum_yaz_ad(n, c_escape(parca));
+        don;
+    }
+    interp_parca_ekle(L, parca, satir, sutun);
+    dugum_yaz_liste(n, L);
+    dugum_yaz_bayrak(n, dugum_bayrak(n) | 32);
+}
+
+fonk interp_dugum_mi(sayi e) -> mantik {
+    don e != 0 && dugum_tur(e) == DugumTur.D_SABIT && dugum_ptrd(e) == 2 && (dugum_bayrak(e) & 32) != 0;
 }
 
 fonk tur_baslangici_mi() -> mantik {
@@ -199,7 +352,7 @@ fonk ayristir_koleksiyon_elem() -> metin {
         don "";
     }
     eger (bak_tur() == JetonTur.J_ANAHTAR && koleksiyon_elem_mi(bak_deger())) {
-        oto ad = bak_deger();
+        oto ad = kanonik_tur(bak_deger());
         j_ilerle();
         don ad;
     }
@@ -232,7 +385,7 @@ fonk ayristir_tur() -> sayi {
                 hata_ver(satir, sutun, "'&dilim[metin]' v1'de yok; sayısal T veya '&metin' kullanın.");
                 don 0;
             }
-            eger (!metin_esit(elem, "sayi") && !metin_esit(elem, "bayt") && !metin_esit(elem, "ondalik") && !metin_esit(elem, "mantik")) {
+            eger (!metin_esit(elem, "sayi") && !metin_esit(elem, "bayt") && !metin_esit(elem, "ubayt") && !metin_esit(elem, "ondalik") && !metin_esit(elem, "mantik")) {
                 hata_ver(satir, sutun, "'&dilim[T]' yalnızca sayi/bayt/ondalik/mantik kabul eder.");
                 don 0;
             }
@@ -260,6 +413,7 @@ fonk ayristir_tur() -> sayi {
         hata_fmt_ver(satir, sutun);
         don 0;
     }
+    ad = kanonik_tur(ad);
     eger (metin_esit(ad, "dilim")) {
         hata_ver(satir, sutun, "'dilim' yalnızca '&dilim[T]' olarak kullanılır.");
         don 0;
@@ -313,6 +467,46 @@ fonk ayristir_baslatici() -> sayi {
     don ayristir_ifade();
 }
 
+fonk diyez_yer(metin s) -> sayi {
+    sayi i = 0;
+    sayi n = metin_uzun(s);
+    iken (i < n) {
+        eger (metin_cp(s, i) == 35) { don i; }
+        i = i + metin_adv(s, i);
+    }
+    don 0 - 1;
+}
+
+fonk sabit_sayi_sonek(sayi satir, sayi sutun, metin v) -> sayi {
+    sayi yer = diyez_yer(v);
+    eger (yer < 0) {
+        don sabit_sayi(satir, sutun, sayi_oku(v));
+    }
+    oto num = intern_dilim(v, 0, yer);
+    oto suf = intern_dilim(v, yer + 1, metin_uzun(v));
+    mantik ham = metin_uzun(num) > 0 && metin_cp(num, 0) == 64;
+    eger (ham) { num = intern_dilim(num, 1, metin_uzun(num)); }
+    eger (!ham && metin_uzun(num) > 19) { ham = dogru; }
+    eger (ham) {
+        eger (!metin_esit(suf, "u64")) {
+            hata_ver(satir, sutun, "Tamsayı sabiti işaretli aralığın dışında.");
+            don 0;
+        }
+        sayi n = dugum_yeni(DugumTur.D_SABIT, satir, sutun);
+        dugum_yaz_ad(n, num);
+        dugum_yaz_ptrd(n, 6);
+        don n;
+    }
+    sayi deger = sayi_oku(num);
+    eger (!sabit_araliga_sigar(suf, deger)) {
+        hata_ver(satir, sutun, "Tamsayı sabiti türün aralığına sığmıyor.");
+        don 0;
+    }
+    sayi n = sabit_sayi(satir, sutun, deger);
+    dugum_yaz_ad(n, suf);
+    don n;
+}
+
 fonk ayristir_birincil() -> sayi {
     eger (hata_var()) {
         don 0;
@@ -322,7 +516,7 @@ fonk ayristir_birincil() -> sayi {
     eger (bak_tur() == JetonTur.J_SAYI) {
         oto v = bak_deger();
         j_ilerle();
-        don sabit_sayi(satir, sutun, sayi_oku(v));
+        don sabit_sayi_sonek(satir, sutun, v);
     }
     eger (bak_tur() == JetonTur.J_ONDALIK) {
         sayi n = dugum_yeni(DugumTur.D_SABIT, satir, sutun);
@@ -336,6 +530,7 @@ fonk ayristir_birincil() -> sayi {
         dugum_yaz_ad(n, bak_deger());
         dugum_yaz_ptrd(n, 2);
         j_ilerle();
+        interp_ayristir(n);
         don n;
     }
     eger (bak_tur() == JetonTur.J_ANAHTAR) {
@@ -1014,12 +1209,6 @@ fonk ayristir_cumle() -> sayi {
     eger (bak_tur() == JetonTur.J_C_GOMMU) {
         sayi tok = j_ilerle();
         sayi n = dugum_yeni(DugumTur.D_C_GOMMU, jeton_satir(tok), jeton_sutun(tok));
-        dugum_yaz_ad(n, jeton_deger(tok));
-        don n;
-    }
-    eger (bak_tur() == JetonTur.J_ASM_GOMMU) {
-        sayi tok = j_ilerle();
-        sayi n = dugum_yeni(DugumTur.D_ASM_GOMMU, jeton_satir(tok), jeton_sutun(tok));
         dugum_yaz_ad(n, jeton_deger(tok));
         don n;
     }

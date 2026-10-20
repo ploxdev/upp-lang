@@ -20,12 +20,10 @@ fonk ana() -> sayi {
     metin ad = "Arda";
     metin s = "merhaba {ad}";
     upp.satir_yaz(s);
-    upp.metin_bosalt(s);
 
     metin m = """satir1
 satir2 {ad}""";
     upp.satir_yaz(m);
-    upp.metin_bosalt(m);
 
     liste[sayi] xs;
     xs.ekle(10);

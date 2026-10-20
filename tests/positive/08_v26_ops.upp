@@ -21,6 +21,5 @@ fonk ana() -> sayi {
         upp.satir_yaz("0");
     }
     upp.satir_yaz("{L}");
-    upp.metin_bosalt(k);
     don 0;
 }

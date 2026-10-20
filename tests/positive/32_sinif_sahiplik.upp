@@ -1,0 +1,56 @@
+// Pozitif: sahipli sınıf değerleri — kopya ref artırır, atama/parametre/don/koşullu ifade sızıntısız
+// @stdout
+// Ali!
+// Ayşe
+// Ali!
+// Veli
+// iç-Ali!
+// Ali!
+// selam
+
+sinif Ic {
+    metin etiket;
+}
+
+sinif Kisi {
+    metin ad;
+    sayi yas;
+    Ic ic;
+    fonk olustur(metin a, sayi y) {
+        kendi.ad = a;
+        kendi.yas = y;
+        kendi.ic.etiket = "iç-" + a;
+    }
+}
+
+fonk yeni_ad(Kisi k) -> Kisi {
+    k.ad = "Veli";
+    don k;
+}
+
+fonk sec(mantik b, Kisi x, Kisi y) -> Kisi {
+    Kisi s = b ? x : y;
+    don s;
+}
+
+fonk ana() -> sayi {
+    Kisi a = Kisi("Ali" + "!", 3);
+    Kisi b = a;
+    b.ad = "Ayşe";
+    upp.satir_yaz(a.ad);
+    upp.satir_yaz(b.ad);
+    Kisi c = yeni_ad(a);
+    upp.satir_yaz(a.ad);
+    upp.satir_yaz(c.ad);
+    c = a;
+    a = b;
+    upp.satir_yaz(c.ic.etiket);
+    upp.satir_yaz(sec(yanlis, a, c).ad);
+    SurecCikti r = upp.sistem.calistir("echo selam");
+    eger (r.basarili) { upp.yaz(r.cikti); }
+    dongu (sayi i = 0; i < 3; i += 1) {
+        Kisi g = Kisi("döngü", i);
+        eger (i == 1) { devam; }
+    }
+    don 0;
+}

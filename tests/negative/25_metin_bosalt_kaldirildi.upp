@@ -1,0 +1,8 @@
+// Negatif: upp.metin_bosalt dilden kaldırıldı; metinler otomatik bırakılır
+// @icerir: dilden kaldırıldı
+
+fonk ana() -> sayi {
+    metin s = upp.giris();
+    upp.metin_bosalt(s);
+    don 0;
+}

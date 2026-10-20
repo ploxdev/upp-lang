@@ -1,0 +1,10 @@
+// Pozitif: boş liste görünüme güvenli boş dilim olur
+// @stdout
+// 0
+
+fonk ana() -> sayi {
+    liste[sayi] l;
+    &dilim[sayi] d = l;
+    upp.satir_yaz("{d.uzunluk}");
+    don 0;
+}

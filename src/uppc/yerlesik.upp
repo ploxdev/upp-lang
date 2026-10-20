@@ -1,0 +1,285 @@
+// Yerleşik (upp.*) fonksiyon tablosu — tek doğru kaynak.
+// Tür denetimi argüman sayısını/türlerini ve dönüş türünü, codegen C adını,
+// güvenlik denetimi 'guvensiz' zorunluluğunu buradan okur.
+// Tabloda olmayan yerleşikler (yaz, satir_yaz, uzunluk, bekle, dunya_ekran,
+// zincir_oku) özel kuralla tur.upp/codegen.upp içinde ele alınır.
+//
+// Bayraklar:
+//   1  YB_GUVENSIZ     yalnızca 'guvensiz' blokta
+//   2  YB_BARINDIRILAN işletim sistemi/libc gerektirir (freestanding'de yok)
+//   4  YB_WINDOWS      yalnızca Windows hedefi
+//   8  YB_LINUX        yalnızca Linux hedefi
+//  64  YB_SERBEST      yalnızca serbest/çekirdek hedefi
+
+harita[metin, sayi] y_idx;
+liste[metin] y_anahtar;
+liste[metin] y_param;
+liste[metin] y_donus;
+liste[metin] y_c;
+liste[sayi] y_bayrak;
+sayi y_hazir = 0;
+
+fonk yk(metin anahtar, metin param, metin donus, metin c, sayi bayrak) -> bos {
+    y_idx.koy(anahtar, y_anahtar.uzunluk() + 1);
+    y_anahtar.ekle(anahtar);
+    y_param.ekle(param);
+    y_donus.ekle(donus);
+    y_c.ekle(c);
+    y_bayrak.ekle(bayrak);
+}
+
+fonk yerlesik_kur() -> bos {
+    eger (y_hazir != 0) { don; }
+    y_hazir = 1;
+    // ---- upp.* (üst düzey) ----
+    yk("giris", "", "metin", "upp_giris", 2);
+    yk("metinden_sayiya", "metin", "sayi", "upp_metinden_sayiya", 0);
+    yk("sayidan_metin", "sayi", "metin", "upp_sayidan_metin", 0);
+    yk("ondalikdan_metin", "ondalik", "metin", "upp_ondalikdan_metin", 0);
+    yk("metinden_ondalik", "metin", "ondalik", "upp_metinden_ondalik", 2);
+    yk("min", "sayi,sayi", "sayi", "upp_min", 0);
+    yk("max", "sayi,sayi", "sayi", "upp_max", 0);
+    yk("mutlak", "sayi", "sayi", "upp_mutlak", 0);
+    yk("zaman", "", "sayi", "upp_zaman", 2);
+    yk("uyut", "sayi", "bos", "upp_uyut", 2);
+    yk("rastgele", "sayi,sayi", "sayi", "upp_rastgele", 2);
+    yk("platform", "", "metin", "upp_platform", 2);
+    yk("arguman_sayisi", "", "sayi", "upp_arguman_sayisi", 2);
+    yk("arguman", "sayi", "metin", "upp_arguman", 2);
+    yk("mesaj", "metin,metin", "bos", "upp_mesaj", 2);
+    yk("hata", "metin,metin", "bos", "upp_hata", 2);
+    yk("ses_cal", "metin", "mantik", "upp_ses_cal", 2);
+    // ---- upp.metin ----
+    yk("metin.kes", "metin,sayi,sayi", "metin", "upp_metin_kes", 0);
+    yk("metin.buyuk", "metin", "metin", "upp_metin_buyuk", 0);
+    yk("metin.kucuk", "metin", "metin", "upp_metin_kucuk", 0);
+    yk("metin.kirp", "metin", "metin", "upp_metin_kirp", 0);
+    yk("metin.baslar", "metin,metin", "mantik", "upp_metin_baslar", 0);
+    yk("metin.biter", "metin,metin", "mantik", "upp_metin_biter", 0);
+    yk("metin.bul", "metin,metin", "sayi", "upp_metin_bul", 0);
+    yk("metin.degistir", "metin,metin,metin", "metin", "upp_metin_degistir", 0);
+    yk("metin.bol", "metin,metin", "liste[metin]", "upp_metin_bol", 0);
+    yk("metin.birlestir", "liste[metin],metin", "metin", "upp_metin_liste_birlestir", 0);
+    yk("metin.kod", "metin,sayi", "sayi", "upp_metin_kod", 0);
+    yk("metin.ileri", "metin,sayi", "sayi", "upp_metin_ileri", 0);
+    yk("metin.hex_coz", "metin", "metin", "upp_metin_hex_coz", 0);
+    yk("metin.hex_kodla", "metin", "metin", "upp_metin_hex_kodla", 0);
+    // ---- upp.dosya ----
+    yk("dosya.oku", "metin", "metin", "upp_dosya_oku", 2);
+    yk("dosya.yaz", "metin,metin", "mantik", "upp_dosya_yaz", 2);
+    yk("dosya.ekle", "metin,metin", "mantik", "upp_dosya_ekle", 2);
+    yk("dosya.var_mi", "metin", "mantik", "upp_dosya_var_mi", 2);
+    yk("dosya.sil", "metin", "mantik", "upp_dosya_sil", 2);
+    yk("dosya.boyut", "metin", "sayi", "upp_dosya_boyut", 2);
+    yk("dosya.listele", "metin", "liste[metin]", "upp_dosya_listele", 2);
+    // ---- upp.yol ----
+    yk("yol.birlestir", "metin,metin", "metin", "upp_yol_birlestir", 2);
+    yk("yol.dizin", "metin", "metin", "upp_yol_dizin", 2);
+    yk("yol.dosya_adi", "metin", "metin", "upp_yol_dosya_adi", 2);
+    yk("yol.uzanti", "metin", "metin", "upp_yol_uzanti", 2);
+    yk("yol.mutlak_mi", "metin", "mantik", "upp_yol_mutlak_mi", 2);
+    yk("yol.gercek", "metin", "metin", "upp_yol_gercek", 2);
+    yk("yol.calisma", "", "metin", "upp_yol_calisma", 2);
+    yk("yol.dizin_var_mi", "metin", "mantik", "upp_yol_dizin_var_mi", 2);
+    yk("yol.dizin_olustur", "metin", "mantik", "upp_yol_klasor_olustur", 2);
+    // ---- upp.sistem ----
+    yk("sistem.calistir", "metin", "SurecCikti", "upp_sistem_calistir", 2);
+    yk("sistem.kos", "metin", "sayi", "upp_sistem_kos", 2);
+    yk("sistem.komut_bul", "metin", "metin", "upp_sistem_komut_bul", 2);
+    yk("sistem.exe_dizin", "", "metin", "upp_sistem_exe_dizin", 2);
+    yk("sistem.pid", "", "sayi", "upp_sistem_pid", 2);
+    yk("sistem.cikis", "sayi", "bos", "upp_sistem_cikis", 2);
+    yk("sistem.ortam_al", "metin", "metin", "upp_ortam_al", 2);
+    yk("sistem.ortam_yaz", "metin,metin", "mantik", "upp_ortam_yaz", 2);
+    // ---- upp.stdio ----
+    yk("stdio.gelen_oku", "", "metin", "upp_stdio_gelen_oku", 2);
+    yk("stdio.yaz", "metin", "bos", "upp_stdio_yaz", 2);
+    // ---- upp.matematik ----
+    yk("matematik.karekok", "ondalik", "ondalik", "upp_mat_karekok", 2);
+    yk("matematik.us", "ondalik,ondalik", "ondalik", "upp_mat_us", 2);
+    yk("matematik.sinus", "ondalik", "ondalik", "upp_mat_sin", 2);
+    yk("matematik.kosinus", "ondalik", "ondalik", "upp_mat_cos", 2);
+    yk("matematik.tanjant", "ondalik", "ondalik", "upp_mat_tan", 2);
+    yk("matematik.atan2", "ondalik,ondalik", "ondalik", "upp_mat_atan2", 2);
+    yk("matematik.taban", "ondalik", "sayi", "upp_mat_taban", 2);
+    yk("matematik.tavan", "ondalik", "sayi", "upp_mat_tavan", 2);
+    yk("matematik.yuvarla", "ondalik", "sayi", "upp_mat_yuvarla", 2);
+    yk("matematik.mutlak", "ondalik", "ondalik", "upp_mat_mutlak", 0);
+    yk("matematik.sinirla", "ondalik,ondalik,ondalik", "ondalik", "upp_mat_sinirla", 0);
+    yk("matematik.yumusat", "ondalik,ondalik,ondalik", "ondalik", "upp_mat_yumusat", 0);
+    yk("matematik.pi", "", "ondalik", "upp_mat_pi", 0);
+    yk("matematik.e", "", "ondalik", "upp_mat_e", 0);
+    yk("matematik.mesafe", "Vektor3,Vektor3", "ondalik", "upp_mat_mesafe_v3", 2);
+    yk("matematik.mesafe_3d", "ondalik,ondalik,ondalik,ondalik,ondalik,ondalik", "ondalik", "upp_mat_mesafe_3d", 2);
+    yk("matematik.aci_hesapla", "ondalik,ondalik,ondalik,ondalik,ondalik,ondalik", "Yonelme", "upp_mat_aci_hesapla", 2);
+    // ---- upp.json ----
+    yk("json.ayristir", "metin", "JSONDeger", "upp_json_ayristir", 2);
+    yk("json.olustur", "JSONDeger", "metin", "upp_json_olustur", 2);
+    yk("json.tur", "JSONDeger", "metin", "upp_json_tur", 2);
+    yk("json.anahtarlar", "JSONDeger", "JSONDeger", "upp_json_anahtarlar", 2);
+    yk("json.anahtar_al", "JSONDeger,metin", "JSONDeger", "upp_json_anahtar_al", 2);
+    yk("json.indeks_al", "JSONDeger,sayi", "JSONDeger", "upp_json_dizi_eleman", 2);
+    yk("json.metin_al", "JSONDeger", "metin", "upp_json_metin_al", 2);
+    yk("json.sayi_al", "JSONDeger", "sayi", "upp_json_sayi_al", 2);
+    yk("json.ondalik_al", "JSONDeger", "ondalik", "upp_json_ondalik_al", 2);
+    yk("json.mantik_al", "JSONDeger", "mantik", "upp_json_mantik_al", 2);
+    yk("json.uzunluk", "JSONDeger", "sayi", "upp_json_uzunluk", 2);
+    yk("json.var_mi", "JSONDeger", "mantik", "upp_json_var_mi", 2);
+    yk("json.nesne", "", "JSONDeger", "upp_json_nesne", 2);
+    yk("json.dizi", "", "JSONDeger", "upp_json_dizi", 2);
+    yk("json.metin_yap", "metin", "JSONDeger", "upp_json_metin_yap", 2);
+    yk("json.sayi_yap", "sayi", "JSONDeger", "upp_json_sayi_yap", 2);
+    yk("json.ondalik_yap", "ondalik", "JSONDeger", "upp_json_ondalik_yap", 2);
+    yk("json.mantik_yap", "mantik", "JSONDeger", "upp_json_mantik_yap", 2);
+    yk("json.yok_yap", "", "JSONDeger", "upp_json_yok_yap", 2);
+    yk("json.koy", "JSONDeger,metin,JSONDeger", "bos", "upp_json_koy", 2);
+    yk("json.ekle", "JSONDeger,JSONDeger", "bos", "upp_json_ekle", 2);
+    yk("json.bosalt", "JSONDeger", "bos", "upp_json_bosalt", 2);
+    // ---- upp.linux ----
+    yk("linux.pid", "", "sayi", "upp_linux_pid", 2 + 8);
+    yk("linux.sinyal_gonder", "sayi,sayi", "mantik", "upp_linux_sinyal_gonder", 2 + 8);
+    yk("linux.proc_oku", "sayi,metin", "metin", "upp_linux_proc_oku", 2 + 8);
+    yk("linux.sayi_oku", "sayi,sayi", "sayi", "upp_linux_sayi_oku", 1 + 2 + 8);
+    yk("linux.sayi_yaz", "sayi,sayi,sayi", "mantik", "upp_linux_sayi_yaz", 1 + 2 + 8);
+    // ---- upp.cekirdek (serbest hedef, donanım) ----
+    yk("cekirdek.port_yaz8", "sayi,sayi", "bos", "upp_cekirdek_port_yaz8", 1 + 64);
+    yk("cekirdek.port_yaz16", "sayi,sayi", "bos", "upp_cekirdek_port_yaz16", 1 + 64);
+    yk("cekirdek.port_yaz32", "sayi,sayi", "bos", "upp_cekirdek_port_yaz32", 1 + 64);
+    yk("cekirdek.port_oku8", "sayi", "sayi", "upp_cekirdek_port_oku8", 1 + 64);
+    yk("cekirdek.port_oku16", "sayi", "sayi", "upp_cekirdek_port_oku16", 1 + 64);
+    yk("cekirdek.port_oku32", "sayi", "sayi", "upp_cekirdek_port_oku32", 1 + 64);
+    yk("cekirdek.bellek_yaz8", "sayi,sayi", "bos", "upp_cekirdek_bellek_yaz8", 1 + 64);
+    yk("cekirdek.bellek_yaz16", "sayi,sayi", "bos", "upp_cekirdek_bellek_yaz16", 1 + 64);
+    yk("cekirdek.bellek_yaz32", "sayi,sayi", "bos", "upp_cekirdek_bellek_yaz32", 1 + 64);
+    yk("cekirdek.bellek_yaz64", "sayi,sayi", "bos", "upp_cekirdek_bellek_yaz64", 1 + 64);
+    yk("cekirdek.bellek_oku8", "sayi", "sayi", "upp_cekirdek_bellek_oku8", 1 + 64);
+    yk("cekirdek.bellek_oku16", "sayi", "sayi", "upp_cekirdek_bellek_oku16", 1 + 64);
+    yk("cekirdek.bellek_oku32", "sayi", "sayi", "upp_cekirdek_bellek_oku32", 1 + 64);
+    yk("cekirdek.bellek_oku64", "sayi", "sayi", "upp_cekirdek_bellek_oku64", 1 + 64);
+    yk("cekirdek.dur", "", "bos", "upp_cekirdek_dur", 1 + 64);
+    yk("cekirdek.kesme_kapat", "", "bos", "upp_cekirdek_kesme_kapat", 1 + 64);
+    yk("cekirdek.kesme_ac", "", "bos", "upp_cekirdek_kesme_ac", 1 + 64);
+    yk("cekirdek.yigin_kur", "sayi,sayi", "bos", "upp_cekirdek_yigin_kur", 1 + 64);
+    // ---- upp.windows ----
+    yk("windows.mesaj", "metin,metin", "bos", "upp_mesaj", 2 + 4);
+    yk("windows.hata", "metin,metin", "bos", "upp_hata", 2 + 4);
+    yk("windows.ses_cal", "metin", "mantik", "upp_ses_cal", 2 + 4);
+    yk("windows.bellek.baglan", "metin", "sayi", "upp_bellek_baglan", 1 + 2);
+    yk("windows.bellek.modul_bul", "metin", "sayi", "upp_bellek_modul_bul", 1 + 2);
+    yk("windows.bellek.sayioku", "sayi", "sayi", "upp_bellek_sayioku", 1 + 2);
+    yk("windows.bellek.sayiyaz", "sayi,sayi", "mantik", "upp_bellek_sayiyaz", 1 + 2);
+    yk("windows.bellek.oku_ondalik", "sayi", "ondalik", "upp_bellek_oku_ondalik", 1 + 2);
+    yk("windows.bellek.yaz_ondalik", "sayi,ondalik", "mantik", "upp_bellek_yaz_ondalik", 1 + 2);
+    yk("windows.bellek.oku_metin", "sayi,sayi", "metin", "upp_bellek_oku_metin", 1 + 2);
+    yk("windows.bellek.yama_yap", "sayi,metin", "mantik", "upp_bellek_yama_yap", 1 + 2);
+    yk("windows.bellek.koruma_degistir", "sayi,sayi,metin", "mantik", "upp_bellek_koruma_degistir", 1 + 2);
+    yk("windows.bellek.koruma_degistir_sayi", "sayi,sayi,sayi", "mantik", "upp_bellek_koruma_degistir_sayi", 1 + 2);
+    yk("windows.bellek.son_hata", "", "sayi", "upp_bellek_son_hata", 1 + 2);
+    yk("windows.bellek.okundu", "", "sayi", "upp_bellek_okundu", 1 + 2);
+    yk("windows.girdi.fare_tasi", "sayi,sayi", "bos", "upp_girdi_fare_tasi", 2 + 4);
+    yk("windows.girdi.fare_tikla", "", "bos", "upp_girdi_fare_tikla", 2 + 4);
+    yk("windows.girdi.tus_bas", "metin", "bos", "upp_girdi_tus_bas", 2 + 4);
+    yk("windows.cizim.baslat", "metin", "sayi", "upp_cizim_baslat", 2 + 4);
+    yk("windows.cizim.temizle", "", "bos", "upp_cizim_temizle", 2 + 4);
+    yk("windows.cizim.kutu", "sayi,sayi,sayi,sayi,metin", "bos", "upp_cizim_kutu", 2 + 4);
+    yk("windows.cizim.yazi", "sayi,sayi,metin,metin", "bos", "upp_cizim_yazi", 2 + 4);
+}
+
+fonk yerlesik_anahtar(metin ns, metin ad) -> metin {
+    eger (ns == yok || metin_esit(ns, "")) { don ad; }
+    don kat3(ns, ".", ad);
+}
+
+// 1 tabanlı tablo indeksi; yoksa 0.
+fonk yerlesik_bul(metin ns, metin ad) -> sayi {
+    yerlesik_kur();
+    oto k = yerlesik_anahtar(ns, ad);
+    eger (y_idx.var_mi(k)) { don y_idx.al(k); }
+    don 0;
+}
+
+fonk yerlesik_c(sayi yi) -> metin { don y_c.al(yi - 1); }
+fonk yerlesik_donus(sayi yi) -> metin { don y_donus.al(yi - 1); }
+fonk yerlesik_bayrak(sayi yi) -> sayi { don y_bayrak.al(yi - 1); }
+fonk yerlesik_param_metin(sayi yi) -> metin { don y_param.al(yi - 1); }
+
+fonk yerlesik_guvensiz_mi(sayi yi) -> mantik {
+    don yi != 0 && (yerlesik_bayrak(yi) & 1) != 0;
+}
+
+// "metin,sayi" → parça sayısı / k'ıncı parça
+fonk yerlesik_param_say(sayi yi) -> sayi {
+    oto p = yerlesik_param_metin(yi);
+    eger (metin_esit(p, "")) { don 0; }
+    sayi n = 1;
+    sayi i = 0;
+    sayi m = metin_uzun(p);
+    iken (i < m) {
+        eger (metin_cp(p, i) == 44) { n = n + 1; }
+        i = i + 1;
+    }
+    don n;
+}
+
+fonk yerlesik_param_tur(sayi yi, sayi k) -> metin {
+    oto p = yerlesik_param_metin(yi);
+    sayi m = metin_uzun(p);
+    sayi i = 0;
+    sayi bas = 0;
+    sayi say = 0;
+    iken (i <= m) {
+        eger (i == m || metin_cp(p, i) == 44) {
+            eger (say == k) { don intern_dilim(p, bas, i); }
+            say = say + 1;
+            bas = i + 1;
+        }
+        i = i + 1;
+    }
+    don "";
+}
+
+// Aynı ad alanındaki yerleşiklerin listesi (öneri için).
+fonk yerlesik_ns_adlari(metin ns) -> metin {
+    yerlesik_kur();
+    metin o = "";
+    sayi i = 0;
+    oto on = kat(ns, ".");
+    sayi n_on = metin_uzun(on);
+    iken (i < y_anahtar.uzunluk()) {
+        oto k = y_anahtar.al(i);
+        mantik uygun = yanlis;
+        eger (metin_esit(ns, "")) {
+            uygun = upp.metin.bul(k, ".") < 0;
+        } yoksa eger (metin_uzun(k) > n_on && metin_esit(intern_dilim(k, 0, n_on), on)) {
+            oto kalan = intern_dilim(k, n_on, metin_uzun(k));
+            uygun = upp.metin.bul(kalan, ".") < 0;
+        }
+        eger (uygun && (y_bayrak.al(i) & 32) == 0) {
+            eger (!metin_esit(o, "")) { o += ", "; }
+            eger (metin_esit(ns, "")) { o += k; } yoksa { o += intern_dilim(k, n_on, metin_uzun(k)); }
+        }
+        i = i + 1;
+    }
+    don o;
+}
+
+// Kaldırılmış yazımlar → yerine geçen tam ad (upp. öneki olmadan).
+fonk yerlesik_kaldirilan(metin anahtar) -> metin {
+    eger (metin_esit(anahtar, "dosya_oku")) { don "dosya.oku"; }
+    eger (metin_esit(anahtar, "dosya_yaz")) { don "dosya.yaz"; }
+    eger (metin_esit(anahtar, "dosya_ekle")) { don "dosya.ekle"; }
+    eger (metin_esit(anahtar, "dosya_var_mi")) { don "dosya.var_mi"; }
+    eger (metin_esit(anahtar, "dosya_sil")) { don "dosya.sil"; }
+    eger (metin_esit(anahtar, "dosya_boyut")) { don "dosya.boyut"; }
+    eger (metin_esit(anahtar, "ortam_al")) { don "sistem.ortam_al"; }
+    eger (metin_esit(anahtar, "ortam_yaz")) { don "sistem.ortam_yaz"; }
+    eger (metin_esit(anahtar, "metin.icinde")) { don "metin.bul"; }
+    eger (metin_esit(anahtar, "metin.baslangic_mi")) { don "metin.baslar"; }
+    eger (metin_esit(anahtar, "metin.bitis_mi")) { don "metin.biter"; }
+    eger (metin_esit(anahtar, "yol.klasor_olustur")) { don "yol.dizin_olustur"; }
+    eger (metin_esit(anahtar, "matematik.sin")) { don "matematik.sinus"; }
+    eger (metin_esit(anahtar, "matematik.cos")) { don "matematik.kosinus"; }
+    eger (metin_esit(anahtar, "matematik.tan")) { don "matematik.tanjant"; }
+    eger (metin_esit(anahtar, "json.dizi_eleman")) { don "json.indeks_al"; }
+    don "";
+}

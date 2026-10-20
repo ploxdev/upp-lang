@@ -54,19 +54,33 @@ u++ modülleri tek bir derleme birimi halinde birleştirildiğinde her dosya der
 | `parser.upp` | **Sözdizim Analizi:** Özyinelemeli inişli (recursive-descent) ayrıştırıcı ve AST inşası. |
 | `tur.upp` | **Tip Çıkarımı & Ad Alanı:** Çok seviyeli ad alanları (`upp.windows.*`, `upp.linux.*`), değişken/fonksiyon tip denetimi, sınıf çözümleme. |
 | `guvenlik.upp` | **Güvenlik Analizi:** Güvenli/güvensiz blok sınırları ve çekirdek bellek erişimlerinin denetimi. |
+| `yerlesik.upp` | **Yerleşik Tablosu:** her `upp.*` için parametre/dönüş türü, C adı, `guvensiz`/barındırılan/serbest bayrakları. |
+| `cekirdek.upp` | **Çekirdek Hedefi:** gömülü önyükleyici (Multiboot → long mode), bağlayıcı betiği, araç zinciri (gcc / x86_64-elf / WSL) ve QEMU. |
+| `asistan.upp` | **Proje Sistemi:** `upp.proje`, `uppc yeni/derle/calistir/asistan`. |
 | `codegen.upp` | **C11 Üretimi:** AST'den optimize GNU C11 kod üretimi ve gömülü çalışma zamanının (`os_runtime_gomulu_yay`) koda eklenmesi. |
 | `gomulu_runtime.upp` | **Gömülü Çalışma Zamanı:** `src/runtime/upp_runtime.c` içeriğini onaltılık (hex) bayt dizisi olarak saklayan ve ihtiyaç duyulduğunda C koduna enjekte eden modül. |
 | `surucu.upp` | **CLI & Sürücü:** Komut satırı argümanlarının ayrıştırılması, GCC çağrısı ve süreç yönetimi. |
-| `birlestir.upp` | **Kaynak Birleştirici:** Modülleri tek `.upp` haline getiren bağımsız yardımcı araç. |
+| `kendini.upp` | **Self-host:** `uppc kendini-derle` — birleştirme, runtime gömme, aşamalı derleme, sabit nokta ve bootstrap üretimi. |
 
 ---
+
+## 🧱 Çalışma Zamanı Katmanları
+
+| Dosya | Görev |
+|---|---|
+| `upp_on_barindirilan.c` / `upp_on_serbest.c` | Hedef yapılandırması, libc başlıkları ya da libc ikameleri, `UPP_AYIR/UPP_YENIDEN/UPP_BIRAK` ayırıcısı |
+| `upp_cekirdek.c` | libc'siz çekirdek: metin v2 (refcount, COW, UTF-8 indeksi, sabit havuzu), metin kurucu, liste/harita, dilimler |
+| `upp_barindirilan.c` | İşletim sistemi katmanı ve platform sözleşmesi (`upp_panik`, `_upp_akis_bayt`, `_upp_ondalik_yaz`) |
+| `upp_serbest.c` | Çekirdek katmanı: COM1 + VGA konsolu, panik, libc'siz `%g`, `upp.cekirdek.*` |
+
+`uppc kendini-derle` iki paket üretir: `upp_runtime.c` (barındırılan) ve `upp_runtime_serbest.c`. İkisini de derleyiciye gömer: `gomulu_runtime.upp` ve `gomulu_serbest.upp`. Codegen hiçbir libc çağrısı ya da `#include` üretmez, her şey runtime üzerinden geçer.
 
 ## 📦 Gömülü Çalışma Zamanı (Embedded Runtime) Mimarisi
 
 Önceki sürümlerde derleyicinin çalışabilmesi için `src/runtime/upp_runtime.c` dosyasının belirli bir göreli yolda bulunması zorunluydu. u++ v3.0 ile bu kısıtlama tamamen ortadan kaldırılmıştır:
 
 1. **Onaltılık Kodlama (Hex Encoding):**
-   - `araclar/gomulu_runtime_uret.py` aracı, `src/runtime/upp_runtime.c` dosyasını okur ve ham baytları onaltılık dizilere dönüştürür.
+   - `uppc kendini-derle`, `src/runtime/upp_runtime.c` dosyasını okur ve baytlarını onaltılık dizilere dönüştürür (`src/uppc/kendini.upp`).
    - Bu diziler `src/uppc/gomulu_runtime.upp` içerisindeki `os_runtime_gomulu_yay()` fonksiyonuna `tampon_yaz(upp.metin.hex_coz("..."))` çağrıları olarak işlenir.
 2. **Sıfır Bağımlılık (Standalone):**
    - Derleyici çalışırken diskte `upp_runtime.c` dosyası aramak zorunda değildir; C kod üretimi sırasında gömülü çalışma zamanını doğrudan bellekten C kaynak dosyasına yayar.
@@ -120,14 +134,11 @@ gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi
 # Linux: gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
 ```
 
-Kaynakları yeniden transpile etmek için mevcut `uppc` gerekir:
+Kaynakları değiştirdikten sonra derleyici kendini yeniden derler. Modülleri birleştirir, runtime'ı gömer, üç aşamayı derleyip sabit noktayı doğrular, yeni `uppc`'yi kurar ve `bootstrap/uppc.c`'yi günceller:
 
-```powershell
-py araclar/birlestir.py
-.\derleyici\uppc.exe derleyici/uppc_birlesik.upp --sadece-c --cikti derleyici/uppc_yeni.c
-py araclar/bootstrap.py hazirla
-gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
-py tests/run_tests.py
+```bash
+./derleyici/uppc kendini-derle            # tam: aşama2 == aşama3 doğrulanır
+./derleyici/uppc kendini-derle --hizli    # iki aşama, sabit nokta kontrolü yok
 ```
 
 `havuz_impl.h` SoA native derleyicide yoktur; düğüm/intern havuzu `src/uppc/havuz.upp`, koleksiyon büyütme `src/runtime/upp_runtime.c` içindedir.

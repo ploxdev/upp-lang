@@ -11,6 +11,5 @@ fonk ana() -> sayi {
     SELAM += "!";
     upp.satir_yaz("{N}");
     upp.satir_yaz(SELAM);
-    upp.metin_bosalt(SELAM);
     don 0;
 }

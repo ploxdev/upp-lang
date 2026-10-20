@@ -1,0 +1,63 @@
+// @bayrak: --hedef cekirdek
+// u++ ile ilk çekirdek: işletim sistemi yok, libc yok.
+// Derle ve QEMU'da çalıştır:
+//     uppc ornekler/cekirdek/merhaba.upp --hedef cekirdek
+// Çıktı hem COM1 seri porta (terminal) hem VGA metin ekranına gider.
+
+// QEMU'nun isa-debug-exit aygıtı: 0xf4 portuna yazılan değerle çıkar.
+fonk qemu_cik(sayi kod) -> bos {
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, kod);
+    }
+}
+
+sinif Sayac {
+    metin ad;
+    sayi deger;
+
+    fonk olustur(metin a) {
+        kendi.ad = a;
+        kendi.deger = 0;
+    }
+
+    fonk artir(sayi n) -> bos {
+        kendi.deger += n;
+    }
+}
+
+fonk asallar(sayi adet) -> liste[sayi] {
+    liste[sayi] L;
+    sayi n = 2;
+    iken (L.uzunluk() < adet) {
+        mantik asal = dogru;
+        her (oto p in L) {
+            eger (n % p == 0) {
+                asal = yanlis;
+                dur;
+            }
+        }
+        eger (asal) { L.ekle(n); }
+        n += 1;
+    }
+    don L;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("Merhaba, u++ çekirdeği! İşletim sistemi yok, libc yok.");
+    liste[sayi] L = asallar(10);
+    metin s = "İlk 10 asal:";
+    her (oto p in L) {
+        s += " {p}";
+    }
+    upp.satir_yaz(s);
+    Sayac c = Sayac("adım");
+    dongu (sayi i = 1; i <= 100; i += 1) {
+        c.artir(i);
+    }
+    upp.satir_yaz("{c.ad} toplamı = {c.deger}");
+    ondalik r = 2.5;
+    upp.satir_yaz("pi = {upp.matematik.pi()}, alan = {upp.matematik.pi() * r * r}");
+    upp.satir_yaz("Büyük harf: {upp.metin.buyuk(\"işletim sistemi\")}");
+    qemu_cik(0);
+    don 0;
+}

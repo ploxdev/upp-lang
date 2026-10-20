@@ -5,6 +5,14 @@ sayi g_analiz_topla = 0;
 sayi g_hata_satir = 0;
 sayi g_hata_sutun = 1;
 metin g_hata_mesaj = "";
+metin g_hata_dosya_cur = "";
+metin g_hata_dosya = "";
+
+// Denetçiler yürüdükleri düğümün dosyasını bildirir; hata o dosyayla raporlanır.
+fonk hata_dosya_yaz(metin d) -> bos {
+    eger (d == yok || metin_esit(d, "")) { don; }
+    g_hata_dosya_cur = d;
+}
 metin g_htampon = "";
 
 liste[sayi] a_satir;
@@ -48,6 +56,8 @@ fonk hata_ver(sayi satir, sayi sutun, metin mesaj) -> bos {
     eger (g_hata_bayrak != 0) { don; }
     g_hata_bayrak = 1;
     g_hata_guvenlik = 0;
+    g_hata_dosya = g_hata_dosya_cur;
+    eger (metin_esit(g_hata_dosya, "")) { g_hata_dosya = dugum_yeni_kaynak(); }
     g_hata_satir = satir;
     g_hata_sutun = sutun < 1 ? 1 : sutun;
     g_hata_mesaj = mesaj;
@@ -75,6 +85,8 @@ fonk hata_guvenlik(sayi satir, sayi sutun, metin mesaj) -> bos {
     eger (g_hata_bayrak != 0) { don; }
     g_hata_bayrak = 1;
     g_hata_guvenlik = 1;
+    g_hata_dosya = g_hata_dosya_cur;
+    eger (metin_esit(g_hata_dosya, "")) { g_hata_dosya = dugum_yeni_kaynak(); }
     g_hata_satir = satir;
     g_hata_sutun = sutun < 1 ? 1 : sutun;
     g_hata_mesaj = mesaj;
@@ -86,6 +98,7 @@ fonk hata_bas() -> bos {
         pref = "[u++ BELLEK GÜVENLİĞİ İHLALİ]";
     }
     metin ad = derleme_kaynak_ad();
+    eger (!metin_esit(g_hata_dosya, "")) { ad = g_hata_dosya; }
     metin o = "";
     o += pref;
     o += " Satır ";

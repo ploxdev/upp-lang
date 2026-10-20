@@ -1,0 +1,28 @@
+// Pozitif: don sabit/küresel metni kopyalar; küresel NULL olmaz
+// @stdout
+// sabit_metin
+// g
+// g
+// g
+
+metin G = "g";
+
+fonk sabit_don() -> metin {
+    sabit metin s = "sabit_metin";
+    don s;
+}
+
+fonk kuresel_don() -> metin {
+    don G;
+}
+
+fonk ana() -> sayi {
+    metin a = sabit_don();
+    upp.satir_yaz(a);
+    metin b = kuresel_don();
+    upp.satir_yaz(b);
+    upp.satir_yaz(G);
+    metin c = kuresel_don();
+    upp.satir_yaz(c);
+    don 0;
+}

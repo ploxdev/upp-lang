@@ -1,0 +1,9 @@
+// Negatif: upp.cekirdek.* yalnızca serbest/çekirdek hedefinde
+// @icerir: yalnızca serbest/çekirdek hedefinde
+
+fonk ana() -> sayi {
+    guvensiz {
+        upp.cekirdek.port_yaz8(0x3f8, 65);
+    }
+    don 0;
+}

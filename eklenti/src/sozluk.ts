@@ -67,7 +67,6 @@ export const UPP_FONK: Record<string, string> = {
   min: "İki `sayi` minimumu.",
   max: "İki `sayi` maksimumu.",
   mutlak: "`sayi` mutlak değer.",
-  metin_bosalt: "Yığın metni serbest bırak.",
   bekle: "`ArkaplanIs` bitene kadar bekle.",
   arguman_sayisi: "`argc`.",
   arguman: "`argv[i]`.",

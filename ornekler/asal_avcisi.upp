@@ -93,7 +93,6 @@ fonk ana() -> sayi {
         upp.satir_yaz("JSON dogrulandi: {json_govde}");
         upp.json.bosalt(ayrik);
     }
-    upp.metin_bosalt(json_govde);
 
     ozet.bosalt();
     don 0;

@@ -116,7 +116,7 @@ fonk yukle_birim(metin kaynak, metin yol, sayi kutuphane, sayi seen, sayi stack,
             oto spec = dugum_ad(d);
             oto hedef = kullan_coz(spec, yol, dugum_satir(d), dugum_sutun(d));
             eger (hata_var() || metin_esit(hedef, "")) { don; }
-            oto alt = upp.dosya_oku(hedef);
+            oto alt = upp.dosya.oku(hedef);
             eger (alt == yok) {
                 hata_fmt_basla();
                 hata_fmt_yaz("'kullan' dosyası okunamadı: ");
@@ -330,6 +330,45 @@ fonk ana() -> sayi {
     eger (argn >= 2 && metin_esit(upp.arguman(1), "--havuz-test")) {
         don havuz_sinir_test();
     }
+    eger (argn >= 2 && (metin_esit(upp.arguman(1), "derle") || metin_esit(upp.arguman(1), "calistir"))) {
+        metin pd = ".";
+        eger (argn >= 3) { pd = upp.arguman(2); }
+        don pj_derle(pd, metin_esit(upp.arguman(1), "calistir"));
+    }
+    eger (argn >= 2 && metin_esit(upp.arguman(1), "yeni")) {
+        metin yad = "";
+        metin yh = "yerel";
+        sayi yi = 2;
+        iken (yi < argn) {
+            oto ya = upp.arguman(yi);
+            eger (metin_esit(ya, "--hedef") && yi + 1 < argn) {
+                yi = yi + 1;
+                yh = upp.arguman(yi);
+            } yoksa { yad = ya; }
+            yi = yi + 1;
+        }
+        don pj_yeni(yad, yh);
+    }
+    eger (argn >= 2 && metin_esit(upp.arguman(1), "asistan")) {
+        metin ad_dizin = ".";
+        eger (argn >= 3) { ad_dizin = upp.arguman(2); }
+        don pj_asistan(ad_dizin);
+    }
+    eger (argn >= 2 && metin_esit(upp.arguman(1), "kendini-derle")) {
+        metin kd_kok = ".";
+        mantik kd_hizli = yanlis;
+        sayi ki = 2;
+        iken (ki < argn) {
+            oto ka = upp.arguman(ki);
+            eger (metin_esit(ka, "--hizli")) { kd_hizli = dogru; }
+            yoksa eger (metin_esit(ka, "--kok") && ki + 1 < argn) {
+                ki = ki + 1;
+                kd_kok = upp.arguman(ki);
+            }
+            ki = ki + 1;
+        }
+        don kendini_derle(kd_kok, kd_hizli);
+    }
     metin kaynak_yol = "ornekler/ornek1.upp";
     metin cikti = "";
     mantik sadece_c = yanlis;
@@ -343,6 +382,7 @@ fonk ana() -> sayi {
     mantik hedef_windows = yanlis;
     mantik surum_iste = yanlis;
     mantik surum_json = yanlis;
+    metin hedef_ad = "";
     sayi i = 1;
     iken (i < argn) {
         oto a = upp.arguman(i);
@@ -354,6 +394,10 @@ fonk ana() -> sayi {
         }
         yoksa eger (metin_esit(a, "--yardim") || metin_esit(a, "-h")) {
             upp.satir_yaz("Kullanım: uppc <dosya.upp> [seçenekler]");
+            upp.satir_yaz("         uppc yeni <ad> [--hedef cekirdek]   proje oluştur (upp.proje)");
+            upp.satir_yaz("         uppc derle [dizin] | uppc calistir [dizin]");
+            upp.satir_yaz("         uppc asistan [dizin]                menülü derleme asistanı");
+            upp.satir_yaz("         uppc kendini-derle [--hizli] [--kok <dizin>]");
             upp.satir_yaz("");
             upp.satir_yaz("Seçenekler:");
             upp.satir_yaz("  --sadece-derle     Derle ve ikili üret, çalıştırma");
@@ -367,6 +411,7 @@ fonk ana() -> sayi {
             upp.satir_yaz("  --bicim-kontrol    Biçim kontrolü yap");
             upp.satir_yaz("  --windows          Windows hedefi için derle");
             upp.satir_yaz("  --linux            Linux hedefi için derle");
+            upp.satir_yaz("  --hedef <h>        windows | linux | serbest (libc'siz .o) | cekirdek (x86_64 ELF + QEMU)");
             upp.satir_yaz("  -v, --surum        Sürüm: u++ 3.0.1");
             upp.satir_yaz("  --json             --surum ile makine-okur JSON");
             upp.satir_yaz("  -h, --yardim       Bu yardım mesajını göster");
@@ -385,6 +430,10 @@ fonk ana() -> sayi {
         yoksa eger (metin_esit(a, "--bicim-kontrol")) { bicim_kontrol = dogru; }
         yoksa eger (metin_esit(a, "--linux")) { hedef_linux = dogru; }
         yoksa eger (metin_esit(a, "--windows")) { hedef_windows = dogru; }
+        yoksa eger (metin_esit(a, "--hedef")) {
+            i = i + 1;
+            eger (i < argn) { hedef_ad = upp.arguman(i); }
+        }
         yoksa eger (metin_esit(a, "--cikti") || metin_esit(a, "-o")) {
             i = i + 1;
             eger (i < argn) { cikti = upp.arguman(i); }
@@ -405,10 +454,22 @@ fonk ana() -> sayi {
         upp.satir_yaz("[u++ HATA] --linux ve --windows birlikte kullanılamaz.");
         don 1;
     }
+    eger (metin_esit(hedef_ad, "linux")) { hedef_linux = dogru; }
+    yoksa eger (metin_esit(hedef_ad, "windows")) { hedef_windows = dogru; }
+    yoksa eger (metin_esit(hedef_ad, "serbest")) { serbest_yaz(1, 0); }
+    yoksa eger (metin_esit(hedef_ad, "cekirdek")) { serbest_yaz(1, 1); }
+    yoksa eger (!metin_esit(hedef_ad, "")) {
+        upp.yaz("[u++ HATA] Bilinmeyen hedef: '");
+        upp.yaz(hedef_ad);
+        upp.satir_yaz("'. Seçenekler: windows, linux, serbest, cekirdek.");
+        don 1;
+    }
     eger (hedef_linux) {
         os_hedef_yaz(1);
     } yoksa eger (hedef_windows) {
         os_hedef_yaz(0);
+    } yoksa eger (serbest_mi()) {
+        os_hedef_yaz(1);
     }
     eger (analiz) {
         json_hata = dogru;
@@ -450,7 +511,7 @@ fonk ana() -> sayi {
         upp.yaz(kaynak_yol);
         upp.satir_yaz("' ayrıştırılıyor...");
     }
-    oto kaynak = kaynak_lf(upp.dosya_oku(kaynak_yol));
+    oto kaynak = kaynak_lf(upp.dosya.oku(kaynak_yol));
     eger (analiz) {
         sayi program = analiz_program(kaynak, kaynak_yol, 1);
         eger (program == 0) {
@@ -517,6 +578,24 @@ fonk ana() -> sayi {
     }
     eger (sadece_c) {
         eger (json_hata) { hata_json_ok(); }
+        don 0;
+    }
+    eger (serbest_mi()) {
+        oto skok = yol_uzanti_kes(c_yol);
+        eger (cekirdek_mi()) {
+            don cekirdek_derle(c_yol, skok, !sadece_derle);
+        }
+        eger (!ck_arac_bul()) {
+            upp.satir_yaz("[u++ HATA] x86_64 ELF araç zinciri bulunamadı (gcc / x86_64-elf-gcc / WSL).");
+            don 1;
+        }
+        eger (ck_calistir(g_ck_gcc + " -std=gnu11 -O2 -m64 -ffreestanding -fno-stack-protector -fno-pic -fno-pie -mno-red-zone -nostdlib -Wno-unused-function -c " + ck_yol(c_yol) + " -o " + ck_yol(skok + ".o")) != 0) {
+            upp.satir_yaz("[GCC DERLEME HATASI]");
+            don 1;
+        }
+        upp.yaz("[u++] SERBEST NESNE HAZIR: ");
+        upp.yaz(skok);
+        upp.satir_yaz(".o  (giriş: upp_cekirdek_giris)");
         don 0;
     }
     oto gcc = os_gcc_bul();

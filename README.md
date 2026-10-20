@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="OGREN.md"><img src="https://img.shields.io/badge/sürüm-v3.0%20beta-007ACC.svg?style=flat-square" alt="Sürüm" /></a>
+  <a href="OGREN.md"><img src="https://img.shields.io/badge/sürüm-v3.1%20beta-007ACC.svg?style=flat-square" alt="Sürüm" /></a>
   <a href="#-lisans"><img src="https://img.shields.io/badge/lisans-Apache%202.0-blue.svg?style=flat-square" alt="Lisans" /></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-222222.svg?style=flat-square" alt="Platform" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20x86__64%20çekirdek-222222.svg?style=flat-square" alt="Platform" />
   <img src="https://img.shields.io/badge/derleyici-Native%20Self--Hosted%20(Standalone)-success.svg?style=flat-square" alt="Derleyici" />
-  <img src="https://img.shields.io/badge/testler-45%2F45%20geçti-brightgreen.svg?style=flat-square" alt="Testler" />
+  <img src="https://img.shields.io/badge/testler-81%2F81%20geçti-brightgreen.svg?style=flat-square" alt="Testler" />
   <a href="eklenti/README.md"><img src="https://img.shields.io/badge/IDE-VS%20Code%20%7C%20Cursor-blueviolet.svg?style=flat-square" alt="IDE Desteği" /></a>
 </p>
 
@@ -37,8 +37,11 @@ Bu proje; derleyici mühendisliği (compiler design), soyut sözdizim ağaçlar�
 - **🇹🇷 Doğal Türkçe Sözdizimi:** `fonk`, `eger`, `dongu`, `sinif`, `don`, `kullan` gibi akıcı, okunaklı ve tutarlı anahtar sözcükler.
 - **⚡ Gerçek Native Performans:** Yorumlayıcı ya da VM (sanal makine) yükü yoktur. Doğrudan optimize C11 çıktısı ve GCC derlemesiyle en yüksek çalışma hızı.
 - **🛡️ Varsayılan Bellek Güvenliği:** Ham işaretçiler (`*`, `&`), doğrudan bellek manipülasyonu ve harici çekirdek bellek erişimleri (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`) yalnızca açıkça belirtilen `guvensiz { ... }` blokları içerisinde serbesttir.
-- **🔄 Standalone Native Derleyici (Self-Hosting):** Tamamen saf u++ diliyle yazılmış, C çalışma zamanını kendi içine gömerek tek ikili (`uppc` / `uppc.exe`) halinde çalışan bağımsız yerel derleyici.
-- **🧱 Zengin Tip Sistemi:** `sayi` (64-bit int), `ondalik` (double), `bayt` (uint8_t), `metin` (string), `mantik` (bool), `liste[T]` (`sil`, `temizle`), `harita[K,V]` (`sil`, `temizle`), `dizi[T, N]` ve `sinif`.
+- **♻️ Otomatik Metin Yönetimi:** Metinler elle serbest bırakılmaz. Derleyici kapsam sonunda, `dur`/`devam` ve `don` noktalarında bırakma kodunu kendisi ekler, geçici metinleri de kopyalamadan taşır. Kopyasız okuma için `&metin` ve `&dilim[T]` görünümleri vardır (`arr[1..4]`).
+- **🖥️ İşletim Sistemi Yazmaya Hazır:** `--hedef cekirdek`, u++ programını Multiboot ile açılan x86_64 çekirdeğine çevirir. libc yoktur. Çıktı seri port ve VGA'ya gider, donanım erişimi `upp.cekirdek.*` (port G/Ç, MMIO, `hlt`/`cli`/`sti`) ile yapılır. `--hedef serbest` libc'siz `.o` üretir.
+- **🧰 Proje Sistemi ve Asistan:** `uppc yeni`, `uppc derle`, `uppc calistir` ve `upp.proje` ile proje yönetilir. `uppc asistan` menülü bir derleme asistanıdır: hedef seçer, araç zincirini (gcc / WSL / QEMU) denetler, derler ve çalıştırır.
+- **🔄 Standalone Native Derleyici (Self-Hosting):** Tamamen saf u++ ile yazılmış, C çalışma zamanını içine gömen tek ikili (`uppc` / `uppc.exe`). `uppc kendini-derle` derleyiciyi yaklaşık 30 saniyede kendisiyle yeniden kurar ve sabit noktayı doğrular (Python yok).
+- **🧱 Zengin Tip Sistemi:** `sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8` (işaretli), `ubayt`/`u8`, `ondalik`, `metin`, `mantik`, `liste[T]`, `harita[K,V]`, `dizi[T, N]` ve `sinif`.
 - **📦 Zengin Standart Kütüphane (`upp.*`):**
   - Dosya & Klasör I/O (`upp.dosya`, `upp.yol`, `upp.dosya.boyut`)
   - Gelişmiş Metin ve UTF-8 İşlemleri (`upp.metin`, `upp.metin.hex_coz`)
@@ -79,7 +82,8 @@ u++ derleme hattı, kaynak koddan çalıştırılabilir ikiliye kadar modüler b
 - **GCC Derleyicisi:**
   - **Windows:** [MinGW-w64](https://www.msys2.org/) (MSYS2 `ucrt64` veya `mingw64` ortamı, PATH'e ekli olmalıdır)
   - **Linux:** `build-essential` (`sudo apt install build-essential`)
-- **Python 3.8+** (Opsiyonel: Yalnızca VS Code LSP dil sunucusu ve test runner için; derleyici bağımsız çalışır)
+- **Python 3.8+** (Opsiyonel: yalnızca test koşucusu için; derleyici ve self-host Python kullanmaz)
+- **Çekirdek hedefi için** (opsiyonel): Linux'ta `gcc`, Windows'ta WSL içinde `gcc` ya da `x86_64-elf-gcc`. Çalıştırmak için `qemu-system-x86_64` gerekir.
 
 ### Kurulum
 
@@ -131,7 +135,9 @@ fonk ana() -> sayi {
 fonk ana() -> sayi {
     oto isim = "Arda";
     sayi yas = 24;
-    bayt seviye = 255;
+    s64 ayni_yas = yas;
+    ubayt seviye = 255;
+    bayt fark = -3;
     ondalik pi = 3.1415;
     mantik aktif = dogru;
 
@@ -218,6 +224,46 @@ fonk ana() -> sayi {
 
 ---
 
+## 🧰 Projeler ve Derleme Asistanı
+
+```bash
+uppc yeni oyunum                 # oyunum/upp.proje + oyunum/kaynak/ana.upp
+cd oyunum && uppc calistir       # derle ve çalıştır
+uppc yeni cekirdegim --hedef cekirdek
+uppc asistan                     # menülü asistan: yeni proje, derle, çalıştır, hedef, araç zinciri
+```
+
+`upp.proje` dosyası satır başına `anahtar = değer` biçimindedir. Anahtarlar `ad`, `giris`, `hedef` (`yerel|windows|linux|serbest|cekirdek`), `cikti` ve `bayraklar`'dır.
+
+---
+
+## 🖥️ İşletim Sistemi Yazmak: `--hedef cekirdek`
+
+```text
+// ornekler/cekirdek/merhaba.upp
+fonk qemu_cik(sayi kod) -> bos {
+    guvensiz { upp.cekirdek.port_yaz32(0xf4, kod); }
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("Merhaba, u++ çekirdeği! İşletim sistemi yok, libc yok.");
+    liste[sayi] L;
+    dongu (sayi i = 0; i < 5; i += 1) { L.ekle(i * i); }
+    upp.satir_yaz("kareler: {L[1]} {L[2]} {L[3]}");
+    qemu_cik(0);
+    don 0;
+}
+```
+
+```bash
+uppc ornekler/cekirdek/merhaba.upp --hedef cekirdek
+# → merhaba.elf (x86_64) ve merhaba32.elf; QEMU varsa: qemu-system-x86_64 -kernel merhaba32.elf -serial stdio
+```
+
+Dilin tamamı çekirdekte çalışır: sınıflar, `liste`/`harita`, metin interpolasyonu ve otomatik bellek yönetimi. Bunları libc'siz çalışma zamanı (`src/runtime/upp_on_serbest.c` + `upp_cekirdek.c` + `upp_serbest.c`) sağlar: kendi yığın ayırıcısı, seri port ve VGA konsolu ile birlikte gelir. Önyükleyici Multiboot üzerinden açılır, long mode'a geçer, ilk 1 GiB'ı eşler, SSE'yi etkinleştirir ve `ana()`'yı çağırır. Önyükleyici derleyicinin içinde gömülüdür. İşletim sistemi isteyen API'ler (`upp.dosya`, `arkaplan` vb.) bu hedefte derleme hatası verir.
+
+---
+
 ## ⚙️ Native Self-Hosted Derleyici
 
 Temiz bir klon **bootstrap C** ile ayağa kalkar (Python derleyici yok):
@@ -230,15 +276,11 @@ gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi
 gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc -pthread -lm
 ```
 
-veya `py araclar/bootstrap.py derle`.
-
-Kaynakları birleştirip yeniden transpile (mevcut `uppc` gerekir):
+Kaynakları değiştirdikten sonra derleyici kendini yeniden derler. Modülleri birleştirir, runtime'ı gömer, üç aşamayı derleyip sabit noktayı doğrular, yeni `uppc`'yi kurar ve `bootstrap/uppc.c`'yi günceller:
 
 ```bash
-py araclar/birlestir.py
-./derleyici/uppc derleyici/uppc_birlesik.upp --sadece-c --cikti derleyici/uppc_yeni.c
-py araclar/bootstrap.py hazirla
-gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
+./derleyici/uppc kendini-derle            # tam: aşama2 == aşama3 doğrulanır
+./derleyici/uppc kendini-derle --hizli    # iki aşama, sabit nokta kontrolü yok
 ```
 
 ---
@@ -261,7 +303,7 @@ u++, native derleyici üzerinden çalışan kapsamlı bir test paketiyle sürekl
 
 ```bash
 # Bootstrap derleyicisini derle, sonra tüm testler:
-py araclar/bootstrap.py derle
+gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi32
 python tests/run_tests.py
 
 python tests/run_tests.py --kategori positive
@@ -285,12 +327,19 @@ upp-lang/
 │   ├── API_tr.md
 │   └── API_en.md
 ├── src/
-│   ├── runtime/            # C çalışma zamanı kütüphanesi (upp_runtime.c)
-│   └── uppc/               # Native derleyici kaynak kodları (saf u++)
-│       └── gomulu_runtime.upp # Derleyiciye gömülü C çalışma zamanı
+│   ├── runtime/            # C çalışma zamanı
+│   │   ├── upp_cekirdek.c        # libc'siz çekirdek: metin v2, koleksiyonlar, kurucu
+│   │   ├── upp_barindirilan.c    # işletim sistemi katmanı (dosya, süreç, iş parçacığı, JSON...)
+│   │   ├── upp_serbest.c         # çekirdek katmanı (seri/VGA, panik, upp.cekirdek.*)
+│   │   ├── upp_on_*.c            # hedef ön dosyaları (yapılandırma, libc ikameleri, ayırıcı)
+│   │   └── upp_runtime*.c        # OTOMATİK: paketler (kendini-derle üretir)
+│   └── uppc/               # Derleyici (saf u++); sıra: moduller.liste
+│       ├── yerlesik.upp          # upp.* yerleşik tablosu (tek doğru kaynak)
+│       ├── cekirdek.upp          # --hedef cekirdek: önyükleyici + araç zinciri
+│       ├── asistan.upp           # upp.proje, yeni/derle/calistir/asistan
+│       └── kendini.upp           # kendini-derle (self-host)
 ├── eklenti/                # VS Code & Cursor IDE eklentisi
-├── araclar/                # Birleştirme ve bootstrap yardımcıları
-├── ornekler/               # Dil yeteneklerini sergileyen örnek kodlar (.upp, .uph)
+├── ornekler/               # Örnekler; ornekler/cekirdek/ x86_64 çekirdek örneği
 └── tests/                  # Entegrasyon, güvenlik, runtime ve negatif test paketi
 ```
 
@@ -317,7 +366,10 @@ Instead of relying on an interpreter or virtual machine, u++ transpiles source c
 - **Native Performance:** Zero interpreter overhead; direct compilation to machine code via C11 and GCC.
 - **Embedded Runtime:** The native compiler embeds its C runtime directly; zero external runtime file dependencies.
 - **Memory Safety by Default:** Raw pointers, manual memory allocations, and foreign process memory accesses are strictly prohibited outside explicit `guvensiz { ... }` blocks.
+- **Automatic String Drop:** Strings are never freed by hand. The compiler releases them at scope exit, `dur`/`devam` and `don`, and moves temporaries instead of copying them. `&metin` / `&dilim[T]` views give zero-copy read access.
 - **Self-Hosting Native Compiler:** The compiler (`uppc` / `uppc.exe`) is written purely in u++ and compiles itself.
+- **OS-ready:** `--hedef cekirdek` turns a u++ program into a Multiboot x86_64 kernel (no libc; serial + VGA output; `upp.cekirdek.*` port I/O / MMIO), and `--hedef serbest` emits a freestanding `.o`.
+- **Projects & assistant:** `uppc yeni / derle / calistir`, the `upp.proje` file, and the interactive `uppc asistan`.
 - **Rich Standard Library (`upp.*`):** Modules for high-performance I/O, UTF-8 strings, JSON, process execution (`upp.sistem.calistir`), threading (`arkaplan` / `Kilit`), and platform-specific namespaces (`upp.windows.*` and `upp.linux.*`).
 
 ### Quick Start

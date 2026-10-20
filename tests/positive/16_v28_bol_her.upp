@@ -12,7 +12,6 @@ fonk ana() -> sayi {
     upp.satir_yaz("{n}");
     oto j = upp.metin.birlestir(p, "-");
     upp.satir_yaz(j);
-    upp.metin_bosalt(j);
     p.bosalt();
 
     harita[metin,sayi] h;

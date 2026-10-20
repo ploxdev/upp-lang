@@ -11,8 +11,15 @@ fonk ana() -> sayi {
     oto toplam = topla(x, y);
     sayi xs[] = [10, 20, 30];
     oto hex = 0x90;
+    ubayt seviye = 255;
+    bayt fark = -3;
+    u16 adim = 0;
+    adim = adim + 1;
+    s64 ayni = 7;
+    usayi genis = 9;
 
     upp.satir_yaz("u++ ornek1 — merhaba {isim}");
+    upp.satir_yaz("seviye={seviye} fark={fark} adim={adim} ayni={ayni} genis={genis}");
     upp.satir_yaz("toplam={toplam} hex={hex}");
 
     eger (toplam == 42) {
@@ -36,12 +43,11 @@ fonk ana() -> sayi {
     }
 
     oto t0 = upp.zaman();
-    upp.dosya_yaz("selam.txt", "Merhaba u++\n");
-    eger (upp.dosya_var_mi("selam.txt")) {
-        oto icerik = upp.dosya_oku("selam.txt");
+    upp.dosya.yaz("selam.txt", "Merhaba u++\n");
+    eger (upp.dosya.var_mi("selam.txt")) {
+        oto icerik = upp.dosya.oku("selam.txt");
         eger (icerik != yok) {
             upp.yaz("dosya: {icerik}");
-            upp.metin_bosalt(icerik);
         }
     }
     oto sayi_metin = upp.metinden_sayiya("123");

@@ -33,9 +33,6 @@ fonk ana() -> sayi {
         don 2;
     }
 
-    upp.metin_bosalt(yaz);
-    upp.metin_bosalt(method);
-    upp.metin_bosalt(uri);
     upp.json.bosalt(anahtarlar);
     upp.json.bosalt(istek);
     upp.json.bosalt(cevap);
@@ -43,7 +40,6 @@ fonk ana() -> sayi {
     SurecCikti komut = upp.sistem.calistir("echo json-ok");
     eger (komut.cikti != yok) {
         upp.satir_yaz(komut.cikti);
-        upp.metin_bosalt(komut.cikti);
     }
     don 0;
 }
