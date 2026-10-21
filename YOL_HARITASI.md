@@ -40,7 +40,9 @@
 - [x] Koleksiyonlar v2: `liste`/`harita` değer türü (refcount + copy-on-write), otomatik bırakma, her değer türünü eleman olarak alır (sınıf, iç içe liste/harita, fonksiyon). `L[i][j] = x`, `K[0].ad += ...`, `K[1].metot()` yerinde çalışır. Harita anahtarı `metin`/`sayi`, eklenme sırası korunur.
 - [x] Fonksiyon değerleri: `fonk(P...) -> R` türü, adla değer alma, değişken/alan/indis/çağrı sonucu üzerinden çağrı, koleksiyonda saklama, yakalamasız anonim fonksiyon (`fonk(sayi x) -> sayi => x * 2`). `yok` çağrısı açık panik. Çekirdek hedefinde de çalışır.
 - [x] `secim` içindeki `dur` doğru döngüyü kırar ve doğru kapsamları bırakır. Tamsayı `/` ve `%` sıfıra bölmede ve `MIN / -1` taşmasında açık panik verir; sabit sıfır bölen derleme hatasıdır.
-- [ ] Sonraki: yakalamalı kapanışlar (closure), genel (generic) fonksiyonlar, `sonuc[T]` ile hata taşıma.
+- [x] Hata yönetimi: `beklenen[T, H]` / `beklenen[T]` (bayrak + union yapısı, gizli ayırma yok), `hata(e)`, `?` ile yayma, `tamam_mi/hata_mi/deger/hata/deger_yoksa`, atılan sonuç derleme hatası. `ertele` ve `hata_ertele` (Zig `defer`/`errdefer`).
+- [x] C tarzı `(T)x` dönüşümü (işaretçi dönüşümü yalnızca `guvensiz`; ondalık → tamsayı taşması panik) ve `boyut(T)` / `boyut(degisken)`.
+- [ ] Sonraki: veri taşıyan `secenek` + desen eşleme, genel (generic) fonksiyonlar, yazılabilir görünümler, yakalamalı kapanışlar.
 
 ## Faz 3 — Freestanding / çekirdek ✅
 
@@ -61,5 +63,5 @@
 
 ## Faz 5 — Belgeler ve testler
 
-- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 97 test (QEMU çekirdek testleri dahil); Linux'ta ASan ve UBSan temiz.
+- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 112 test (QEMU çekirdek testleri dahil); Linux'ta ASan ve UBSan temiz.
 - [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.

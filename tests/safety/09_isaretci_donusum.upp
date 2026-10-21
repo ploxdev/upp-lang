@@ -1,0 +1,8 @@
+// Güvenlik: işaretçi dönüşümü guvensiz dışında yasak
+// @icerir: yalnızca 'guvensiz' blokta yapılabilir
+
+fonk ana() -> sayi {
+    sayi a = 0;
+    sayi b = (sayi)((u16*)0xB8000);
+    don a + b;
+}

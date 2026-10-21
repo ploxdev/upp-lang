@@ -50,6 +50,42 @@ upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
 - İmzalar birebir eşleşmelidir. Fonksiyon değerleriyle yalnızca `==` ve `!=` kullanılır. Metotlar ve `ana` değer olarak alınamaz.
 - C karşılığı düz fonksiyon işaretçisidir; serbest ve çekirdek hedeflerinde de çalışır (kesme/komut işleyici tabloları).
 
+### Hata yönetimi: `beklenen`, `?`, `ertele`
+`beklenen[T, H]` ya bir `T` değeri ya da bir `H` hatası taşır; `beklenen[T]`, `beklenen[T, metin]` kısaltmasıdır. C'de bir bayrak ve birlikten (`union`) oluşan düz bir yapıdır: değer olarak döner, gizli bellek ayırma yoktur. Hata türü `secenek` ise heap'e hiç dokunulmaz.
+
+```upp
+secenek DiskHata { YOK, BOZUK, DOLU }
+
+fonk sektor(sayi no) -> beklenen[sayi, DiskHata] {
+    eger (no > 100) { don hata(DiskHata.DOLU); }
+    don no * 512;                     // T değeri: başarı
+}
+
+fonk iki_sektor(sayi a, sayi b) -> beklenen[sayi, DiskHata] {
+    sayi x = sektor(a)?;              // hata ise temizleyip aynı hatayı döndürür
+    sayi y = sektor(b)?;
+    don x + y;
+}
+```
+
+- **Kurma:** `beklenen` dönen fonksiyonda `don x;` başarı, `don hata(e);` hata döndürür. Aynısı ilk değer, atama ve argümanda da geçerlidir: `beklenen[sayi] r = 5;`, `r = hata("x");`. İlk değeri olmayan değişken başarı + sıfır değerdir.
+- **`beklenen[bos, H]`:** değer taşımaz; `don;` ya da fonksiyonun sonuna gelmek başarıdır.
+- **Metotlar:** `tamam_mi()`, `hata_mi()`, `deger()` (hata varsa panik; `H` metinse mesajı yazar), `hata()` (hata yoksa panik), `deger_yoksa(v)`.
+- **`e?`:** yalnızca `beklenen` dönen ve aynı `H` türünü kullanan fonksiyonda yazılır. Döngü koşulunda, `&&`/`||` sağ tarafında ve `?:` dallarında kullanılamaz.
+- **Yok sayma yasak:** `f();` biçiminde atılan `beklenen` sonucu derleme hatasıdır; `?` ile yayın ya da denetleyin.
+- **Kısıtlar:** `beklenen` sınıf alanı olamaz, `arkaplan` içine yakalanamaz, üst düzey değişkeni ilk değer almaz. `hata(...)` `oto` ile kullanılamaz.
+
+`ertele` gövdesi bulunduğu kapsamdan her çıkışta (blok sonu, `dur`, `devam`, `don`, `?`) ters sırayla çalışır. `hata_ertele` yalnızca fonksiyon hata döndürürken çalışır (`don hata(...)`, `?`, ya da çalışma anında hata taşıyan bir `beklenen` döndürülürken). Gövde `ertele ifade;` ya da `ertele { ... }` olabilir; içinden `don`, `?` ya da dışarıya `dur`/`devam` ile çıkılamaz. Dönüş değeri `ertele` çalışmadan önce hesaplanır.
+
+```upp
+fonk ac(metin ad) -> beklenen[Dosya] {
+    oto d = dosya_ac(ad)?;
+    hata_ertele d.kapat();            // yalnızca aşağıdaki adımlardan biri başarısız olursa
+    baslik_oku(d)?;
+    don d;
+}
+```
+
 ### Tamsayı bölme
 `/` ve `%` sıfıra bölmede ve `EN_KUCUK / -1` taşmasında açık panik verir (çekirdekte de). Sabit bölen sıfırsa derleme hatasıdır.
 
@@ -73,8 +109,19 @@ upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
 | `dizi[T, N]` | C dizisi | `sayi a[] = [1, 2]`, sınır denetimli |
 | `liste[T]`, `harita[K,V]` | değer (refcount + COW) | Dinamik koleksiyon |
 | `fonk(P...) -> R` | fonksiyon işaretçisi | Fonksiyon değeri, `yok` olabilir |
+| `beklenen[T, H]`, `beklenen[T]` | yapı (bayrak + union) | Değer ya da hata; `?` ile yayılır |
 | `&metin`, `&dilim[T]` | görünüm | Kopyasız bakış |
 | `sinif`, `secenek` | `struct`, `enum` | Kullanıcı türleri |
+
+### Tür dönüşümü `(T)x` ve `boyut(T)`
+C ile aynı yazım: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.9;` (3), `Renk r = (Renk)2;`.
+
+- Sayısal türler, `mantik` ve `secenek` arasında serbesttir. Tamsayı daraltma C gibi keser (`(ubayt)300` = 44).
+- `ondalik` → tamsayı: sonuç hedef aralığa sığmıyorsa ya da değer NaN ise açık panik verir (C'de belirsiz davranıştır).
+- İşaretçi ↔ işaretçi, işaretçi ↔ tamsayı ve fonksiyon değeri ↔ işaretçi/tamsayı dönüşümleri yalnızca `guvensiz` içinde: `u16* vga = (u16*)0xB8000;`.
+- `metin`, sınıf, koleksiyon ve dizi dönüştürülemez.
+
+`boyut(T)` türün bayt boyutunu `sayi` olarak verir (C `sizeof`); `boyut(degisken)` değişkenin boyutunu verir (dizide tüm dizi). Derleme anı sabitidir, `sabit` ifadelerinde kullanılabilir.
 
 ---
 

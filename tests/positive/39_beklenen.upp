@@ -1,0 +1,128 @@
+// Pozitif: beklenen[T, H], hata(...), '?' ile yayma, metotlar ve sahiplik
+// @stdout
+// böl: 5 | hata: sıfıra bölme
+// zincir: 14 | hata: sıfıra bölme
+// seçenek: 512 | kod: 1
+// boş: tamam | hata: yazılamadı
+// metin: [merhaba] [yok: kayıp]
+// sınıf: Ali 30 | liste: 3
+// varsayılan: 7 99
+// koleksiyon: 2 hata 1
+// parametre: değer 8 | hata x
+// dinamik: geri al | 0
+// varsayılan değer: dogru 0
+// atama: 1 -> hata z
+
+secenek DiskHata { YOK, BOZUK, DOLU }
+
+sinif Kisi {
+    metin ad;
+    sayi yas;
+}
+
+fonk bol(sayi a, sayi b) -> beklenen[sayi] {
+    eger (b == 0) { don hata("sıfıra bölme"); }
+    don a / b;
+}
+
+fonk zincir(sayi a, sayi b, sayi c) -> beklenen[sayi] {
+    sayi x = bol(a, b)?;
+    sayi y = bol(x, c)?;
+    don y + bol(4, 2)?;
+}
+
+fonk sektor_oku(sayi no) -> beklenen[sayi, DiskHata] {
+    eger (no < 0) { don hata(DiskHata.BOZUK); }
+    don no * 512;
+}
+
+fonk yaz(mantik ok) -> beklenen[bos] {
+    eger (!ok) { don hata("yazılamadı"); }
+}
+
+fonk selam(mantik ok) -> beklenen[metin] {
+    metin s = "merhaba";
+    eger (!ok) { don hata("kayıp"); }
+    don s;
+}
+
+fonk kisi_yap(metin ad) -> beklenen[Kisi] {
+    Kisi k;
+    k.ad = ad;
+    k.yas = 30;
+    don k;
+}
+
+fonk liste_yap() -> beklenen[liste[sayi]] {
+    liste[sayi] L;
+    L.ekle(1);
+    L.ekle(2);
+    L.ekle(3);
+    don L;
+}
+
+fonk tanimla(beklenen[sayi] r) -> metin {
+    eger (r.tamam_mi()) { don "değer {r.deger()}"; }
+    don "hata {r.hata()}";
+}
+
+fonk dinamik(mantik bozuk) -> beklenen[sayi] {
+    hata_ertele upp.yaz("geri al");
+    beklenen[sayi] r = 0;
+    eger (bozuk) { r = hata("d"); }
+    don r;
+}
+
+fonk ana() -> sayi {
+    oto a = bol(10, 2);
+    oto b = bol(1, 0);
+    upp.satir_yaz("böl: {a.deger()} | hata: {b.hata()}");
+
+    oto z1 = zincir(48, 2, 2);
+    oto z2 = zincir(1, 0, 2);
+    upp.satir_yaz("zincir: {z1.deger()} | hata: {z2.hata()}");
+
+    oto s1 = sektor_oku(1);
+    oto s2 = sektor_oku(0 - 1);
+    upp.satir_yaz("seçenek: {s1.deger()} | kod: {(sayi)s2.hata()}");
+
+    oto y1 = yaz(dogru);
+    oto y2 = yaz(yanlis);
+    metin ys = "?";
+    eger (y1.tamam_mi()) { ys = "tamam"; }
+    upp.satir_yaz("boş: {ys} | hata: {y2.hata()}");
+
+    oto m1 = selam(dogru);
+    oto m2 = selam(yanlis);
+    upp.satir_yaz("metin: [{m1.deger()}] [yok: {m2.hata()}]");
+
+    oto k = kisi_yap("Ali");
+    oto lr = liste_yap();
+    upp.satir_yaz("sınıf: {k.deger().ad} {k.deger().yas} | liste: {lr.deger().uzunluk()}");
+
+    upp.satir_yaz("varsayılan: {bol(14, 2).deger_yoksa(99)} {bol(1, 0).deger_yoksa(99)}");
+
+    liste[beklenen[sayi]] L;
+    L.ekle(bol(4, 2));
+    L.ekle(bol(4, 0));
+    L.ekle(1);
+    sayi hs = 0;
+    her (oto e in L) { eger (e.hata_mi()) { hs += 1; } }
+    upp.satir_yaz("koleksiyon: {L[0].deger()} hata {hs}");
+
+    upp.satir_yaz("parametre: {tanimla(8)} | {tanimla(hata(\"x\"))}");
+
+    upp.yaz("dinamik: ");
+    oto d1 = dinamik(dogru);
+    upp.satir_yaz(" | {dinamik(yanlis).deger()}");
+
+    beklenen[sayi] bos_r;
+    upp.satir_yaz("varsayılan değer: {bos_r.tamam_mi()} {bos_r.deger()}");
+
+    beklenen[metin] at = "x";
+    sayi once = upp.uzunluk(at.deger());
+    at = hata("z");
+    upp.satir_yaz("atama: {once} -> hata {at.hata()}");
+    eger (d1.tamam_mi()) { don 1; }
+    don 0;
+}

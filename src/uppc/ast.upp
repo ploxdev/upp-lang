@@ -83,7 +83,11 @@ secenek DugumTur {
     D_DIZI_SABIT,
     D_KULLAN,
     D_UCLU,
-    D_GUVENLI
+    D_GUVENLI,
+    D_DONUSUM,
+    D_BOYUT,
+    D_ERTELE,
+    D_HATA_YAY
 }
 
 fonk dugum_tur_mi(sayi id, sayi tur) -> mantik {
@@ -176,6 +180,9 @@ fonk anahtar_mi(metin s) -> mantik {
     eger (metin_esit(s, "kullan")) { don dogru; }
     eger (metin_esit(s, "olarak")) { don dogru; }
     eger (metin_esit(s, "sabit")) { don dogru; }
+    eger (metin_esit(s, "ertele")) { don dogru; }
+    eger (metin_esit(s, "hata_ertele")) { don dogru; }
+    eger (metin_esit(s, "beklenen")) { don dogru; }
     don yanlis;
 }
 
@@ -206,6 +213,7 @@ fonk tur_adi_mi(metin s) -> mantik {
     eger (metin_esit(s, "liste")) { don dogru; }
     eger (metin_esit(s, "harita")) { don dogru; }
     eger (metin_esit(s, "dilim")) { don dogru; }
+    eger (metin_esit(s, "beklenen")) { don dogru; }
     don yanlis;
 }
 
@@ -452,4 +460,47 @@ fonk fonk_imza_tur(sayi fn) -> sayi {
     }
     s = kat3(s, ")->", tur_kanonik_ad(dugum_a(fn)));
     don tur_dugum(dugum_satir(fn), dugum_sutun(fn), intern(s), 0, 0);
+}
+
+// beklenen[T,H]: kanonik ad her zaman iki parçalıdır ("beklenen[sayi,metin]").
+fonk beklenen_tur_mi(metin n) -> mantik {
+    sayi L = metin_uzun(n);
+    eger (L < 12) { don yanlis; }
+    eger (!metin_esit(intern_dilim(n, 0, 9), "beklenen[")) { don yanlis; }
+    don metin_cp(n, L - 1) == 93;
+}
+
+// En dıştaki ayırıcı virgülün yeri (iç içe [] ve () atlanır).
+fonk beklenen_virgul_yer(metin n) -> sayi {
+    sayi i = 9;
+    sayi d = 0;
+    sayi L = metin_uzun(n) - 1;
+    iken (i < L) {
+        sayi c = metin_cp(n, i);
+        eger (c == 40 || c == 91) { d = d + 1; }
+        yoksa eger (c == 41 || c == 93) { d = d - 1; }
+        yoksa eger (c == 44 && d == 0) { don i; }
+        i = i + 1;
+    }
+    don L;
+}
+
+fonk beklenen_deger_ad(metin n) -> metin {
+    don intern_dilim(n, 9, beklenen_virgul_yer(n));
+}
+
+fonk beklenen_hata_ad(metin n) -> metin {
+    sayi v = beklenen_virgul_yer(n);
+    don intern_dilim(n, v + 1, metin_uzun(n) - 1);
+}
+
+// hata(e) ifadesinin iç türü: "hata[H]". Yalnızca beklenen[_, H]'ye atanabilir.
+fonk hata_isaret_mi(metin n) -> mantik {
+    sayi L = metin_uzun(n);
+    eger (L < 7) { don yanlis; }
+    don metin_esit(intern_dilim(n, 0, 5), "hata[") && metin_cp(n, L - 1) == 93;
+}
+
+fonk hata_isaret_ad(metin n) -> metin {
+    don intern_dilim(n, 5, metin_uzun(n) - 1);
 }

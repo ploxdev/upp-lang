@@ -1,0 +1,7 @@
+// Negatif: ertele gövdesinden don ile çıkılamaz
+// @icerir: 'ertele' gövdesinden 'don' ile çıkılamaz
+
+fonk ana() -> sayi {
+    ertele { don 1; }
+    don 0;
+}

@@ -1,0 +1,7 @@
+// Negatif: oto ile hata(...) türsüzdür
+// @icerir: 'oto' ile 'hata(...)' kullanılamaz
+
+fonk ana() -> sayi {
+    oto h = hata("x");
+    don 0;
+}

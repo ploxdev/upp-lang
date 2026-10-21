@@ -118,6 +118,11 @@ Native derleyicide C benzeri ham işaretçiler (`*`, `&`) yerine, veri odaklı v
 - **Değer ve çağrı:** Fonksiyon adı değer olarak C adına iner. `cagri_fonk_turu` çağrı hedefinin bir fonksiyon değeri olup olmadığını (yerel/küresel değişken, sınıf alanı, indis, çağrı sonucu, anonim) çözer; tür denetimi ve codegen aynı kararı kullanır. Çağrı `(*({ _upp_ftN _uf = (f); if (_uf == NULL) upp_panik(...); _uf; }))(args)` biçimindedir.
 - **Anonim fonksiyonlar:** Ayrıştırıcı `fonk(...) -> T => ifade` gövdesini gizli üst düzey `_upp_anon_N` fonksiyonuna taşır ve ifade yerine onu gösteren bir kimlik düğümü bırakır (düğümün `sayi` alanı bildirime işaret eder). Yakalama olmadığından sonuç her hedefte düz bir fonksiyon işaretçisidir.
 
+- **`beklenen[T,H]`:** `bk_ref` her tür için `struct _upp_bkN { bool hatali; union { T deger; H hata; }; }` üretir. İleri bildirim fonksiyon türü havuzuna, gövde ve sahipli parçalar için `__birak` / `__kopya` / `_upp_kt_bkN` sınıf yardımcılarından sonraki `/* ==== u++ beklenen türleri ==== */` işaretine yazılır. Sahiplik koduna `tur_sahip` = `-100 - id` ile bağlanır; böylece değişken, atama, parametre, dönüş ve koleksiyon yolları sınıflarla aynı kodu kullanır. `uret_beklenen_kurulum` T değerini, `hata(e)` ifadesini ya da aynı türden değeri sahip olunan bir yapıya çevirir.
+- **`e?`:** değer geçici bir `_qN`'e alınır; hatalıysa hata yeni dönüş yapısına taşınır, dönüş temizliği (hata kipinde) yapılır ve `return` edilir; değilse `deger` kayıtlı bir geçiciye taşınır. Kaldırma (hoist) gerektiğinden tür denetçisi `?`'ı döngü koşulu, `&&`/`||` sağ tarafı ve `?:` dallarında reddeder.
+- **`ertele` / `hata_ertele`:** drop yığınına `@<düğüm>` adlı, `@e` / `@h` işlevli bir kayıt olarak girer. `emit_drop_i` bu kayda gelince gövdeyi kendi C bloğunda yeniden üretir; `@h` yalnızca `g_hata_donus` açıkken (hata dönüşü) üretilir. Çalışma anında belli olan dönüşlerde (`don r;`) temizlik `if (rv.hatali)` ile iki kez üretilir. Böylece `dur`, `devam`, `don` ve blok sonu mevcut drop mekanizmasıyla aynı sırayı izler.
+- **`(T)x` ve `boyut(T)`:** `D_DONUSUM` / `D_BOYUT` düğümleri; hedef tür düğümü `sayi` alanında tutulur (ifade yürüyücüleri tür düğümüne inmesin diye). `ondalik` → tamsayı dönüşümü `upp_ondalik_tam` / `upp_ondalik_u64` ile aralık denetimlidir.
+
 ---
 
 ## 🔤 Sözcük Analizi (Lexer) ve UTF-8 Yönetimi

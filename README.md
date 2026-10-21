@@ -42,6 +42,7 @@ Bu proje; derleyici mühendisliği (compiler design), soyut sözdizim ağaçlar�
 - **🧰 Proje Sistemi ve Asistan:** `uppc yeni`, `uppc derle`, `uppc calistir` ve `upp.proje` ile proje yönetilir. `uppc asistan` menülü bir derleme asistanıdır: hedef seçer, araç zincirini (gcc / WSL / QEMU) denetler, derler ve çalıştırır.
 - **🔄 Standalone Native Derleyici (Self-Hosting):** Tamamen saf u++ ile yazılmış, C çalışma zamanını içine gömen tek ikili (`uppc` / `uppc.exe`). `uppc kendini-derle` derleyiciyi yaklaşık 30 saniyede kendisiyle yeniden kurar ve sabit noktayı doğrular (Python yok).
 - **🧱 Zengin Tip Sistemi:** `sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8` (işaretli), `ubayt`/`u8`, `ondalik`, `metin`, `mantik`, `liste[T]`, `harita[K,V]`, `dizi[T, N]`, `sinif` ve fonksiyon türleri `fonk(sayi) -> sayi`. Koleksiyonlar değer türüdür (O(1) kopya, yazınca ayrılır) ve sınıf, iç içe liste/harita ya da fonksiyon dahil her değeri tutar. Fonksiyonlar değişkende, koleksiyonda ve alanda saklanabilir; yakalamasız anonim fonksiyon yazılır: `fonk(sayi x) -> sayi => x * 2`.
+- **🚦 Hata Yönetimi:** `beklenen[T, H]` (kısaca `beklenen[T]`) değer ya da hata taşır, `don hata(e)` ile hata döner, `x?` hatayı yukarı iletir; atılan sonuç derleme hatasıdır. Gizli bellek ayırma yoktur. `ertele` kapsam çıkışında, `hata_ertele` yalnızca hata dönüşünde temizlik yapar. C tarzı `(u16)x` dönüşümü ve `boyut(T)` vardır.
 - **📦 Zengin Standart Kütüphane (`upp.*`):**
   - Dosya & Klasör I/O (`upp.dosya`, `upp.yol`, `upp.dosya.boyut`)
   - Gelişmiş Metin ve UTF-8 İşlemleri (`upp.metin`, `upp.metin.hex_coz`)
@@ -183,6 +184,26 @@ fonk ana() -> sayi {
     oto a = esle(L, ikiye);
     oto b = esle(L, fonk(sayi x) -> sayi => x * x + 1);
     upp.satir_yaz("{a[1]} {b[1]}"); // 4 5
+    don 0;
+}
+```
+
+### Hata Yönetimi (`beklenen`, `?`, `ertele`)
+```text
+fonk bol(sayi a, sayi b) -> beklenen[sayi] {
+    eger (b == 0) { don hata("sıfıra bölme"); }
+    don a / b;
+}
+
+fonk hesapla() -> beklenen[sayi] {
+    ertele upp.satir_yaz("hesap bitti");
+    sayi x = bol(10, 2)?;
+    don x + bol(x, 0)?;     // ikinci bölme hata verir; hata yukarı iletilir
+}
+
+fonk ana() -> sayi {
+    oto r = hesapla();
+    upp.satir_yaz("{r.hata_mi()} {r.hata()}"); // dogru sıfıra bölme
     don 0;
 }
 ```

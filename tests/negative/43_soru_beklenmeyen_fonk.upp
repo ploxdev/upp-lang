@@ -1,0 +1,12 @@
+// Negatif: '?' yalnızca beklenen dönen fonksiyonda
+// @icerir: '?' yalnızca 'beklenen' dönen fonksiyonda
+
+fonk bol(sayi a, sayi b) -> beklenen[sayi] {
+    eger (b == 0) { don hata("sıfır"); }
+    don a / b;
+}
+
+fonk ana() -> sayi {
+    sayi x = bol(4, 2)?;
+    don x;
+}

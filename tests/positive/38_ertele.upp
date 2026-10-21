@@ -1,0 +1,80 @@
+// Pozitif: ertele (kapsam çıkışında ters sırayla) ve hata_ertele (yalnızca hata dönüşünde)
+// @stdout
+// gövde
+// ertele 2
+// ertele 1
+// döngü 0
+// döngü sonu 0
+// döngü 1
+// döngü sonu 1
+// dur öncesi
+// döngü sonu 2
+// erken dönüş
+// kapat: a
+// --
+// aç: dosya1
+// geri al: dosya1
+// kapat: dosya1
+// hata: bozuk
+// aç: dosya2
+// kapat: dosya2
+// tamam: 42
+// iç içe: b a
+
+fonk sirali() -> bos {
+    ertele upp.satir_yaz("ertele 1");
+    ertele {
+        upp.satir_yaz("ertele 2");
+    }
+    upp.satir_yaz("gövde");
+}
+
+fonk donguler() -> bos {
+    dongu (sayi i = 0; i < 5; i += 1) {
+        ertele upp.satir_yaz("döngü sonu {i}");
+        eger (i == 2) {
+            upp.satir_yaz("dur öncesi");
+            dur;
+        }
+        upp.satir_yaz("döngü {i}");
+    }
+}
+
+fonk erken(metin ad) -> sayi {
+    ertele upp.satir_yaz("kapat: {ad}");
+    eger (ad == "a") {
+        upp.satir_yaz("erken dönüş");
+        don 1;
+    }
+    don 0;
+}
+
+fonk ac(metin ad, mantik bozuk) -> beklenen[sayi] {
+    upp.satir_yaz("aç: {ad}");
+    ertele upp.satir_yaz("kapat: {ad}");
+    hata_ertele upp.satir_yaz("geri al: {ad}");
+    eger (bozuk) { don hata("bozuk"); }
+    don 42;
+}
+
+fonk ic_ice() -> metin {
+    metin s = "";
+    {
+        ertele { s += " a"; }
+        ertele { s += " b"; }
+    }
+    don s;
+}
+
+fonk ana() -> sayi {
+    sirali();
+    donguler();
+    erken("a");
+    upp.satir_yaz("--");
+    oto r1 = ac("dosya1", dogru);
+    eger (r1.hata_mi()) { upp.satir_yaz("hata: {r1.hata()}"); }
+    oto r2 = ac("dosya2", yanlis);
+    upp.satir_yaz("tamam: {r2.deger()}");
+    upp.satir_yaz("iç içe:{ic_ice()}");
+    don 0;
+}

@@ -1,0 +1,17 @@
+// Negatif: '?' hata türleri aynı olmalı
+// @icerir: '?' hata türleri uyuşmuyor
+
+secenek Kod { A, B }
+
+fonk oku() -> beklenen[sayi, Kod] {
+    don hata(Kod.A);
+}
+
+fonk isle() -> beklenen[sayi] {
+    sayi v = oku()?;
+    don v;
+}
+
+fonk ana() -> sayi {
+    don isle().deger_yoksa(0);
+}

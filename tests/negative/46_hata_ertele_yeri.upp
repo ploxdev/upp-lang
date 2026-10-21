@@ -1,0 +1,7 @@
+// Negatif: hata_ertele yalnızca beklenen dönen fonksiyonda
+// @icerir: 'hata_ertele' yalnızca 'beklenen' dönen fonksiyonda
+
+fonk ana() -> sayi {
+    hata_ertele upp.satir_yaz("x");
+    don 0;
+}

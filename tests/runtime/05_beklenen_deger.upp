@@ -1,0 +1,12 @@
+// Çalışma zamanı: hata taşıyan beklenen'den deger() açık panik verir
+// @icerir: beklenen: değer yerine hata var: dosya yok
+
+fonk ac() -> beklenen[sayi] {
+    don hata("dosya yok");
+}
+
+fonk ana() -> sayi {
+    sayi v = ac().deger();
+    upp.satir_yaz("{v}");
+    don 0;
+}

@@ -1,0 +1,56 @@
+// Pozitif: (T)x tür dönüşümü ve boyut(T)
+// @stdout
+// ubayt: 44 u16: 4464 s32: -1
+// ondalik: 3 -3 2.5
+// mantik: dogru yanlis
+// renk: 2 Mavi
+// boyut: 1 2 4 8 8 1
+// sınıf: 16 dizi: 32 değişken: 8
+// sabit: 24
+// işaretçi: 753664
+
+secenek Renk { Kirmizi, Yesil, Mavi }
+
+sinif Nokta {
+    sayi x;
+    sayi y;
+}
+
+sabit sayi IKI_NOKTA_ARTI = boyut(Nokta) + boyut(sayi);
+
+fonk ana() -> sayi {
+    sayi x = 300;
+    ubayt b = (ubayt)x;
+    u16 p = (u16)70000;
+    s32 m = (s32)4294967295u64;
+    upp.satir_yaz("ubayt: {b} u16: {p} s32: {m}");
+
+    ondalik d = 3.99;
+    sayi a = (sayi)d;
+    sayi n = (sayi)(0.0 - 3.7);
+    ondalik y = (ondalik)5 / 2.0;
+    upp.satir_yaz("ondalik: {a} {n} {y}");
+
+    mantik t = (mantik)7;
+    mantik f = (mantik)0;
+    upp.satir_yaz("mantik: {t} {f}");
+
+    Renk r = (Renk)2;
+    sayi ri = (sayi)Renk.Mavi;
+    metin rad = "?";
+    eger (r == Renk.Mavi) { rad = "Mavi"; }
+    upp.satir_yaz("renk: {ri} {rad}");
+
+    upp.satir_yaz("boyut: {boyut(ubayt)} {boyut(u16)} {boyut(u32)} {boyut(sayi)} {boyut(ondalik)} {boyut(mantik)}");
+    sayi dizi[] = [1, 2, 3, 4];
+    upp.satir_yaz("sınıf: {boyut(Nokta)} dizi: {boyut(dizi)} değişken: {boyut(x)}");
+    upp.satir_yaz("sabit: {IKI_NOKTA_ARTI}");
+
+    sayi adres = 0;
+    guvensiz {
+        u16* vga = (u16*)0xB8000;
+        adres = (sayi)vga;
+    }
+    upp.satir_yaz("işaretçi: {adres}");
+    don 0;
+}

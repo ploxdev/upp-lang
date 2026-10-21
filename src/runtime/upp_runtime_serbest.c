@@ -303,6 +303,39 @@ static char* upp_mk_bas(void);
 static void upp_mk_sayi(char** s, long long v);
 static void _upp_m_ekle_n(char** s, const char* x, size_t nb, int x_ascii);
 
+/* (T)x ondalık -> tamsayı: kesilmiş değer [alt, ust) dışında ya da NaN ise panik
+   (C'de bu dönüşüm belirsiz davranıştır). */
+static long long upp_ondalik_tam(double d, double alt, double ust) {
+    if (!((d >= alt || d > alt - 1.0) && d < ust)) {
+        upp_panik("tür dönüşümünde taşma (ondalik -> tamsayı)");
+    }
+    return (long long)d;
+}
+
+static unsigned long long upp_ondalik_u64(double d) {
+    if (!(d > -1.0 && d < 18446744073709551616.0)) {
+        upp_panik("tür dönüşümünde taşma (ondalik -> u64)");
+    }
+    return (unsigned long long)d;
+}
+
+/* beklenen[T, metin].deger() hata taşırken: mesajı yığında birleştirir (ayırma yok). */
+static void upp_beklenen_panik(const char* hata) {
+    static const char on[] = "beklenen: değer yerine hata var: ";
+    char b[512];
+    size_t n = sizeof(on) - 1;
+    size_t h = hata ? strlen(hata) : 0;
+    memcpy(b, on, n);
+    if (h > sizeof(b) - n - 1) {
+        h = sizeof(b) - n - 1;
+    }
+    if (h) {
+        memcpy(b + n, hata, h);
+    }
+    b[n + h] = '\0';
+    upp_panik(b);
+}
+
 static long long upp_bol_s(long long a, long long b) {
     if (b == 0) {
         upp_panik("sıfıra bölme");

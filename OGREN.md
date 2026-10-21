@@ -619,6 +619,75 @@ d.tikla = fonk(sayi n) -> sayi { don n + 1; };
 
 Anonim fonksiyonlar dışarıdaki yerel değişkenleri **yakalamaz**; ihtiyaç duydukları her şeyi parametre olarak almalıdır. Böylece her zaman düz bir C fonksiyon işaretçisine dönüşürler ve işletim sistemi çekirdeğinde de (kesme işleyicileri, komut tabloları) çalışırlar.
 
+### Hataları Ele Almak: `beklenen`
+Bazı işler başarısız olabilir: dosya olmayabilir, bölen sıfır olabilir. Böyle bir fonksiyon `beklenen[T]` döndürür; sonuç ya bir değer ya da bir hatadır:
+
+```text
+fonk bol(sayi a, sayi b) -> beklenen[sayi] {
+    eger (b == 0) { don hata("sıfıra bölme"); }
+    don a / b;                 // normal değer = başarı
+}
+
+fonk ana() -> sayi {
+    oto r = bol(10, 0);
+    eger (r.hata_mi()) {
+        upp.satir_yaz("olmadı: {r.hata()}");
+        don 1;
+    }
+    upp.satir_yaz("sonuç: {r.deger()}");
+    don 0;
+}
+```
+
+Hatayı her adımda elle denetlemek yerine `?` ile yukarı iletebilirsiniz. Hata varsa fonksiyon o hatayla hemen döner, yoksa değer gelir:
+
+```text
+fonk hesapla(sayi a, sayi b) -> beklenen[sayi] {
+    sayi x = bol(a, b)?;
+    sayi y = bol(x, 2)?;
+    don x + y;
+}
+```
+
+Hata türünü siz de seçebilirsiniz: `beklenen[sayi, DiskHata]`. `beklenen[T]` yazmak `beklenen[T, metin]` demektir. Bir `beklenen` sonucunu hiç bakmadan atamazsınız; `f();` yazmak derleme hatasıdır, çünkü unutulan hatalar en sinsi hatalardır.
+
+### Temizliği Ertelemek: `ertele` ve `hata_ertele`
+`ertele`, yazdığınız işi bulunduğunuz bloktan çıkarken çalıştırır: blok bitince, `dur`/`devam` ile ya da `don` ile çıkarken. Birden çok `ertele` ters sırayla çalışır:
+
+```text
+fonk isle() -> bos {
+    kilit_al();
+    ertele kilit_birak();      // fonksiyondan nasıl çıkılırsa çıkılsın çalışır
+    eger (bos_mu()) { don; }
+    calis();
+}
+```
+
+`hata_ertele` ise yalnızca fonksiyon bir hata döndürürken çalışır. Yarım kalan işi geri almak için idealdir:
+
+```text
+fonk kaydet(metin ad) -> beklenen[bos] {
+    dosya_olustur(ad)?;
+    hata_ertele dosya_sil(ad);  // sonraki adımlardan biri başarısız olursa yarım dosya kalmasın
+    baslik_yaz(ad)?;
+    govde_yaz(ad)?;
+}
+```
+
+### Tür Dönüşümü ve `boyut`
+Bir değeri başka bir sayısal türe çevirmek için C'deki gibi türü parantez içinde önüne yazın:
+
+```text
+sayi x = 300;
+ubayt b = (ubayt)x;           // 44: taşan bitler kesilir
+sayi n = (sayi)3.9;           // 3
+Renk r = (Renk)2;             // seçeneğe çevirme
+```
+
+`ondalik` bir değeri sığmayacağı bir tamsayıya çevirmeye çalışırsanız program açık bir hatayla durur; sessizce çöp değer üretmez. İşaretçi dönüşümleri yalnızca `guvensiz` içinde yapılabilir: `u16* vga = (u16*)0xB8000;`.
+
+`boyut(T)` bir türün bellekte kaç bayt tuttuğunu söyler: `boyut(sayi)` 8, `boyut(u16)` 2. Bir değişken de verebilirsiniz: `boyut(dizi)`.
+
 ---
 
 ## 11. Nesne Yönelimli Programlama: Sınıflar (`sinif`)

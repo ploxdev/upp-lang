@@ -1,0 +1,9 @@
+// Çalışma zamanı: aralık dışı ondalik -> tamsayı dönüşümü panik verir (C'de belirsiz davranış)
+// @icerir: tür dönüşümünde taşma
+
+fonk ana() -> sayi {
+    ondalik d = upp.metinden_ondalik("1e30");
+    sayi x = (sayi)d;
+    upp.satir_yaz("{x}");
+    don 0;
+}

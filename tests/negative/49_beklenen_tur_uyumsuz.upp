@@ -1,0 +1,10 @@
+// Negatif: yanlış türde değer beklenen olarak döndürülemez
+// @icerir: Dönüş türü uyumsuz
+
+fonk f() -> beklenen[sayi] {
+    don "metin";
+}
+
+fonk ana() -> sayi {
+    don f().deger_yoksa(0);
+}

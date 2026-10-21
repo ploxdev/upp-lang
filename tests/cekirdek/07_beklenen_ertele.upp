@@ -1,0 +1,35 @@
+// Çekirdek: beklenen + '?' + ertele + (T)x + boyut, gizli ayırma olmadan
+// @stdout
+// sektör 3: 1536
+// kapandı
+// hata: 2
+// boyut: 16 2
+
+secenek DiskHata { YOK, BOZUK, DOLU }
+
+fonk cik() -> bos {
+    guvensiz {
+        upp.cekirdek.port_yaz32(0xf4, 0);
+    }
+}
+
+fonk sektor(sayi no) -> beklenen[sayi, DiskHata] {
+    eger (no > 100) { don hata(DiskHata.DOLU); }
+    don no * 512;
+}
+
+fonk iki_sektor(sayi a, sayi b) -> beklenen[sayi, DiskHata] {
+    ertele upp.satir_yaz("kapandı");
+    sayi x = sektor(a)?;
+    sayi y = sektor(b)?;
+    don x + y;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("sektör 3: {sektor(3).deger()}");
+    oto r = iki_sektor(1, 500);
+    eger (r.hata_mi()) { upp.satir_yaz("hata: {(sayi)r.hata()}"); }
+    upp.satir_yaz("boyut: {boyut(beklenen[sayi, DiskHata])} {(u16)boyut(u16)}");
+    cik();
+    don 0;
+}

@@ -1,0 +1,11 @@
+// Negatif: beklenen sonucu yok sayılamaz
+// @icerir: 'beklenen' sonucu yok sayılamaz
+
+fonk yaz() -> beklenen[bos] {
+    don hata("x");
+}
+
+fonk ana() -> sayi {
+    yaz();
+    don 0;
+}

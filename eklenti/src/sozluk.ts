@@ -34,6 +34,10 @@ export const ANAHTARLAR: Record<string, string> = {
   kullan: "`kullan \"kutuphane.uph\";` veya `olarak` önek.",
   olarak: "`kullan \"yol.uph\" olarak ad`.",
   sabit: "Derleme anı sabiti. Yeniden atanamaz.",
+  ertele: "Kapsamdan çıkarken (dur/devam/don dahil) ters sırayla çalışır. `ertele { ... }` ya da `ertele ifade;`",
+  hata_ertele: "Yalnızca fonksiyon hata döndürürken çalışan `ertele` (`beklenen` dönen fonksiyonlarda).",
+  hata: "`hata(e)` — `beklenen` dönen fonksiyondan hata döndürür: `don hata(\"dosya yok\");`",
+  boyut: "`boyut(T)` / `boyut(degisken)` — bayt cinsinden boyut (C `sizeof`), derleme anı sabiti.",
   ana: "Giriş noktası. Parametre almaz.",
 };
 
@@ -54,6 +58,7 @@ export const TIPLER: Record<string, string> = {
   bos: "Yok türü (`void`).",
   liste: "`liste[T]`. ekle, al, yaz, sil, temizle, uzunluk, bosalt.",
   harita: "`harita[K,V]`. koy, al, sil, temizle, anahtarlar.",
+  beklenen: "`beklenen[T, H]` — değer ya da hata; `beklenen[T]` = `beklenen[T, metin]`. tamam_mi, hata_mi, deger, hata, deger_yoksa; `?` ile yayılır.",
 };
 
 /** Tabloda olmayan özel yerleşikler. */

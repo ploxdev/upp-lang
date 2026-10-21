@@ -94,11 +94,11 @@
     },
     "keywords": {
       "name": "keyword.control.upp",
-      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|kendi|oto|c_ekle|kullan|olarak|sabit)\\b"
+      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|kendi|oto|c_ekle|kullan|olarak|sabit|ertele|hata_ertele)\\b"
     },
     "types": {
       "name": "storage.type.upp",
-      "match": "\\b(sayi|ondalik|metin|mantik|bos|liste|harita)\\b"
+      "match": "\\b(sayi|ondalik|metin|mantik|bos|liste|harita|beklenen|s64|u64|usayi|s32|u32|s16|u16|bayt|ubayt|s8|u8)\\b"
     },
     "constants": {
       "name": "constant.language.upp",

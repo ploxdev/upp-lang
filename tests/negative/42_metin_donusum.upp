@@ -1,0 +1,7 @@
+// Negatif: metin dönüştürülemez
+// @icerir: Metin için 'upp.metinden_sayiya'
+
+fonk ana() -> sayi {
+    metin s = "5";
+    don (sayi)s;
+}

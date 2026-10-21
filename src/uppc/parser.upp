@@ -494,6 +494,30 @@ fonk ayristir_tur() -> sayi {
             don 0;
         }
         ad = kat(kat3("harita[", k, ","), kat(v, "]"));
+    } yoksa eger (metin_esit(ad, "beklenen")) {
+        beklenen_tur(JetonTur.J_KOSE_AC, "[");
+        sayi ds = bak_satir();
+        sayi dc = bak_sutun();
+        sayi dt = ayristir_tur();
+        eger (hata_var() || dt == 0) { don 0; }
+        eger (dugum_dims(dt) > 0 || tip_gorunum_mi(dt)) {
+            hata_ver(ds, dc, "'beklenen' değer türü dizi ya da görünüm olamaz.");
+            don 0;
+        }
+        metin hn = "metin";
+        eger (esles_tur(JetonTur.J_VIRGUL)) {
+            sayi hs = bak_satir();
+            sayi hc = bak_sutun();
+            sayi ht = ayristir_tur();
+            eger (hata_var() || ht == 0) { don 0; }
+            eger (dugum_dims(ht) > 0 || tip_gorunum_mi(ht) || tip_void_mi(ht)) {
+                hata_ver(hs, hc, "'beklenen' hata türü 'bos', dizi ya da görünüm olamaz.");
+                don 0;
+            }
+            hn = tur_kanonik_ad(ht);
+        }
+        beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
+        ad = intern(kat(kat3("beklenen[", tur_kanonik_ad(dt), ","), kat(hn, "]")));
     }
     sayi depth = 0;
     iken (esles_tur(JetonTur.J_YILDIZ)) {
@@ -573,6 +597,21 @@ fonk ayristir_birincil() -> sayi {
     }
     sayi satir = bak_satir();
     sayi sutun = bak_sutun();
+    eger (bak_tur() == JetonTur.J_KIMLIK && metin_esit(bak_deger(), "boyut") && bak_tur_at(1) == JetonTur.J_PARANTEZ_AC) {
+        j_ilerle();
+        j_ilerle();
+        sayi bt = bak_tur();
+        eger (bt != JetonTur.J_ANAHTAR && bt != JetonTur.J_KIMLIK && bt != JetonTur.J_VE_ISARET) {
+            hata_ver(bak_satir(), bak_sutun(), "'boyut(...)' bir tür ya da değişken adı alır.");
+            don 0;
+        }
+        sayi ty = ayristir_tur();
+        beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+        eger (hata_var()) { don 0; }
+        sayi n = dugum_yeni(DugumTur.D_BOYUT, satir, sutun);
+        dugum_yaz_sayi(n, ty);
+        don n;
+    }
     eger (bak_tur() == JetonTur.J_SAYI) {
         oto v = bak_deger();
         j_ilerle();
@@ -672,6 +711,41 @@ fonk ayristir_birincil() -> sayi {
     don 0;
 }
 
+// Sonek '?': ardından ifade başlayamayan bir jeton gelir (üçlü '? :' ile karışmaz).
+fonk soru_yay_mi() -> mantik {
+    sayi t = bak_tur_at(1);
+    don t == JetonTur.J_NOKTALI_VIRGUL || t == JetonTur.J_PARANTEZ_KAPA || t == JetonTur.J_VIRGUL || t == JetonTur.J_KOSE_KAPA || t == JetonTur.J_SLUS_KAPA || t == JetonTur.J_NOKTA;
+}
+
+// '(' tür ')' ile başlayan dönüşüm mü?
+fonk donusum_basi_mi() -> mantik {
+    eger (bak_tur() != JetonTur.J_PARANTEZ_AC) { don yanlis; }
+    sayi t1 = bak_tur_at(1);
+    eger (t1 == JetonTur.J_ANAHTAR) {
+        oto v = bak_deger_at(1);
+        eger (tur_adi_mi(v)) { don dogru; }
+        don metin_esit(v, "fonk") && bak_tur_at(2) == JetonTur.J_PARANTEZ_AC;
+    }
+    eger (t1 != JetonTur.J_KIMLIK) { don yanlis; }
+    sayi i = 2;
+    eger (bak_tur_at(i) == JetonTur.J_NOKTA && bak_tur_at(i + 1) == JetonTur.J_KIMLIK) { i = i + 2; }
+    sayi yildiz = 0;
+    iken (bak_tur_at(i) == JetonTur.J_YILDIZ) {
+        i = i + 1;
+        yildiz = yildiz + 1;
+    }
+    eger (bak_tur_at(i) != JetonTur.J_PARANTEZ_KAPA) { don yanlis; }
+    eger (yildiz > 0) { don dogru; }
+    // (Ad)x: yalnızca ardından değer başlıyorsa (sayı, ad, sabit sözcük) dönüşümdür.
+    sayi sn = bak_tur_at(i + 1);
+    eger (sn == JetonTur.J_SAYI || sn == JetonTur.J_ONDALIK || sn == JetonTur.J_KIMLIK) { don dogru; }
+    eger (sn == JetonTur.J_ANAHTAR) {
+        oto w = bak_deger_at(i + 1);
+        don metin_esit(w, "dogru") || metin_esit(w, "yanlis") || metin_esit(w, "yok") || metin_esit(w, "kendi");
+    }
+    don yanlis;
+}
+
 fonk ayristir_sonek() -> sayi {
     sayi expr = ayristir_birincil();
     iken (!hata_var()) {
@@ -707,6 +781,15 @@ fonk ayristir_sonek() -> sayi {
                 dugum_yaz_b(n, idx);
                 expr = n;
             }
+        } yoksa eger (bak_tur() == JetonTur.J_SORU && soru_yay_mi()) {
+            sayi qt = j_ilerle();
+            eger (g_ertele_derin > 0) {
+                hata_ver(jeton_satir(qt), jeton_sutun(qt), "'ertele' gövdesinde '?' kullanılamaz.");
+                don 0;
+            }
+            sayi n = dugum_yeni(DugumTur.D_HATA_YAY, jeton_satir(qt), jeton_sutun(qt));
+            dugum_yaz_a(n, expr);
+            expr = n;
         } yoksa eger (bak_tur() == JetonTur.J_NOKTA && bak_tur_at(1) == JetonTur.J_NOKTA) {
             dur;
         } yoksa eger (esles_tur(JetonTur.J_NOKTA)) {
@@ -723,6 +806,18 @@ fonk ayristir_sonek() -> sayi {
 }
 
 fonk ayristir_tekil() -> sayi {
+    eger (donusum_basi_mi()) {
+        sayi satir = bak_satir();
+        sayi sutun = bak_sutun();
+        j_ilerle();
+        sayi hedef = ayristir_tur();
+        beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+        eger (hata_var()) { don 0; }
+        sayi n = dugum_yeni(DugumTur.D_DONUSUM, satir, sutun);
+        dugum_yaz_sayi(n, hedef);
+        dugum_yaz_a(n, ayristir_tekil());
+        don n;
+    }
     sayi t = bak_tur();
     eger (t == JetonTur.J_UNLEM || t == JetonTur.J_EKSI || t == JetonTur.J_ARTI || t == JetonTur.J_YILDIZ || t == JetonTur.J_VE_ISARET) {
         sayi satir = bak_satir();
@@ -1216,7 +1311,28 @@ fonk ayristir_cumle() -> sayi {
     eger (kw_mi("her")) { don ayristir_her(); }
     eger (kw_mi("iken")) { don ayristir_iken(); }
     eger (kw_mi("dongu")) { don ayristir_dongu(); }
+    eger (kw_mi("ertele") || kw_mi("hata_ertele")) {
+        mantik hk = kw_mi("hata_ertele");
+        sayi kw = j_ilerle();
+        sayi sl = loop_al();
+        sayi ss = switch_al();
+        loop_yaz(0);
+        switch_yaz(0);
+        g_ertele_derin = g_ertele_derin + 1;
+        sayi govde = ayristir_cumle();
+        g_ertele_derin = g_ertele_derin - 1;
+        loop_yaz(sl);
+        switch_yaz(ss);
+        sayi n = dugum_yeni(DugumTur.D_ERTELE, jeton_satir(kw), jeton_sutun(kw));
+        dugum_yaz_a(n, govde);
+        eger (hk) { dugum_yaz_bayrak(n, 1); }
+        don n;
+    }
     eger (kw_mi("don")) {
+        eger (g_ertele_derin > 0) {
+            hata_ver(bak_satir(), bak_sutun(), "'ertele' gövdesinden 'don' ile çıkılamaz.");
+            don 0;
+        }
         sayi kw = j_ilerle();
         sayi val = 0;
         eger (bak_tur() != JetonTur.J_NOKTALI_VIRGUL) {
@@ -1301,6 +1417,13 @@ fonk ayristir_fonksiyon(metin sinif_ad) -> sayi {
     sayi nm = beklenen_kimlik(yanlis);
     eger (metin_esit(jeton_deger(nm), "upp") && metin_esit(sinif_ad, "")) {
         hata_ver(jeton_satir(nm), jeton_sutun(nm), "'upp' yerleşik ad alanıdır; fonksiyon adı olamaz.");
+    }
+    eger (metin_esit(sinif_ad, "") && (metin_esit(jeton_deger(nm), "hata") || metin_esit(jeton_deger(nm), "boyut"))) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'");
+        hata_fmt_yaz(jeton_deger(nm));
+        hata_fmt_yaz("' yerleşik addır; fonksiyon adı olamaz.");
+        hata_fmt_ver(jeton_satir(nm), jeton_sutun(nm));
     }
     don ayristir_fonk_govde(kw, jeton_deger(nm), jeton_satir(nm), jeton_sutun(nm), sinif_ad, yanlis);
 }

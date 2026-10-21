@@ -72,6 +72,12 @@ sayi g_anon_n = 0;
 harita[metin,sayi] g_ft_id;
 metin g_ft_tanim = "";
 sayi g_ft_n = 0;
+sayi g_ertele_derin = 0;
+sayi g_hata_donus = 0;
+sayi g_guvensiz_derin = 0;
+harita[metin,sayi] g_bk_id;
+metin g_bk_tanim = "";
+sayi g_bk_n = 0;
 
 liste[metin] k_ad;
 liste[sayi] k_tip;

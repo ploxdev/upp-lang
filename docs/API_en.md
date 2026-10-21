@@ -50,6 +50,42 @@ upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
 - Signatures must match exactly. Only `==` and `!=` work on function values. Methods and `ana` cannot be taken as values.
 - In C it is a plain function pointer, so it also works on the freestanding and kernel targets (interrupt/command handler tables).
 
+### Error handling: `beklenen`, `?`, `ertele`
+`beklenen[T, H]` holds either a `T` value or an `H` error; `beklenen[T]` is short for `beklenen[T, metin]`. In C it is a plain struct of a flag and a `union`: it is returned by value and never allocates behind your back. When the error type is a `secenek`, the heap is never touched.
+
+```upp
+secenek DiskHata { YOK, BOZUK, DOLU }
+
+fonk sektor(sayi no) -> beklenen[sayi, DiskHata] {
+    eger (no > 100) { don hata(DiskHata.DOLU); }
+    don no * 512;                     // a T value: success
+}
+
+fonk iki_sektor(sayi a, sayi b) -> beklenen[sayi, DiskHata] {
+    sayi x = sektor(a)?;              // on error: clean up and return the same error
+    sayi y = sektor(b)?;
+    don x + y;
+}
+```
+
+- **Construction:** in a function returning `beklenen`, `don x;` returns success and `don hata(e);` returns an error. The same works for initializers, assignments, and arguments: `beklenen[sayi] r = 5;`, `r = hata("x");`. A variable without an initializer is success with the zero value.
+- **`beklenen[bos, H]`:** carries no value; `don;` or reaching the end of the function is success.
+- **Methods:** `tamam_mi()`, `hata_mi()`, `deger()` (panics on error and prints the message when `H` is `metin`), `hata()` (panics on success), `deger_yoksa(v)`.
+- **`e?`:** only inside a function that returns `beklenen` with the same `H`. Not allowed in loop conditions, on the right side of `&&`/`||`, or in `?:` branches.
+- **No silent discard:** a `beklenen` result thrown away as `f();` is a compile error; propagate it with `?` or check it.
+- **Restrictions:** `beklenen` cannot be a class field, cannot be captured by `arkaplan`, and a top-level variable of this type takes no initializer. `hata(...)` cannot be used with `oto`.
+
+An `ertele` body runs in reverse order on every exit from its scope (end of block, `dur`, `devam`, `don`, `?`). `hata_ertele` only runs when the function returns an error (`don hata(...)`, `?`, or returning a `beklenen` that holds an error at run time). The body is `ertele stmt;` or `ertele { ... }`; it cannot leave through `don` or `?`, nor through `dur`/`devam` to an outer loop. The return value is computed before deferred code runs.
+
+```upp
+fonk ac(metin ad) -> beklenen[Dosya] {
+    oto d = dosya_ac(ad)?;
+    hata_ertele d.kapat();            // only if one of the steps below fails
+    baslik_oku(d)?;
+    don d;
+}
+```
+
 ### Integer division
 `/` and `%` panic explicitly on division by zero and on `MIN / -1` overflow (in the kernel too). A constant zero divisor is a compile error.
 
@@ -73,8 +109,19 @@ The following are only allowed inside `guvensiz { }`: pointers (`*`, `&`), `bell
 | `dizi[T, N]` | C array | Bounds-checked |
 | `liste[T]`, `harita[K,V]` | value (refcount + COW) | |
 | `fonk(P...) -> R` | function pointer | Function value, may be `yok` |
+| `beklenen[T, H]`, `beklenen[T]` | struct (flag + union) | Value or error; propagated with `?` |
 | `&metin`, `&dilim[T]` | view | |
 | `sinif`, `secenek` | `struct`, `enum` | |
+
+### Casts `(T)x` and `boyut(T)`
+Same syntax as C: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.9;` (3), `Renk r = (Renk)2;`.
+
+- Free between numeric types, `mantik`, and enums. Integer narrowing truncates like C (`(ubayt)300` is 44).
+- `ondalik` → integer panics explicitly when the result does not fit the target range or the value is NaN (undefined behavior in C).
+- Pointer ↔ pointer, pointer ↔ integer, and function value ↔ pointer/integer casts are only allowed inside `guvensiz`: `u16* vga = (u16*)0xB8000;`.
+- `metin`, classes, collections, and arrays cannot be cast.
+
+`boyut(T)` gives the size of a type in bytes as a `sayi` (C `sizeof`); `boyut(variable)` gives the variable's size (the whole array for arrays). It is a compile-time constant and can be used in `sabit` expressions.
 
 ---
 
