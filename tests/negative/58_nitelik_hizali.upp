@@ -1,0 +1,10 @@
+// Negatif: @hizali değeri 2'nin kuvveti olmalı.
+// @icerir: [u++ HATA]
+// @icerir: '@hizali' değeri 1 ile 2^30 arasında 2'nin kuvveti
+
+@hizali(24)
+sayi g = 0;
+
+fonk ana() -> sayi {
+    don 0;
+}

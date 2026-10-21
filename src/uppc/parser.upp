@@ -156,6 +156,7 @@ fonk metin_coz(metin raw) -> metin {
             yoksa eger (nxt == 114) { s = kat(s, "\r"); }
             yoksa eger (nxt == 92) { s = kat(s, "\\"); }
             yoksa eger (nxt == 34) { s = kat(s, "\""); }
+            yoksa eger (nxt == 39) { s = kat(s, "'"); }
             yoksa eger (nxt == 101) { s = kat(s, upp.metin.hex_coz("1b")); }
             yoksa eger (nxt == 120 && i + adv + nadv + 1 < n - 1 && hex_hane_deger(metin_cp(raw, i + adv + nadv)) >= 0 && hex_hane_deger(metin_cp(raw, i + adv + nadv + 1)) >= 0) {
                 s = kat(s, upp.metin.hex_coz(intern_dilim(raw, i + adv + nadv, i + adv + nadv + 2)));
@@ -180,7 +181,7 @@ fonk metin_coz(metin raw) -> metin {
                 devam;
             }
             yoksa {
-                g_kacis_hatasi = kat3("Bilinmeyen kaçış dizisi '\\", intern_dilim(raw, i + adv, i + adv + nadv), "'. Geçerli: \\n \\t \\r \\\\ \\\" \\e \\xHH \\uHHHH");
+                g_kacis_hatasi = kat3("Bilinmeyen kaçış dizisi '\\", intern_dilim(raw, i + adv, i + adv + nadv), "'. Geçerli: \\n \\t \\r \\\\ \\\" \\' \\e \\xHH \\uHHHH");
                 s = kat(s, intern_dilim(raw, i + adv, i + adv + nadv));
             }
             i = i + adv + nadv;
@@ -199,6 +200,42 @@ fonk interp_baslar_mi(sayi c) -> mantik {
     don ident_bas(c) || c == 40;
 }
 
+// p konumunda eksiksiz bir karakter sabiti mi: 'a', '\n', '\x41', 'ş'.
+// "'{' ile" gibi düz metinler (tırnaktan sonra kapanmayan) interpolasyon sayılmaz.
+fonk interp_kar_sabiti_mi(metin t, sayi p) -> mantik {
+    eger (metin_cp(t, p) != 39) { don yanlis; }
+    sayi c = metin_cp(t, p + 1);
+    eger (c < 0 || c == 39 || c == 10) { don yanlis; }
+    eger (c != 92) { don metin_cp(t, p + 2) == 39; }
+    sayi k = metin_cp(t, p + 2);
+    eger (k == 120) { don hex_hane_deger(metin_cp(t, p + 3)) >= 0 && hex_hane_deger(metin_cp(t, p + 4)) >= 0 && metin_cp(t, p + 5) == 39; }
+    eger (k == 117) {
+        dongu (sayi h = 3; h < 7; h += 1) {
+            eger (hex_hane_deger(metin_cp(t, p + h)) < 0) { don yanlis; }
+        }
+        don metin_cp(t, p + 7) == 39;
+    }
+    eger (k == 34) {
+        // "..." içinde '"' kaynakta '\"' diye yazılır: '\"' + kapanış
+        eger (metin_cp(t, p + 3) == 39) { don dogru; }
+    }
+    don k >= 0 && metin_cp(t, p + 3) == 39;
+}
+
+// p'de eksiksiz bir karakter sabiti varsa kapanış tırnağından sonraki konum, yoksa -1.
+fonk kar_sabiti_son(metin t, sayi p) -> sayi {
+    eger (!interp_kar_sabiti_mi(t, p)) { don -1; }
+    sayi q = p + 2;
+    iken (metin_cp(t, q) != 39) { q = q + 1; }
+    don q + 1;
+}
+
+// t[i] == '{' bir interpolasyon ifadesi başlatıyor mu (tanımlayıcı, '(' ya da karakter sabiti).
+fonk interp_ifade_baslar(metin t, sayi i) -> mantik {
+    sayi c2 = metin_cp(t, i + 1);
+    don interp_baslar_mi(c2) || interp_kar_sabiti_mi(t, i + 1);
+}
+
 fonk interp_aday_var(metin text) -> mantik {
     sayi n = metin_uzun(text);
     sayi i = 0;
@@ -209,7 +246,7 @@ fonk interp_aday_var(metin text) -> mantik {
                 i = i + 2;
                 devam;
             }
-            eger (interp_baslar_mi(c2)) { don dogru; }
+            eger (interp_ifade_baslar(text, i)) { don dogru; }
         }
         i = i + 1;
     }
@@ -265,26 +302,53 @@ fonk kacis_var(metin text) -> mantik {
     don yanlis;
 }
 
+// Düz metin parçasının kaçışlarını çözer ("..." için); üçlü tırnakta yalnızca CR atılır.
+fonk interp_parca_coz(metin ham, mantik uclu) -> metin {
+    eger (uclu) { don metin_coz(kat3("\"\"\"", ham, "\"\"\"")); }
+    don metin_coz(kat3("\"", ham, "\""));
+}
+
+// İnterpolasyon kaynak (ham) metin üzerinde bölünür:
+//  - düz parçaların kaçışları (\n, \u00e7 ...) yalnızca o parçalara uygulanır;
+//  - {ifade} kaynakta yazıldığı gibi ayrıştırılır; tek istisna "..." içinde iç içe
+//    metnin tırnağının \" yazılmasıdır. Böylece "{'\n'}", "{'}'}", "{'\''}" doğru çalışır.
+//  - {{ ve }} düz { ve } olur.
 fonk interp_ayristir(sayi n) -> bos {
-    oto text = metin_coz(dugum_ad(n));
-    eger (!metin_esit(g_kacis_hatasi, "")) {
-        oto kh = g_kacis_hatasi;
-        g_kacis_hatasi = "";
-        hata_ver(dugum_satir(n), dugum_sutun(n), kh);
+    oto raw = dugum_ad(n);
+    sayi rn = metin_uzun(raw);
+    mantik uclu = rn >= 6 && metin_cp(raw, 0) == 34 && metin_cp(raw, 1) == 34 && metin_cp(raw, 2) == 34;
+    eger (rn < 2 || metin_cp(raw, 0) != 34) { don; }
+    sayi tq = 1;
+    eger (uclu) { tq = 3; }
+    oto ic = intern_dilim(raw, tq, rn - tq);
+    eger (!interp_aday_var(ic) && !kacis_var(ic)) {
+        // Düz metin: kaçış hatası varsa şimdi bildir (codegen yeniden çözer).
+        metin_coz(raw);
+        eger (!metin_esit(g_kacis_hatasi, "")) {
+            oto kh = g_kacis_hatasi;
+            g_kacis_hatasi = "";
+            hata_ver(dugum_satir(n), dugum_sutun(n), kh);
+        }
         don;
     }
-    mantik aday = interp_aday_var(text);
-    eger (!aday && !kacis_var(text)) { don; }
     sayi satir = dugum_satir(n);
     sayi sutun = dugum_sutun(n);
     sayi L = liste_yeni();
     metin parca = "";
-    sayi m = metin_uzun(text);
+    metin duz = "";
+    mantik ifade_var = yanlis;
+    sayi m = metin_uzun(ic);
     sayi i = 0;
     iken (i < m && !hata_var()) {
-        sayi c = metin_cp(text, i);
+        sayi c = metin_cp(ic, i);
         sayi c2 = -1;
-        eger (i + 1 < m) { c2 = metin_cp(text, i + 1); }
+        eger (i + 1 < m) { c2 = metin_cp(ic, i + 1); }
+        eger (c == 92 && c2 >= 0 && !uclu) {
+            // kaçış çifti düz parçada kalır; \{ gibi geçersizler çözümde hata verir
+            parca += intern_dilim(ic, i, i + 2);
+            i = i + 2;
+            devam;
+        }
         eger (c == 123 && c2 == 123) {
             parca += "{";
             i = i + 2;
@@ -295,48 +359,85 @@ fonk interp_ayristir(sayi n) -> bos {
             i = i + 2;
             devam;
         }
-        eger (c == 123 && interp_baslar_mi(c2)) {
+        eger (c == 123 && interp_ifade_baslar(ic, i)) {
+            // {ifade}: kaynak olduğu gibi; yalnızca \" → " (iç içe metin tırnağı)
+            metin ifade = "";
             sayi j = i + 1;
             sayi derin = 0;
-            mantik tirnak = yanlis;
+            mantik ic_metin = yanlis;
+            mantik ic_kar = yanlis;
+            mantik kapandi = yanlis;
             iken (j < m) {
-                sayi d = metin_cp(text, j);
-                eger (tirnak) {
-                    eger (d == 92) { j = j + 1; }
-                    yoksa eger (d == 34) { tirnak = yanlis; }
-                } yoksa eger (d == 34) {
-                    tirnak = dogru;
-                } yoksa eger (d == 40 || d == 91 || d == 123) {
-                    derin = derin + 1;
-                } yoksa eger (d == 41 || d == 93) {
-                    derin = derin - 1;
-                } yoksa eger (d == 125) {
-                    eger (derin == 0) { dur; }
-                    derin = derin - 1;
+                sayi d = metin_cp(ic, j);
+                sayi d2 = -1;
+                eger (j + 1 < m) { d2 = metin_cp(ic, j + 1); }
+                eger (d == 92 && d2 >= 0) {
+                    eger (d2 == 34 && !uclu) {
+                        ifade += "\"";
+                        eger (!ic_kar) { ic_metin = !ic_metin; }
+                    } yoksa {
+                        ifade += intern_dilim(ic, j, j + 2);
+                    }
+                    j = j + 2;
+                    devam;
                 }
+                eger (uclu && d == 34 && !ic_kar) {
+                    ic_metin = !ic_metin;
+                } yoksa eger (!ic_metin && d == 39) {
+                    ic_kar = !ic_kar;
+                } yoksa eger (!ic_metin && !ic_kar) {
+                    eger (d == 40 || d == 91 || d == 123) {
+                        derin = derin + 1;
+                    } yoksa eger (d == 41 || d == 93) {
+                        derin = derin - 1;
+                    } yoksa eger (d == 125) {
+                        eger (derin == 0) {
+                            kapandi = dogru;
+                            dur;
+                        }
+                        derin = derin - 1;
+                    }
+                }
+                ifade += intern_dilim(ic, j, j + 1);
                 j = j + 1;
             }
-            eger (j >= m) {
+            eger (!kapandi) {
                 hata_ver(satir, sutun, "Kapatılmamış interpolasyon '{'. Düz '{{' yazmak için '{{{{' kullanın.");
                 don;
             }
-            interp_parca_ekle(L, parca, satir, sutun);
+            oto cozulmus = interp_parca_coz(parca, uclu);
+            eger (!metin_esit(g_kacis_hatasi, "")) {
+                oto kh = g_kacis_hatasi;
+                g_kacis_hatasi = "";
+                hata_ver(satir, sutun, kh);
+                don;
+            }
+            interp_parca_ekle(L, cozulmus, satir, sutun);
+            duz += cozulmus;
             parca = "";
-            sayi e = interp_ifade_ayristir(intern_dilim(text, i + 1, j), satir, sutun);
+            sayi e = interp_ifade_ayristir(ifade, satir, sutun);
             eger (e == 0) { don; }
             liste_ekle(L, e);
+            ifade_var = dogru;
             i = j + 1;
             devam;
         }
-        parca += intern_dilim(text, i, i + 1);
+        parca += intern_dilim(ic, i, i + 1);
         i = i + 1;
     }
-    eger (!aday) {
-        // yalnızca {{ / }} kaçışı: çözülmüş metni ham sabit olarak geri yaz
-        dugum_yaz_ad(n, c_escape(parca));
+    oto son = interp_parca_coz(parca, uclu);
+    eger (!metin_esit(g_kacis_hatasi, "")) {
+        oto kh = g_kacis_hatasi;
+        g_kacis_hatasi = "";
+        hata_ver(satir, sutun, kh);
         don;
     }
-    interp_parca_ekle(L, parca, satir, sutun);
+    eger (!ifade_var) {
+        // yalnızca {{ / }} kaçışı: çözülmüş metni ham sabit olarak geri yaz
+        dugum_yaz_ad(n, c_escape(kat(duz, son)));
+        don;
+    }
+    interp_parca_ekle(L, son, satir, sutun);
     dugum_yaz_liste(n, L);
     dugum_yaz_bayrak(n, dugum_bayrak(n) | 32);
 }
@@ -738,7 +839,7 @@ fonk ayristir_birincil() -> sayi {
 // Sonek '?': ardından ifade başlayamayan bir jeton gelir (üçlü '? :' ile karışmaz).
 fonk soru_yay_mi() -> mantik {
     sayi t = bak_tur_at(1);
-    don t == JetonTur.J_NOKTALI_VIRGUL || t == JetonTur.J_PARANTEZ_KAPA || t == JetonTur.J_VIRGUL || t == JetonTur.J_KOSE_KAPA || t == JetonTur.J_SLUS_KAPA || t == JetonTur.J_NOKTA;
+    don t == JetonTur.J_NOKTALI_VIRGUL || t == JetonTur.J_PARANTEZ_KAPA || t == JetonTur.J_VIRGUL || t == JetonTur.J_KOSE_KAPA || t == JetonTur.J_SLUS_KAPA || t == JetonTur.J_NOKTA || t == JetonTur.J_ARALIK;
 }
 
 // '(' tür ')' ile başlayan dönüşüm mü?
@@ -788,9 +889,7 @@ fonk ayristir_sonek() -> sayi {
             expr = n;
         } yoksa eger (esles_tur(JetonTur.J_KOSE_AC)) {
             sayi idx = ayristir_ifade();
-            eger (bak_tur() == JetonTur.J_NOKTA && bak_tur_at(1) == JetonTur.J_NOKTA) {
-                j_ilerle();
-                j_ilerle();
+            eger (esles_tur(JetonTur.J_ARALIK)) {
                 sayi son = ayristir_ifade();
                 beklenen_tur(JetonTur.J_KOSE_KAPA, "]");
                 sayi n = dugum_yeni(DugumTur.D_INDIS, dugum_satir(expr), dugum_sutun(expr));
@@ -814,7 +913,7 @@ fonk ayristir_sonek() -> sayi {
             sayi n = dugum_yeni(DugumTur.D_HATA_YAY, jeton_satir(qt), jeton_sutun(qt));
             dugum_yaz_a(n, expr);
             expr = n;
-        } yoksa eger (bak_tur() == JetonTur.J_NOKTA && bak_tur_at(1) == JetonTur.J_NOKTA) {
+        } yoksa eger (bak_tur() == JetonTur.J_ARALIK) {
             dur;
         } yoksa eger (esles_tur(JetonTur.J_NOKTA)) {
             sayi nm = beklenen_kimlik(dogru);
@@ -1302,6 +1401,11 @@ fonk ayristir_her() -> sayi {
     }
     beklenen_kw("in");
     sayi it = ayristir_ifade();
+    // Aralık: her (sayi i in a..b) — a dahil, b hariç; b bir kez hesaplanır.
+    sayi aralik_son = 0;
+    eger (esles_tur(JetonTur.J_ARALIK)) {
+        aralik_son = ayristir_ifade();
+    }
     beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
     loop_yaz(loop_al() + 1);
     sayi body = ayristir_cumle();
@@ -1311,9 +1415,13 @@ fonk ayristir_her() -> sayi {
     dugum_yaz_a(n, typ);
     dugum_yaz_b(n, it);
     dugum_yaz_c(n, body);
-    eger (inferred != 0) {
-        dugum_yaz_bayrak(n, 1);
+    sayi fl = 0;
+    eger (inferred != 0) { fl = fl + 1; }
+    eger (aralik_son != 0) {
+        fl = fl + 2;
+        dugum_yaz_d(n, aralik_son);
     }
+    dugum_yaz_bayrak(n, fl);
     don n;
 }
 
@@ -1703,37 +1811,146 @@ fonk ayristir_include() -> sayi {
     don n;
 }
 
+// ---- nitelikler: @paketli, @hizali(N), @bolum("ad") ----
+// Üst düzey bildirimden hemen önce yazılır; düğüm kimliğine göre yan tablolarda
+// tutulur ve codegen GCC __attribute__((...)) olarak üretir.
+//   sinif              : @paketli, @hizali
+//   üst düzey fonk     : @hizali, @bolum
+//   global değişken    : @hizali, @bolum   (@bolum ayrıca 'used': bağlayıcı atmaz)
+harita[sayi, mantik] g_nit_paketli;
+harita[sayi, sayi] g_nit_hizali;
+harita[sayi, metin] g_nit_bolum;
+mantik g_nb_paketli = yanlis;
+sayi g_nb_hizali = 0;
+metin g_nb_bolum = "";
+sayi g_nb_satir = 0;
+sayi g_nb_sutun = 0;
+sayi g_nb_say = 0;
+
+fonk nitelik_paketli(sayi d) -> mantik => g_nit_paketli.var_mi(d);
+fonk nitelik_hizali(sayi d) -> sayi => g_nit_hizali.al(d);
+fonk nitelik_bolum(sayi d) -> metin {
+    eger (!g_nit_bolum.var_mi(d)) { don ""; }
+    don g_nit_bolum.al(d);
+}
+
+fonk nitelik_iki_kuvveti_mi(sayi v) -> mantik {
+    eger (v < 1) { don yanlis; }
+    iken (v % 2 == 0) { v = v / 2; }
+    don v == 1;
+}
+
+fonk nitelik_bolum_adi_gecerli(metin s) -> mantik {
+    sayi n = upp.uzunluk(s);
+    eger (n == 0 || n > 64) { don yanlis; }
+    dongu (sayi i = 0; i < n; i += 1) {
+        sayi c = s[i];
+        mantik ok = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c == 46 || c == 95 || c == 36;
+        eger (!ok) { don yanlis; }
+    }
+    don dogru;
+}
+
+// Bildirimden önceki @... dizisini okur; değerleri g_nb_* içinde bekletir.
+fonk ayristir_nitelikler() -> bos {
+    g_nb_paketli = yanlis;
+    g_nb_hizali = 0;
+    g_nb_bolum = "";
+    g_nb_say = 0;
+    g_nb_satir = bak_satir();
+    g_nb_sutun = bak_sutun();
+    iken (bak_tur() == JetonTur.J_AT && !hata_var()) {
+        sayi at = j_ilerle();
+        sayi nm = beklenen_tur(JetonTur.J_KIMLIK, "nitelik adı");
+        eger (nm == 0) { don; }
+        oto ad = jeton_deger(nm);
+        g_nb_say = g_nb_say + 1;
+        eger (metin_esit(ad, "paketli")) {
+            eger (g_nb_paketli) { hata_ver(jeton_satir(at), jeton_sutun(at), "'@paketli' iki kez yazılmış."); don; }
+            g_nb_paketli = dogru;
+        } yoksa eger (metin_esit(ad, "hizali")) {
+            eger (g_nb_hizali != 0) { hata_ver(jeton_satir(at), jeton_sutun(at), "'@hizali' iki kez yazılmış."); don; }
+            beklenen_tur(JetonTur.J_PARANTEZ_AC, "(");
+            sayi sj = beklenen_tur(JetonTur.J_SAYI, "hizalama (bayt, 2'nin kuvveti)");
+            beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+            eger (hata_var()) { don; }
+            oto sv = jeton_deger(sj);
+            sayi v = 0;
+            eger (diyez_yer(sv) < 0 && metin_cp(sv, 0) != 64) { v = upp.metinden_sayiya(sv); }
+            eger (!nitelik_iki_kuvveti_mi(v) || v > 1073741824) {
+                hata_ver(jeton_satir(sj), jeton_sutun(sj), "'@hizali' değeri 1 ile 2^30 arasında 2'nin kuvveti olan soneksiz bir tamsayı olmalı (ör. @hizali(16), @hizali(4096)).");
+                don;
+            }
+            g_nb_hizali = v;
+        } yoksa eger (metin_esit(ad, "bolum")) {
+            eger (!metin_esit(g_nb_bolum, "")) { hata_ver(jeton_satir(at), jeton_sutun(at), "'@bolum' iki kez yazılmış."); don; }
+            beklenen_tur(JetonTur.J_PARANTEZ_AC, "(");
+            sayi mj = beklenen_tur(JetonTur.J_METIN, "bölüm adı (metin)");
+            beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+            eger (hata_var()) { don; }
+            oto bad = metin_coz(jeton_deger(mj));
+            eger (!nitelik_bolum_adi_gecerli(bad)) {
+                hata_ver(jeton_satir(mj), jeton_sutun(mj), "'@bolum' adı boş olmayan, en çok 64 karakterlik ve yalnızca harf, rakam, '.', '_', '$' içeren bir ad olmalı (ör. @bolum(\".limine_istekler\")).");
+                don;
+            }
+            g_nb_bolum = bad;
+        } yoksa {
+            hata_fmt_basla();
+            hata_fmt_yaz("Bilinmeyen nitelik '@");
+            hata_fmt_yaz(ad);
+            hata_fmt_yaz("'. Geçerli: @paketli, @hizali(N), @bolum(\"ad\").");
+            hata_fmt_ver(jeton_satir(at), jeton_sutun(at));
+            don;
+        }
+    }
+}
+
+fonk nitelik_uygulanamaz(metin nit, metin hedef) -> bos {
+    hata_fmt_basla();
+    hata_fmt_yaz("'@");
+    hata_fmt_yaz(nit);
+    hata_fmt_yaz("' ");
+    hata_fmt_yaz(hedef);
+    hata_fmt_yaz(" için kullanılamaz.");
+    hata_fmt_ver(g_nb_satir, g_nb_sutun);
+}
+
+// Bekleyen nitelikleri d bildirimine bağlar; bildirim türüne uygunluğu denetler.
+fonk nitelik_bagla(sayi d) -> bos {
+    eger (g_nb_say == 0 || d == 0 || hata_var()) { don; }
+    sayi t = dugum_tur(d);
+    eger (t == DugumTur.D_SINIF) {
+        eger (!metin_esit(g_nb_bolum, "")) { nitelik_uygulanamaz("bolum", "sınıf"); don; }
+    } yoksa eger (t == DugumTur.D_FONK) {
+        eger (g_nb_paketli) { nitelik_uygulanamaz("paketli", "fonksiyon"); don; }
+    } yoksa eger (t == DugumTur.D_DEGISKEN) {
+        eger (g_nb_paketli) { nitelik_uygulanamaz("paketli", "değişken"); don; }
+    } yoksa {
+        hata_ver(g_nb_satir, g_nb_sutun, "Nitelikler yalnızca sınıf, üst düzey fonksiyon ve global değişken bildirimlerinden önce yazılabilir.");
+        don;
+    }
+    eger (g_nb_paketli) { g_nit_paketli.koy(d, dogru); }
+    eger (g_nb_hizali > 0) { g_nit_hizali.koy(d, g_nb_hizali); }
+    eger (!metin_esit(g_nb_bolum, "")) { g_nit_bolum.koy(d, g_nb_bolum); }
+    g_nb_say = 0;
+}
+
 fonk ayristir_birim() -> sayi {
     sayi first_satir = bak_satir();
     sayi first_sutun = bak_sutun();
     sayi decls = liste_yeni();
     g_anon.temizle();
     iken (bak_tur() != JetonTur.J_EOF && !hata_var()) {
-        eger (kw_mi("c_ekle")) {
-            liste_ekle(decls, ayristir_include());
-        } yoksa eger (kw_mi("kullan")) {
-            liste_ekle(decls, ayristir_kullan());
-        } yoksa eger (kw_mi("sabit")) {
-            liste_ekle(decls, ayristir_sabit());
-        } yoksa eger (kw_mi("sinif")) {
-            liste_ekle(decls, ayristir_sinif());
-        } yoksa eger (kw_mi("secenek")) {
-            liste_ekle(decls, ayristir_secenek());
-        } yoksa eger (kw_mi("fonk") && bak_tur_at(1) != JetonTur.J_PARANTEZ_AC) {
-            liste_ekle(decls, ayristir_fonksiyon(""));
-        } yoksa eger (kw_mi("oto") || tur_baslangici_mi()) {
-            eger (kw_mi("oto")) {
-                liste_ekle(decls, ayristir_oto());
+        ayristir_nitelikler();
+        eger (hata_var()) { dur; }
+        sayi onceki_n = liste_uzunluk(decls);
+        ayristir_bildirim(decls);
+        eger (g_nb_say > 0 && !hata_var()) {
+            eger (liste_uzunluk(decls) > onceki_n) {
+                nitelik_bagla(liste_al(decls, liste_uzunluk(decls) - 1));
             } yoksa {
-                liste_ekle(decls, ayristir_degisken());
+                hata_ver(g_nb_satir, g_nb_sutun, "Nitelikten sonra bir bildirim bekleniyordu.");
             }
-        } yoksa {
-            hata_fmt_basla();
-            hata_fmt_yaz("Üst düzeyde 'c_ekle', 'kullan', 'sabit', değişken, 'sinif', 'secenek' veya 'fonk' bekleniyordu, '");
-            hata_fmt_yaz(bak_deger());
-            hata_fmt_yaz("' bulundu.");
-            hata_fmt_ver(bak_satir(), bak_sutun());
-            dur;
         }
     }
     eger (hata_var()) {
@@ -1744,6 +1961,113 @@ fonk ayristir_birim() -> sayi {
     sayi n = dugum_yeni(DugumTur.D_PROGRAM, first_satir, first_sutun);
     dugum_yaz_liste(n, decls);
     don n;
+}
+
+// ---- c_harici: C fonksiyonu bildirimi ----
+//   c_harici fonk strlen(cmetin s) -> u64;
+//   c_harici "puts" fonk c_yaz(cmetin s) -> s32;   (C sembolü u++ adından farklıysa)
+// Gövdesiz bir D_FONK üretir; C sembolü g_harici_sembol'de tutulur. Codegen
+// başlıktaki prototiple çakışmasın diye GCC asm etiketiyle ayrı bir C adı bildirir.
+harita[sayi, metin] g_harici_sembol;
+
+fonk harici_mi(sayi fn) -> mantik => fn != 0 && g_harici_sembol.var_mi(fn);
+fonk harici_sembol(sayi fn) -> metin => g_harici_sembol.al(fn);
+
+// ASCII C tanımlayıcısı: [A-Za-z_][A-Za-z0-9_]*
+fonk c_tanimlayici_mi(metin s) -> mantik {
+    sayi n = upp.uzunluk(s);
+    eger (n == 0) { don yanlis; }
+    dongu (sayi i = 0; i < n; i += 1) {
+        sayi c = s[i];
+        mantik harf = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95;
+        eger (!harf && !(i > 0 && c >= 48 && c <= 57)) { don yanlis; }
+    }
+    don dogru;
+}
+
+fonk ayristir_c_harici() -> sayi {
+    sayi kw = beklenen_kw("c_harici");
+    metin sembol = "";
+    eger (bak_tur() == JetonTur.J_METIN) {
+        sayi sj = j_ilerle();
+        sembol = metin_coz(jeton_deger(sj));
+        eger (!c_tanimlayici_mi(sembol)) {
+            hata_ver(jeton_satir(sj), jeton_sutun(sj), "c_harici C sembol adı geçerli bir ASCII C tanımlayıcısı olmalı (harf, rakam, '_').");
+            don 0;
+        }
+    }
+    eger (!kw_mi("fonk")) {
+        hata_ver(bak_satir(), bak_sutun(), "'c_harici' ardından 'fonk ad(...) -> tür;' bildirimi bekleniyordu.");
+        don 0;
+    }
+    sayi fkw = j_ilerle();
+    sayi nm = beklenen_kimlik(yanlis);
+    eger (hata_var()) { don 0; }
+    beklenen_tur(JetonTur.J_PARANTEZ_AC, "(");
+    sayi params = liste_yeni();
+    eger (bak_tur() != JetonTur.J_PARANTEZ_KAPA) {
+        liste_ekle(params, ayristir_param());
+        iken (esles_tur(JetonTur.J_VIRGUL)) {
+            liste_ekle(params, ayristir_param());
+        }
+    }
+    beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+    sayi ret = tur_dugum(jeton_satir(fkw), jeton_sutun(fkw), "bos", 0, 0);
+    eger (esles_tur(JetonTur.J_OK)) {
+        ret = ayristir_tur();
+    }
+    eger (bak_tur() == JetonTur.J_SLUS_AC || bak_tur() == JetonTur.J_YAG_OK) {
+        hata_ver(bak_satir(), bak_sutun(), "'c_harici' fonksiyonun gövdesi olmaz; tanım C tarafındadır. Bildirimi ';' ile bitirin.");
+        don 0;
+    }
+    beklenen_tur(JetonTur.J_NOKTALI_VIRGUL, ";");
+    eger (hata_var()) { don 0; }
+    sayi n = dugum_yeni(DugumTur.D_FONK, jeton_satir(kw), jeton_sutun(kw));
+    dugum_yaz_ad(n, jeton_deger(nm));
+    dugum_yaz_a(n, ret);
+    dugum_yaz_liste(n, params);
+    dugum_yaz_bayrak(n, 4);
+    eger (metin_esit(sembol, "")) {
+        sembol = jeton_deger(nm);
+        eger (!c_tanimlayici_mi(sembol)) {
+            hata_ver(jeton_satir(nm), jeton_sutun(nm), "c_harici fonksiyon adı ASCII bir C tanımlayıcısı değil; C sembolünü açıkça yazın: c_harici \"c_adi\" fonk ...");
+            don 0;
+        }
+    }
+    g_harici_sembol.koy(n, sembol);
+    don n;
+}
+
+// Tek bir üst düzey bildirim ayrıştırır ve decls listesine ekler.
+fonk ayristir_bildirim(sayi decls) -> bos {
+    eger (bak_tur() == JetonTur.J_EOF || hata_var()) { don; }
+    eger (kw_mi("c_ekle")) {
+        liste_ekle(decls, ayristir_include());
+    } yoksa eger (kw_mi("c_harici")) {
+        liste_ekle(decls, ayristir_c_harici());
+    } yoksa eger (kw_mi("kullan")) {
+        liste_ekle(decls, ayristir_kullan());
+    } yoksa eger (kw_mi("sabit")) {
+        liste_ekle(decls, ayristir_sabit());
+    } yoksa eger (kw_mi("sinif")) {
+        liste_ekle(decls, ayristir_sinif());
+    } yoksa eger (kw_mi("secenek")) {
+        liste_ekle(decls, ayristir_secenek());
+    } yoksa eger (kw_mi("fonk") && bak_tur_at(1) != JetonTur.J_PARANTEZ_AC) {
+        liste_ekle(decls, ayristir_fonksiyon(""));
+    } yoksa eger (kw_mi("oto") || tur_baslangici_mi()) {
+        eger (kw_mi("oto")) {
+            liste_ekle(decls, ayristir_oto());
+        } yoksa {
+            liste_ekle(decls, ayristir_degisken());
+        }
+    } yoksa {
+        hata_fmt_basla();
+        hata_fmt_yaz("Üst düzeyde 'c_ekle', 'c_harici', 'kullan', 'sabit', değişken, 'sinif', 'secenek' veya 'fonk' bekleniyordu, '");
+        hata_fmt_yaz(bak_deger());
+        hata_fmt_yaz("' bulundu.");
+        hata_fmt_ver(bak_satir(), bak_sutun());
+    }
 }
 
 fonk ayristir_program() -> sayi {

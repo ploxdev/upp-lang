@@ -1,0 +1,11 @@
+// Negatif: geçici bir metin cmetin değişkenine konamaz (deyim bitince serbest kalır).
+// @icerir: [u++ HATA]
+// @icerir: Geçici bir metin cmetin değişkenine konamaz
+
+fonk ana() -> sayi {
+    metin a = "x";
+    guvensiz {
+        cmetin c = a + "y";
+    }
+    don 0;
+}

@@ -1,0 +1,10 @@
+// Negatif: c_harici fonksiyon yalnızca guvensiz blokta çağrılabilir.
+// @icerir: [u++
+// @icerir: c_harici fonksiyon 'strlen' yalnızca 'guvensiz' blokta
+
+c_harici fonk strlen(cmetin s) -> u64;
+
+fonk ana() -> sayi {
+    u64 n = strlen("abc");
+    don 0;
+}

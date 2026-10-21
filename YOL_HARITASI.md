@@ -64,6 +64,8 @@
 - [x] Uppix 0.3: **Limine ile diskten 64-bit açılış** (BIOS ve UEFI). Limine v11.4.1 depoya gömülü (`src/os/onyukleyici/limine`). `uppc --onyukleyici limine` higher-half ELF64 üretir; runtime Limine isteklerinden bellek haritası, çerçeve tamponu ve HHDM alır, kendi GDT'sini ve sayfa tablolarını kurar, yerel APIC'i kapatır. Çerçeve tamponu konsolu (Terminus 8x16, Türkçe). `--disk-hazirla` ve `upp.proje` `onyukleyici = limine`. `uppix.img`: FAT32 `/boot` + ext4 kök (`tests/cekirdek/11_uppix_limine.upp`).
 - [x] Dil: `c_kod` metin sözleşmesi. `metin` her zaman yönetilir; runtime başlığı tahmin etmez (ASan/UBSan temiz). Ham C dizgisi `upp_metin_ata_c` ile kopyalanarak girer; `c_kod` içinde metin değişkenini yeniden yönlendirmek ya da içeriğine yazmak derleme hatasıdır.
 - [x] Uppix: `snake` yılan oyunu (otopilot `-o`, kalıcı rekor). Konsol: `\e[satır;sütunH`, `\e[?25l/h`, çerçeve tamponunda `░▒▓` (`tests/cekirdek/12_uppix_snake.upp`).
+- [x] Dil: karakter sabitleri (`'a'`, kaçışlar, Türkçe), `her (sayi i in a..b)` aralık döngüsü, `upp.metin.ingkucuk` / `ingbuyuk` (ASCII). İnterpolasyon `{...}` içi ham kaynaktan ayrıştırılır (`"{'\n'}"`).
+- [x] Dil: `c_harici` C fonksiyonu bildirimleri (asm etiketiyle; başlık prototipiyle çakışmaz) ve `cmetin` türü; `@paketli`, `@hizali(N)`, `@bolum("ad")` nitelikleri; `uppc --guvenlik-denetimi[=is]` (ASan + UBSan / TSan; Windows'ta UBSan tuzağı).
 - [ ] Sonraki: ext4 günlüğü ve büyük dosyalar için extent ağacı yazımı, AHCI/virtio-blk, kesintili zamanlama (runtime kilitleri), kullanıcı modu + sistem çağrıları + ELF yükleyici, `uppc`'nin Uppix içinde çalışması (doğrudan makine kodu arka ucu).
 
 ## Faz 4 — Derleme asistanı ✅
@@ -73,5 +75,5 @@
 
 ## Faz 5 — Belgeler ve testler
 
-- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 125 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
+- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 136 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
 - [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.

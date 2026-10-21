@@ -222,9 +222,28 @@ static bool upp_dosya_sil(const char* yol) {
 static int _upp_argc = 0;
 static char** _upp_argv = NULL;
 
+#if defined(UPP_GUVENLIK_DENETIMI) && UPP_WIN
+/* uppc --guvenlik-denetimi, Windows: MinGW'de ASan/UBSan çalışma zamanı yoktur;
+ * UBSan tuzak kipinde tanımsız davranış 'ud2' (geçersiz komut) olur. Sessiz bir
+ * çökme yerine ne olduğunu söyle. */
+#include <signal.h>
+static void _upp_ubsan_tuzak(int s) {
+    (void)s;
+    fputs("[u++ HATA] güvenlik denetimi: tanımsız davranış yakalandı (UBSan tuzağı: "
+          "işaretli tamsayı taşması, geçersiz kaydırma, hizasız erişim vb.).\n"
+          "  Yerini görmek için Linux/WSL'de 'uppc --guvenlik-denetimi' ile derleyin "
+          "(ASan + UBSan, kaynak satırıyla).\n", stderr);
+    fflush(stderr);
+    _exit(134);
+}
+#endif
+
 static void upp_argv_ayarla(int argc, char** argv) {
     _upp_argc = argc;
     _upp_argv = argv;
+#if defined(UPP_GUVENLIK_DENETIMI) && UPP_WIN
+    signal(SIGILL, _upp_ubsan_tuzak);
+#endif
 #if UPP_WIN
     {
         HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);

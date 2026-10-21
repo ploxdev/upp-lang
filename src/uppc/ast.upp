@@ -41,7 +41,9 @@ secenek JetonTur {
     J_YILDIZ_ATAMA,
     J_BOLU_ATAMA,
     J_MOD_ATAMA,
-    J_SORU
+    J_SORU,
+    J_ARALIK,
+    J_AT
 }
 
 secenek DugumTur {
@@ -171,6 +173,8 @@ fonk anahtar_mi(metin s) -> mantik {
     eger (metin_esit(s, "kendi")) { don dogru; }
     eger (metin_esit(s, "oto")) { don dogru; }
     eger (metin_esit(s, "c_ekle")) { don dogru; }
+    eger (metin_esit(s, "c_harici")) { don dogru; }
+    eger (metin_esit(s, "cmetin")) { don dogru; }
     eger (metin_esit(s, "secim")) { don dogru; }
     eger (metin_esit(s, "durum")) { don dogru; }
     eger (metin_esit(s, "varsayilan")) { don dogru; }
@@ -214,6 +218,7 @@ fonk tur_adi_mi(metin s) -> mantik {
     eger (metin_esit(s, "harita")) { don dogru; }
     eger (metin_esit(s, "dilim")) { don dogru; }
     eger (metin_esit(s, "beklenen")) { don dogru; }
+    eger (metin_esit(s, "cmetin")) { don dogru; }
     don yanlis;
 }
 

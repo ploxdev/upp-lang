@@ -12,6 +12,7 @@ fonk uret_ctur(sayi t) -> metin {
     yoksa eger (metin_esit(n, "u64")) { s = "unsigned long long"; }
     yoksa eger (metin_esit(n, "ondalik")) { s = "double"; }
     yoksa eger (metin_esit(n, "metin")) { s = "char*"; }
+    yoksa eger (metin_esit(n, "cmetin")) { s = "const char*"; }
     yoksa eger (metin_esit(n, "mantik")) { s = "bool"; }
     yoksa eger (metin_esit(n, "bos")) { s = "void"; }
     yoksa eger (metin_esit(n, "&metin")) { s = "upp_ref_metin"; }
@@ -380,6 +381,11 @@ fonk uret_donusum(sayi e) -> metin {
     sayi src = tip_ifade(dugum_a(e));
     oto ct = uret_ctur(dst);
     oto x = uret_ifade(dugum_a(e));
+    eger (tip_metin_mi(dst) && !tip_metin_mi(src)) {
+        // (metin)c: ham C dizgisinden yönetilen kopya (önünü okumaz); NULL → NULL (boş metin).
+        // Sonuç sahipli bir geçicidir: metin döndüren çağrılar gibi geçiciye alınıp bırakılır.
+        don uret_cagri_metin_son(kat3("_upp_m_c(", x, ")"), dst);
+    }
     mantik ond = dugum_ptrd(src) == 0 && metin_esit(dugum_ad(src), "ondalik");
     eger (ond && dugum_ptrd(dst) == 0 && metin_esit(dugum_ad(dst), "u64")) {
         don kat3("((unsigned long long)upp_ondalik_u64(", x, "))");
@@ -1138,7 +1144,7 @@ fonk uret_metot(sayi expr) -> metin {
         oto name = dugum_ad(member);
         sayi fn = tablo_bul(1, c_sembol(name, alias));
         eger (fn != 0) {
-            don kat4(dugum_c_ad(fn), "(", uret_args_fn(fn, dugum_liste(expr)), ")");
+            don kat4(fonk_c_ad(fn), "(", uret_args_fn(fn, dugum_liste(expr)), ")");
         }
         sayi kcls = tablo_bul(0, intern(kat3(alias, ".", name)));
         eger (kcls != 0) {
@@ -1323,7 +1329,7 @@ fonk uret_ifade(sayi e) -> metin {
     eger (t == DugumTur.D_SABIT) { don uret_sabit(e); }
     eger (t == DugumTur.D_KIMLIK) {
         sayi fdb = fonk_deger_bildirim(e);
-        eger (fdb != 0) { don dugum_c_ad(fdb); }
+        eger (fdb != 0) { don fonk_c_ad(fdb); }
         don dugum_ad(e);
     }
     eger (t == DugumTur.D_ATAMA) {
@@ -1450,7 +1456,7 @@ fonk uret_ifade(sayi e) -> metin {
             }
             sayi fn = tablo_bul(1, name);
             eger (fn != 0) {
-                cc = kat4(dugum_c_ad(fn), "(", uret_args_fn(fn, dugum_liste(e)), ")");
+                cc = kat4(fonk_c_ad(fn), "(", uret_args_fn(fn, dugum_liste(e)), ")");
             } yoksa {
                 cc = kat4(uret_ifade(dugum_a(e)), "(", uret_args(dugum_liste(e)), ")");
             }
@@ -1943,7 +1949,7 @@ fonk uret_var(sayi d, mantik kuresel) -> bos {
             s = kat(s, uret_ifade(dugum_c(d)));
         }
         emit(kat(s, ";"));
-    } yoksa eger (dugum_ptrd(ty) > 0 || tip_metin_mi(ty) || tip_fonk_mi(ty)) {
+    } yoksa eger (dugum_ptrd(ty) > 0 || tip_metin_mi(ty) || tip_fonk_mi(ty) || tip_cmetin_mi(ty)) {
         s = kat(s, " = NULL");
         emit(kat(s, ";"));
     } yoksa eger (tip_gorunum_mi(ty) || liste_tur_mi(dugum_ad(ty)) || harita_tur_mi(dugum_ad(ty)) || tip_beklenen_mi(ty)) {
@@ -2169,6 +2175,38 @@ fonk uret_cumle(sayi stmt) -> bos {
         kir_cek();
         indent_ekle(-1);
         emit("}");
+        don;
+    }
+    eger (t == DugumTur.D_HER && (dugum_bayrak(stmt) & 2) != 0) {
+        // Aralık: sınırlar bir kez hesaplanır; değişken her turda gizli sayaçtan
+        // kopyalanır (gövdede değiştirilse de yineleme bozulmaz).
+        sayi idx = tmp_yeni();
+        oto ix = kat("_upp_i", sayi_metin(idx));
+        oto sx = kat("_upp_s", sayi_metin(idx));
+        oto ct = uret_ctur(dugum_a(stmt));
+        kapsam_ac();
+        kapsam_bagla(dugum_ad(stmt), dugum_a(stmt));
+        emit("{");
+        indent_ekle(1);
+        drop_cerceve_ac();
+        drop_dongu_it(drop_cer_cur_al());
+        emit(kat5("long long ", ix, " = (long long)(", uret_ifade(dugum_b(stmt)), ");"));
+        emit(kat5("long long ", sx, " = (long long)(", uret_ifade(dugum_d(stmt)), ");"));
+        emit(kat5("for (; ", ix, " < ", sx, kat3("; ", ix, "++) {")));
+        indent_ekle(1);
+        drop_cerceve_ac();
+        emit(kat(kat5(ct, " ", dugum_ad(stmt), " = (", ct), kat3(")", ix, ";")));
+        uret_govde(dugum_c(stmt));
+        emit_drop_cerceve();
+        drop_cerceve_pop();
+        indent_ekle(-1);
+        emit("}");
+        emit_drop_cerceve();
+        drop_dongu_cek();
+        drop_cerceve_pop();
+        indent_ekle(-1);
+        emit("}");
+        kapsam_kapat();
         don;
     }
     eger (t == DugumTur.D_HER) {
@@ -2558,6 +2596,49 @@ fonk uret_sahiplik_yardimcilari(sayi decls) -> bos {
     }
 }
 
+// Fonksiyon bildiriminin C'deki adı; c_harici için asm etiketli _upp_c_<ad>.
+fonk fonk_c_ad(sayi fn) -> metin {
+    eger (harici_mi(fn)) { don kat("_upp_c_", dugum_c_ad(fn)); }
+    don dugum_c_ad(fn);
+}
+
+// c_harici prototipi: extern T _upp_c_ad(...) __asm__("sembol");
+// GCC asm etiketi çağrıyı doğrudan C sembolüne bağlar; c_ekle ile gelen başlıktaki
+// prototip (ör. size_t strlen(const char*)) ile tür çakışması olmaz.
+fonk uret_harici_prototip(sayi fn) -> metin {
+    metin s = kat3("extern ", uret_ctur(dugum_a(fn)), " ");
+    s = kat3(s, fonk_c_ad(fn), "(");
+    sayi P = dugum_liste(fn);
+    eger (liste_uzunluk(P) == 0) { s = kat(s, "void"); }
+    dongu (sayi i = 0; i < liste_uzunluk(P); i += 1) {
+        eger (i > 0) { s = kat(s, ", "); }
+        sayi p = liste_al(P, i);
+        s = kat3(s, uret_ctur(dugum_a(p)), " ");
+        s = kat(s, dugum_ad(p));
+    }
+    don kat3(s, ") __asm__(\"", kat(harici_sembol(fn), "\");"));
+}
+
+// Nitelikler (@paketli, @hizali, @bolum) → GCC __attribute__((...)); yoksa "".
+// @bolum'lu globaller 'used' da alır: yalnızca bağlayıcının okuduğu veri atılmasın.
+fonk uret_nitelik(sayi d, mantik kullanilan) -> metin {
+    metin s = "";
+    eger (nitelik_paketli(d)) { s = "packed"; }
+    sayi h = nitelik_hizali(d);
+    eger (h > 0) {
+        eger (!metin_esit(s, "")) { s = kat(s, ", "); }
+        s = kat3(s, "aligned(", kat(sayi_metin(h), ")"));
+    }
+    oto b = nitelik_bolum(d);
+    eger (!metin_esit(b, "")) {
+        eger (!metin_esit(s, "")) { s = kat(s, ", "); }
+        s = kat3(s, "section(\"", kat(b, "\")"));
+        eger (kullanilan) { s = kat(s, ", used"); }
+    }
+    eger (metin_esit(s, "")) { don ""; }
+    don kat3("__attribute__((", s, "))");
+}
+
 fonk uret_program(sayi program) -> bos {
     tampon_sifirla();
     tmp_sifirla();
@@ -2668,6 +2749,11 @@ fonk uret_program(sayi program) -> bos {
         eger (dugum_tur(d) == DugumTur.D_SINIF) {
             hata_fmt_basla();
             hata_fmt_yaz("struct ");
+            oto snit = uret_nitelik(d, yanlis);
+            eger (!metin_esit(snit, "")) {
+                hata_fmt_yaz(snit);
+                hata_fmt_yaz(" ");
+            }
             hata_fmt_yaz(dugum_c_ad(d));
             hata_fmt_yaz(" {");
             emit(intern(hata_fmt_al()));
@@ -2735,8 +2821,12 @@ fonk uret_program(sayi program) -> bos {
     i = 0;
     iken (i < liste_uzunluk(decls)) {
         sayi d = liste_al(decls, i);
-        eger (dugum_tur(d) == DugumTur.D_FONK) {
-            emit(kat(uret_prototip(d), ";"));
+        eger (dugum_tur(d) == DugumTur.D_FONK && harici_mi(d)) {
+            emit(uret_harici_prototip(d));
+        } yoksa eger (dugum_tur(d) == DugumTur.D_FONK) {
+            oto fnit = uret_nitelik(d, dogru);
+            eger (!metin_esit(fnit, "")) { fnit = kat(fnit, " "); }
+            emit(kat3(fnit, uret_prototip(d), ";"));
         }
         i = i + 1;
     }
@@ -2746,7 +2836,8 @@ fonk uret_program(sayi program) -> bos {
     iken (i < liste_uzunluk(decls)) {
         sayi d = liste_al(decls, i);
         eger (dugum_tur(d) == DugumTur.D_DEGISKEN) {
-            emit("static");
+            oto gnit = uret_nitelik(d, dogru);
+            eger (metin_esit(gnit, "")) { emit("static"); } yoksa { emit(kat("static ", gnit)); }
             uret_var(d, dogru);
         }
         i = i + 1;
@@ -2804,7 +2895,7 @@ fonk uret_program(sayi program) -> bos {
     i = 0;
     iken (i < liste_uzunluk(decls)) {
         sayi d = liste_al(decls, i);
-        eger (dugum_tur(d) == DugumTur.D_FONK) {
+        eger (dugum_tur(d) == DugumTur.D_FONK && !harici_mi(d)) {
             uret_fonksiyon(d);
         }
         i = i + 1;

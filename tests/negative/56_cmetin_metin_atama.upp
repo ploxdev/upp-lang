@@ -1,0 +1,12 @@
+// Negatif: cmetin örtük olarak metne atanamaz; (metin)c ile kopyalanır.
+// @icerir: [u++ HATA]
+// @icerir: '(metin)c' ile kopyalayın
+
+c_harici fonk getenv(cmetin ad) -> cmetin;
+
+fonk ana() -> sayi {
+    guvensiz {
+        metin m = getenv("PATH");
+    }
+    don 0;
+}

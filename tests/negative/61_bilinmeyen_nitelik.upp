@@ -1,0 +1,10 @@
+// Negatif: bilinmeyen nitelik.
+// @icerir: [u++ HATA]
+// @icerir: Bilinmeyen nitelik '@satir_ici'
+
+@satir_ici
+fonk f() -> sayi => 1;
+
+fonk ana() -> sayi {
+    don f();
+}

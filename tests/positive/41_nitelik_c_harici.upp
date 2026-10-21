@@ -1,0 +1,73 @@
+// Pozitif: @paketli, @hizali(N), @bolum("ad") nitelikleri; c_harici ile C fonksiyonu
+// bildirimi (asm etiketi: başlıktaki prototiple çakışmaz) ve cmetin (ham C dizgisi).
+// @bayrak: --guvenlik-denetimi
+// @stdout
+// paketli: 5
+// hizali: 64
+// sayfa hizalı: dogru
+// özel: 42 7
+// strlen: 7
+// strlen metin: 6
+// abs: 5
+// getenv: yok
+// strchr: =b
+// doğrudan: :y
+// değer: 3
+// boş kopya: 0
+// karakter: 125 123
+// düz: '{' ile başlar
+
+c_harici fonk strlen(cmetin s) -> u64;
+c_harici "abs" fonk c_mutlak(s32 x) -> s32;
+c_harici fonk getenv(cmetin ad) -> cmetin;
+c_harici fonk strchr(cmetin s, s32 c) -> cmetin;
+
+@paketli
+sinif Baslik {
+    ubayt tur;
+    u32 uzunluk;
+}
+
+@hizali(64)
+sinif Satir {
+    sayi a;
+}
+
+@hizali(4096)
+sayi g_sayfa = 0;
+
+@bolum(".uppoz") @hizali(16)
+sayi g_ozel = 7;
+
+@bolum(".uppkod")
+fonk ozel_fonk() -> sayi => 42;
+
+fonk ana() -> sayi {
+    upp.satir_yaz("paketli: {boyut(Baslik)}");
+    upp.satir_yaz("hizali: {boyut(Satir)}");
+    guvensiz {
+        sayi adres = (sayi)&g_sayfa;
+        upp.satir_yaz("sayfa hizalı: {adres % 4096 == 0}");
+    }
+    upp.satir_yaz("özel: {ozel_fonk()} {g_ozel}");
+    guvensiz {
+        u64 n = strlen("merhaba");
+        upp.satir_yaz("strlen: {n}");
+        metin m = "dünya";
+        upp.satir_yaz("strlen metin: {strlen(m)}");
+        upp.satir_yaz("abs: {c_mutlak(-5)}");
+        cmetin ortam = getenv("UPP_OLMAYAN_DEGISKEN_XYZ");
+        eger (ortam == yok) { upp.satir_yaz("getenv: yok"); }
+        cmetin p = strchr("a=b", '=');
+        metin kopya = (metin)p;
+        upp.satir_yaz("strchr: " + kopya);
+        upp.satir_yaz("doğrudan: " + (metin)strchr("x:y", ':'));
+        fonk(cmetin) -> u64 f = strlen;
+        upp.satir_yaz("değer: {f(\"abc\")}");
+        metin bos_kopya = (metin)ortam;
+        upp.satir_yaz("boş kopya: {upp.uzunluk(bos_kopya)}");
+    }
+    upp.satir_yaz("karakter: {'}'} {'{'}");
+    upp.satir_yaz("düz: '{' ile başlar");
+    don 0;
+}

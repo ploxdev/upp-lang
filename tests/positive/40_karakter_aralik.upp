@@ -1,0 +1,76 @@
+// Pozitif: karakter sabitleri ('a', kaçışlar, Türkçe), aralık döngüsü (a..b),
+// upp.metin.ingkucuk / ingbuyuk (yalnızca ASCII; Türkçe harfler korunur).
+// @bayrak: --guvenlik-denetimi
+// @stdout
+// 97 65 351 304
+// 10 9 13 0 92 39 34 27
+// 65 351 255
+// harf: q
+// O'nun kalemi
+// 0 1 2 3 4
+// 3 4 5
+// boş aralık: 0
+// toplam: 4950
+// 2 4 6 8
+// 10 11 12
+// sınırlar bir kez: 2 tur
+// limine.conf
+// LIMINE.CONF
+// iŞik ilik İ
+// İSTANBUL ıIIİ
+// istanbul ıiiİ
+// yaz: QWERTY
+
+fonk sinir_al(sayi n) -> sayi {
+    upp.satir_yaz("sınırlar bir kez: {n} tur");
+    don n;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("{'a'} {'A'} {'ş'} {'İ'}");
+    upp.satir_yaz("{'\n'} {'\t'} {'\r'} {'\0'} {'\\'} {'\''} {'\"'} {'\e'}");
+    upp.satir_yaz("{'\x41'} {'ş'} {'\xff'}");
+    sayi tus = 113;
+    eger (tus == 'q') { upp.satir_yaz("harf: q"); }
+    ubayt u = 'z';
+    eger (u != 'z') { upp.satir_yaz("hata: ubayt"); }
+    upp.satir_yaz("O\'nun kalemi");
+
+    metin s = "";
+    her (sayi i in 0..5) { s += "{i} "; }
+    upp.satir_yaz(upp.metin.kirp(s));
+    s = "";
+    sayi bas = 3;
+    her (oto i in bas..bas + 3) { s += "{i} "; }
+    upp.satir_yaz(upp.metin.kirp(s));
+    sayi tur_sayisi = 0;
+    her (sayi i in 5..5) { tur_sayisi += 1; }
+    her (sayi i in 7..2) { tur_sayisi += 1; }
+    upp.satir_yaz("boş aralık: {tur_sayisi}");
+    sayi toplam = 0;
+    her (sayi i in 0..100) { toplam += i; }
+    upp.satir_yaz("toplam: {toplam}");
+    s = "";
+    her (sayi i in 1..10) {
+        eger (i % 2 == 1) { devam; }
+        eger (i > 8) { dur; }
+        s += "{i} ";
+    }
+    upp.satir_yaz(upp.metin.kirp(s));
+    s = "";
+    her (sayi i in 10..13) {
+        s += "{i} ";
+        i = 100;
+    }
+    upp.satir_yaz(upp.metin.kirp(s));
+    her (sayi i in 0..sinir_al(2)) { }
+
+    upp.satir_yaz(upp.metin.ingkucuk("LIMINE.CONF"));
+    upp.satir_yaz(upp.metin.ingbuyuk("limine.conf"));
+    upp.satir_yaz(upp.metin.ingkucuk("IŞIK ILIK İ"));
+    upp.satir_yaz(upp.metin.buyuk("istanbul") + " " + upp.metin.ingbuyuk("ıIiİ"));
+    upp.satir_yaz(upp.metin.ingkucuk("ISTANBUL") + " " + upp.metin.ingkucuk("ıIiİ"));
+    metin klavye = "qwerty";
+    upp.satir_yaz("yaz: " + upp.metin.ingbuyuk(klavye));
+    don 0;
+}

@@ -1,0 +1,9 @@
+// Negatif: c_harici metin döndüremez; cmetin döndürüp (metin)c ile kopyalanır.
+// @icerir: [u++ HATA]
+// @icerir: c_harici 'metin' döndüremez
+
+c_harici fonk getenv(cmetin ad) -> metin;
+
+fonk ana() -> sayi {
+    don 0;
+}

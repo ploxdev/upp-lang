@@ -1375,6 +1375,35 @@ static char* upp_metin_kucuk(const char* s) {
     return _upp_harf_cevir(s, 0);
 }
 
+/* İngilizce (ASCII) harf dönüşümü: yalnızca A-Z / a-z değişir; Türkçe harfler
+ * ve diğer UTF-8 dizileri (hepsi >= 0x80 baytlardır) olduğu gibi kalır.
+ * Dosya adları, protokoller, onaltılık metin gibi yerel ayardan bağımsız işler için. */
+static char* _upp_ascii_cevir(const char* s, int buyuk) {
+    size_t n, i;
+    char* p;
+    if (!s) s = UPP_LIT("");
+    n = upp_metin_nbayt(s);
+    p = _upp_m_yeni(n);
+    for (i = 0; i < n; i++) {
+        char c = s[i];
+        if (buyuk && c >= 'a' && c <= 'z') {
+            c = (char)(c - 32);
+        } else if (!buyuk && c >= 'A' && c <= 'Z') {
+            c = (char)(c + 32);
+        }
+        p[i] = c;
+    }
+    return p;
+}
+
+static char* upp_metin_ingbuyuk(const char* s) {
+    return _upp_ascii_cevir(s, 1);
+}
+
+static char* upp_metin_ingkucuk(const char* s) {
+    return _upp_ascii_cevir(s, 0);
+}
+
 static char* upp_metin_hex_coz(const char* hex) {
     size_t len = hex ? strlen(hex) : 0;
     size_t i, j = 0;

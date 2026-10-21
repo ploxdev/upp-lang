@@ -1,0 +1,10 @@
+// Negatif: @paketli yalnızca sınıflar içindir.
+// @icerir: [u++ HATA]
+// @icerir: '@paketli' fonksiyon için kullanılamaz
+
+@paketli
+fonk f() -> sayi => 1;
+
+fonk ana() -> sayi {
+    don f();
+}

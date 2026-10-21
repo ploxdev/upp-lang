@@ -19,6 +19,7 @@ sayi g_yl_skor = 0;
 sayi g_yl_rekor = 0;
 sayi g_yl_kacis = 0;           // tuş çözücü: 0 normal, 1 ESC, 2 ESC [
 metin g_yl_cizim = "";         // kare boyunca biriken çıktı; tek seferde yazılır
+mantik g_yl_oto = yanlis;      // -o: otopilot
 
 fonk yl_git(sayi satir_no, sayi sutun) -> metin => "\e[{satir_no};{sutun}H";
 
@@ -29,6 +30,12 @@ fonk yl_hucre_ciz(sayi h, metin renk, metin desen) -> bos {
 }
 
 fonk yl_bas() -> sayi => g_yl_govde[g_yl_govde.uzunluk() - 1];
+
+// Alt satırdaki tuş ipucu (kipe göre).
+fonk yl_ipucu() -> metin {
+    eger (g_yl_oto) { don "\e[90motopilot   p: duraklat   q: çık\e[0m"; }
+    don "\e[90moklar/WASD: yön   p: duraklat   q: çık\e[0m";
+}
 
 fonk yl_baslik() -> bos {
     g_yl_cizim += yl_git(1, 1) + "\e[1;92mUppix Yılan\e[0m   skor: \e[1;93m{g_yl_skor}\e[0m   rekor: {g_yl_rekor}   uzunluk: {g_yl_govde.uzunluk()}\e[K";
@@ -94,7 +101,7 @@ fonk yl_kur() -> bos {
     yl_hucre_ciz(yl_bas(), "\e[92m", "██");
     yl_yem_koy();
     yl_baslik();
-    yl_alt("\e[90moklar/WASD: yön   p: duraklat   q: çık\e[0m");
+    yl_alt(yl_ipucu());
     yl_bosalt();
 }
 
@@ -110,27 +117,27 @@ fonk yl_yon_iste(sayi yeni) -> bos {
 fonk yl_tus(sayi c) -> sayi {
     eger (g_yl_kacis == 1) {
         g_yl_kacis = 0;
-        eger (c == 91 || c == 79) { g_yl_kacis = 2; }
+        eger (c == '[' || c == 'O') { g_yl_kacis = 2; }
         don 0;
     }
     eger (g_yl_kacis == 2) {
         g_yl_kacis = 0;
-        eger (c == 65) { yl_yon_iste(0); }
-        yoksa eger (c == 67) { yl_yon_iste(1); }
-        yoksa eger (c == 66) { yl_yon_iste(2); }
-        yoksa eger (c == 68) { yl_yon_iste(3); }
+        eger (c == 'A') { yl_yon_iste(0); }
+        yoksa eger (c == 'C') { yl_yon_iste(1); }
+        yoksa eger (c == 'B') { yl_yon_iste(2); }
+        yoksa eger (c == 'D') { yl_yon_iste(3); }
         don 0;
     }
-    eger (c == 27) {
+    eger (c == '\e') {
         g_yl_kacis = 1;
         don 0;
     }
-    eger (c == 3 || c == 113 || c == 81) { don 1; }
-    eger (c == 112 || c == 80) { don 2; }
-    eger (c == 119 || c == 87) { yl_yon_iste(0); }
-    yoksa eger (c == 100 || c == 68) { yl_yon_iste(1); }
-    yoksa eger (c == 115 || c == 83) { yl_yon_iste(2); }
-    yoksa eger (c == 97 || c == 65) { yl_yon_iste(3); }
+    eger (c == 3 || c == 'q' || c == 'Q') { don 1; }
+    eger (c == 'p' || c == 'P') { don 2; }
+    eger (c == 'w' || c == 'W') { yl_yon_iste(0); }
+    yoksa eger (c == 'd' || c == 'D') { yl_yon_iste(1); }
+    yoksa eger (c == 's' || c == 'S') { yl_yon_iste(2); }
+    yoksa eger (c == 'a' || c == 'A') { yl_yon_iste(3); }
     don 0;
 }
 
@@ -259,17 +266,17 @@ fonk yl_aralik() -> sayi {
 fonk yl_kullanim() -> bos {
     satir("kullanım: snake [-o] [-n ADIM]");
     satir("  oklar/WASD yön, p duraklat, q ya da Ctrl-C çık; çarpınca r yeniden başlatır");
-    satir("  -o       otopilot: yılan kendi oynar (bir tuşla çıkılır)");
+    satir("  -o       otopilot: yılan kendi oynar (p duraklatır, q çıkar)");
     satir("  -n ADIM  ADIM adım sonra bitir; beklemez, tuş okumaz (test için)");
 }
 
 fonk k_snake(liste[metin] a, metin girdi) -> sayi {
-    mantik oto_oyun = yanlis;
+    g_yl_oto = yanlis;
     sayi adim_siniri = -1;
     sayi i = 1;
     iken (i < a.uzunluk()) {
         eger (a[i] == "-o") {
-            oto_oyun = dogru;
+            g_yl_oto = dogru;
         } yoksa eger (a[i] == "-n" && i + 1 < a.uzunluk() && sayi_mi(a[i + 1])) {
             adim_siniri = sayiya(a[i + 1]);
             i = i + 1;
@@ -300,18 +307,20 @@ fonk k_snake(liste[metin] a, metin girdi) -> sayi {
         eger (adim_siniri < 0) { c = upp.cekirdek.tus_oku(); }
         iken (c != 0 && !cik) {
             sayi sonuc = yl_tus(c);
-            eger (oto_oyun && g_yl_kacis == 0 && c != 27) { sonuc = 1; }
+            // Otopilotta yönü yılan seçer: ok/WASD yok sayılır (sıradaki yön bir
+            // adımlığına otopilotu ezip yılanı duvara sokmasın). p ve q her kipte çalışır.
+            eger (g_yl_oto) { g_yl_sira.temizle(); }
             eger (sonuc == 1) { cik = dogru; }
             eger (sonuc == 2) {
                 yl_alt("\e[1;93mDURAKLATILDI\e[0m — devam için bir tuş");
                 yl_bosalt();
                 upp.cekirdek.tus_bekle();
-                yl_alt("\e[90moklar/WASD: yön   p: duraklat   q: çık\e[0m");
+                yl_alt(yl_ipucu());
             }
             c = upp.cekirdek.tus_oku();
         }
         eger (cik) { dur; }
-        eger (oto_oyun) { yl_otopilot(); }
+        eger (g_yl_oto) { yl_otopilot(); }
         mantik yasiyor = yl_adim();
         adim = adim + 1;
         yl_bosalt();
@@ -324,10 +333,10 @@ fonk k_snake(liste[metin] a, metin girdi) -> sayi {
             mantik karar = yanlis;
             iken (!karar) {
                 sayi t = upp.cekirdek.tus_bekle();
-                eger (t == 114 || t == 82) {
+                eger (t == 'r' || t == 'R') {
                     karar = dogru;
                     yl_kur();
-                } yoksa eger (t == 113 || t == 81 || t == 3) {
+                } yoksa eger (t == 'q' || t == 'Q' || t == 3) {
                     karar = dogru;
                     cik = dogru;
                 }

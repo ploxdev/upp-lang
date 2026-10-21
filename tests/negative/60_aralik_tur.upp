@@ -1,0 +1,8 @@
+// Negatif: aralık sınırları tamsayı olmalı.
+// @icerir: [u++ HATA]
+// @icerir: Aralık sınırları tamsayı olmalı
+
+fonk ana() -> sayi {
+    her (sayi i in 0..2.5) { }
+    don 0;
+}

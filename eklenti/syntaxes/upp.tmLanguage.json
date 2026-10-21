@@ -8,6 +8,8 @@
     { "include": "#interpCall" },
     { "include": "#tripleString" },
     { "include": "#strings" },
+    { "include": "#charLiteral" },
+    { "include": "#attributes" },
     { "include": "#numbers" },
     { "include": "#keywords" },
     { "include": "#types" },
@@ -16,6 +18,14 @@
     { "include": "#operators" }
   ],
   "repository": {
+    "charLiteral": {
+      "name": "string.quoted.single.upp",
+      "match": "'(?:[^'\\\\\\n]|\\\\(?:[ntr0\\\\'\"e]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}))'"
+    },
+    "attributes": {
+      "name": "storage.modifier.attribute.upp",
+      "match": "@(paketli|hizali|bolum)\\b"
+    },
     "comments": {
       "patterns": [
         { "name": "comment.line.double-slash.upp", "match": "//.*$" },
@@ -94,11 +104,11 @@
     },
     "keywords": {
       "name": "keyword.control.upp",
-      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|kendi|oto|c_ekle|kullan|olarak|sabit|ertele|hata_ertele)\\b"
+      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|kendi|oto|c_ekle|c_harici|kullan|olarak|sabit|ertele|hata_ertele)\\b"
     },
     "types": {
       "name": "storage.type.upp",
-      "match": "\\b(sayi|ondalik|metin|mantik|bos|liste|harita|beklenen|s64|u64|usayi|s32|u32|s16|u16|bayt|ubayt|s8|u8)\\b"
+      "match": "\\b(sayi|ondalik|metin|cmetin|mantik|bos|liste|harita|beklenen|s64|u64|usayi|s32|u32|s16|u16|bayt|ubayt|s8|u8)\\b"
     },
     "constants": {
       "name": "constant.language.upp",
@@ -123,7 +133,7 @@
     },
     "operators": {
       "name": "keyword.operator.upp",
-      "match": "->|=>|==|!=|<=|>=|&&|\\|\\||\\+=|-=|\\*=|/=|%=|\\?|[+\\-*/%=<>!&|^]"
+      "match": "\\.\\.|->|=>|==|!=|<=|>=|&&|\\|\\||\\+=|-=|\\*=|/=|%=|\\?|[+\\-*/%=<>!&|^]"
     }
   }
 }

@@ -153,6 +153,58 @@ guvensiz {
 
 Derleyici, `c_kod` metninde kapsamdaki bir `metin` değişkenini yeniden yönlendiren (`s = ...`, `s += 1`, `s++`) ya da içeriğine yazan (`s[0] = ...`, `*s = ...`) işlemleri derleme hatasıyla reddeder. `c_kod`'un kendi tanımladığı aynı adlı C yereli (`char* s = ...`) ve üye erişimleri (`p->s`) etkilenmez. Denetim sözcükseldir; işaretçi üzerinden dolaylı atama (`char** p = &s; *p = "x";`) yakalanamaz. Bu durumda başlıksız metin ilk kullanımda `yönetilmeyen metin` paniğiyle durur, sessiz bellek bozulmasına yol açmaz.
 
+#### `c_harici` ve `cmetin`: C fonksiyonlarını tür güvenli çağırma
+Çoğu durumda `c_kod` gerekmez: bir C fonksiyonu imzasıyla bildirilir ve u++'tan normal bir fonksiyon gibi çağrılır.
+
+```upp
+c_harici fonk strlen(cmetin s) -> u64;
+c_harici fonk getenv(cmetin ad) -> cmetin;
+c_harici "abs" fonk c_mutlak(s32 x) -> s32;   // C sembolü u++ adından farklıysa
+
+fonk ana() -> sayi {
+    guvensiz {
+        u64 n = strlen("merhaba");             // metin → cmetin örtük (ödünç)
+        cmetin yol = getenv("PATH");
+        eger (yol != yok) {
+            metin kopya = (metin)yol;          // C dizgisinin yönetilen kopyası
+            upp.satir_yaz(kopya);
+        }
+    }
+    don 0;
+}
+```
+
+- **Bildirim:** `c_harici [\"c_sembolü\"] fonk ad(parametreler) -> tür;` yalnızca üst düzeyde yazılır ve gövdesi olmaz. Derleyici C tarafında `extern T _upp_c_ad(...) __asm__("c_sembolü");` üretir. GCC asm etiketi çağrıyı doğrudan sembole bağlar, bu yüzden `c_ekle` ile gelen başlıktaki prototiple (ör. `size_t strlen(const char*)`) tür çakışması olmaz. u++ adı ASCII değilse C sembolü açıkça yazılmalıdır.
+- **İzin verilen türler:**
+  - Parametre: tamsayılar, `ondalik`, `mantik`, `cmetin`, `metin` (verinin kendisi, ödünç) ve işaretçiler.
+  - Dönüş: bunlara ek olarak `bos`; `metin` döndürülemez.
+  - Liste, harita, sınıf, görünüm ve `beklenen` C'ye geçirilemez.
+- **Güvenlik:** `c_harici` fonksiyonu çağırmak ya da değer olarak almak (`fonk(cmetin) -> u64 f = strlen;`) yalnızca `guvensiz` blokta yapılabilir; C kodunun bellek güvenliğini derleyici denetleyemez.
+- **`cmetin`:** Başlıksız ham C dizgisidir (`const char*`). Yönetilmez ve serbest bırakılmaz. Kurallar:
+  - **Atama:** `metin` → `cmetin` örtüktür, verinin kendisini ödünç verir. `cmetin` → `metin` yalnızca `(metin)c` ile ve kopyalanarak yapılır; `NULL` boş metin olur.
+  - **Karşılaştırma:** Yalnızca `yok` ya da başka bir `cmetin` ile `==` / `!=` (işaretçi eşitliği). Aritmetik, indeksleme ve yazdırma yoktur; içerik için `(metin)c` kullanın.
+  - **Nerede kullanılır:** Değişkeni yalnızca `guvensiz` blokta bildirilebilir. Sınıf alanı ya da koleksiyon elemanı olamaz.
+  - **Geçici metin:** `cmetin c = a + b;` gibi geçici bir metin `cmetin` değişkenine konamaz, çünkü deyim bitince serbest kalır. Fonksiyon argümanı olarak geçmek güvenlidir.
+
+### Nitelikler: `@paketli`, `@hizali(N)`, `@bolum("ad")`
+Üst düzey bir bildirimden hemen önce yazılır ve C'ye GCC `__attribute__((...))` olarak geçer. Çekirdek ve donanım kodunda bellek düzenini denetlemek içindir.
+
+| Nitelik | Uygulandığı yer | Etkisi |
+| :--- | :--- | :--- |
+| `@paketli` | `sinif` | Alanlar arasında dolgu olmaz (`packed`): `sinif Baslik { ubayt tur; u32 uzunluk; }` 5 bayt olur |
+| `@hizali(N)` | `sinif`, üst düzey `fonk`, global değişken | `N` bayta hizalar (`aligned(N)`); `N` 1 ile 2^30 arasında 2'nin kuvveti olmalı (ör. sayfa tablosu için `@hizali(4096)`) |
+| `@bolum("ad")` | üst düzey `fonk`, global değişken | Bağlayıcı bölümünü seçer (`section("ad")`); global değişken ayrıca `used` alır, kodda kullanılmasa da atılmaz. Ad yalnızca harf, rakam, `.`, `_`, `$` içerir (en çok 64 karakter; Windows PE için kısa adlar önerilir) |
+
+```upp
+@paketli
+sinif GdtGirdisi { u16 sinir; u16 taban_alt; ubayt taban_orta; ubayt erisim; ubayt bayrak; ubayt taban_ust; }
+
+@bolum(".limine_istekler") @hizali(8)
+u64 g_istek = 0;
+```
+
+Bilinmeyen nitelik, aynı niteliğin iki kez yazılması ve uygun olmayan bildirime uygulanması derleme hatasıdır.
+
 ---
 
 ## 2. Tür Sistemi, Dönüşümler ve `boyut(T)`
@@ -165,6 +217,7 @@ Derleyici, `c_kod` metninde kapsamdaki bir `metin` değişkenini yeniden yönlen
 | `bayt` / `s8`, `ubayt` / `u8` | `int8_t` / `uint8_t` | İşaretli (`-128..127`) ve işaretsiz (`0..255`) 8 bit tamsayı |
 | `ondalik` | `double` | Çift duyarlıklı (64 bit IEEE 754) kayan noktalı sayı |
 | `metin` | `char*` (yönetilen başlık) | Atomik referans sayılı, COW destekli UTF-8 metin |
+| `cmetin` | `const char*` | Başlıksız ham C dizgisi; yalnızca `guvensiz` blokta ve `c_harici` imzalarında (bkz. [`c_harici` ve `cmetin`](#c_harici-ve-cmetin-c-fonksiyonlarını-tür-güvenli-çağırma)) |
 | `mantik` | `bool` | Mantıksal değer (`dogru` / `yanlis`) |
 | `bos` | `void` | Değer döndürmeyen fonksiyon dönüş türü |
 | `dizi[T, N]` | C dizisi (`T[N]`) | Yığında (stack) yaşayan, çalışma anı sınır denetimli sabit dizi (`sayi a[] = [1, 2];`) |
@@ -185,17 +238,36 @@ Renk r = (Renk)2;
 - **Sayısal / Mantıksal / Seçenek Dönüşümleri:** Sayısal türler, `mantik` ve `secenek` arasında güvenli kodda serbesttir. Tamsayı daraltmaları C gibi alt bitleri koruyarak keser (`(ubayt)300 == 44`).
 - **`ondalik` $\rightarrow$ Tamsayı Güvenliği:** Kayan noktalı sayı hedef tamsayı türünün aralığına sığmıyorsa veya `NaN` ise (C'deki tanımsız davranış yerine) çalışma zamanında açık panik verir.
 - **İşaretçi Dönüşümleri (`guvensiz`):** İşaretçi $\leftrightarrow$ işaretçi, işaretçi $\leftrightarrow$ tamsayı ve fonksiyon değeri $\leftrightarrow$ işaretçi/tamsayı dönüşümleri yalnızca `guvensiz` bloğu içinde yapılabilir: `u16* vga = (u16*)0xB8000;`.
-- `metin`, `sinif`, `liste`, `harita`, `beklenen` ve `dizi` türleri `(T)x` ile dönüştürülemez.
+- `metin`, `sinif`, `liste`, `harita`, `beklenen` ve `dizi` türleri `(T)x` ile dönüştürülemez. İstisna: `(metin)c` bir `cmetin`'i yönetilen metne kopyalar, `(cmetin)m` metnin verisini ödünç verir.
 - **`boyut(T)` ve `boyut(degisken)`:** Bir türün veya değişkenin bellekte kapladığı bayt sayısını `sayi` olarak döndürür (C `sizeof` karşılığı; sabit dizilerde tüm dizinin bayt boyutunu verir). Derleme anı sabitidir ve üst düzey `sabit` ifadelerinde kullanılabilir.
+
+### Karakter Sabitleri
+`'a'` biçimindeki karakter sabiti tek bir Unicode kod noktasıdır ve soneksiz bir tamsayı sabiti olarak davranır: türü `sayi`'dır, aralığa sığıyorsa `ubayt`, `u16` gibi türlere de atanır (`ubayt b = 'z';`). Türkçe harfler doğrudan yazılır (`'ş'` == 351, `'İ'` == 304).
+
+| Yazım | Değer |
+| :--- | :--- |
+| `'a'`, `'ş'`, `'{'` | Karakterin kod noktası |
+| `'\n'` `'\t'` `'\r'` `'\0'` | 10, 9, 13, 0 |
+| `'\\'` `'\''` `'\"'` `'\e'` | 92, 39, 34, 27 (ESC) |
+| `'\xHH'` | 2 onaltılık hane (`'\x41'` == 65) |
+| `'\uHHHH'` | 4 onaltılık hane (`'\u015f'` == `'ş'`); UTF-16 vekil aralığı (D800–DFFF) hatadır |
+
+Boş (`''`) ya da birden fazla karakter içeren (`'ab'`) sabitler ve bilinmeyen kaçışlar derleme hatasıdır. Metin için `"..."` kullanılır.
+
+```upp
+eger (tus == 'q' || tus == '\e') { cik(); }
+```
+
 
 ---
 
 ## 3. Metin İnterpolasyonu ve Standart Çıktı/Girdi
 
-- **İfade İnterpolasyonu (`"... {ifade} ..."`):** Metin sabiti içinde `{` karakterinden hemen sonra bir harf, `_` veya `(` gelirse derleyici içeriği tam bir `u++` ifadesi olarak ayrıştırır: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`. Hatalı ifadeler derleme anında yakalanır.
+- **İfade İnterpolasyonu (`"... {ifade} ..."`):** Metin sabiti içinde `{` karakterinden hemen sonra bir harf, `_`, `(` ya da eksiksiz bir karakter sabiti (`'a'`, `'\n'`) gelirse derleyici içeriği tam bir `u++` ifadesi olarak ayrıştırır: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`, `"{'}'}"`. Hatalı ifadeler derleme anında yakalanır.
+- **İfadenin kaynağı:** `{...}` içi kaynakta yazıldığı gibi ayrıştırılır; dış metnin kaçışları yalnızca düz metin parçalarına uygulanır. Tek istisna, iç içe metnin tırnağıdır: dış metni kapatmamak için `\"` yazılır (`"{f(\"abc\")}"`). Böylece `"{'\n'}"` ya da `"{'\''}"` beklendiği gibi çalışır. `'{' ile` gibi kapanmayan tırnaklar karakter sabiti sayılmaz, düz metin kalır.
 - **Kaçış Dizileri:**
   - Metin içinde düz süslü parantez yazmak için `{{` ve `}}` kullanılır (`{` sonrasında boşluk veya rakam varsa kaçışa gerek olmadan düz metin sayılır).
-  - Standart kaçışlar: `\n`, `\t`, `\r`, `\\`, `\"`, `\e` (ESC - `0x1B`), `\xHH` (onaltılık bayt) ve `\uHHHH` (4 basamaklı Unicode kod noktası, ör. `\u00e7` $\rightarrow$ `ç`). Tanımsız kaçış dizileri derleme hatası verir.
+  - Standart kaçışlar: `\n`, `\t`, `\r`, `\\`, `\"`, `\'`, `\e` (ESC - `0x1B`), `\xHH` (onaltılık bayt) ve `\uHHHH` (4 basamaklı Unicode kod noktası, ör. `\u00e7` $\rightarrow$ `ç`). Tanımsız kaçış dizileri derleme hatası verir.
 - **Yazdırılabilir Türler:** Tüm tamsayı türleri, `ondalik`, `mantik`, `metin`, `&metin` ve `secenek` doğrudan `upp.yaz` / `upp.satir_yaz` fonksiyonlarına verilebilir.
 
 | Fonksiyon | İmza | Açıklama |
@@ -258,6 +330,8 @@ Tüm `upp.metin.*` fonksiyonları `libc`'den bağımsızdır; hem barındırıla
 | `upp.metin.kes(s, bas, adet)` | `(metin, sayi, sayi) -> metin` | `s` metninden UTF-8 kod noktası (karakter) cinsinden `bas` indeksinden başlayarak `adet` karakter kesip döndürür |
 | `upp.metin.buyuk(s)` | `(metin) -> metin` | Türkçe kurallarına duyarlı (`i` $\rightarrow$ `İ`, `ı` $\rightarrow$ `I`) büyük harfe çevirir |
 | `upp.metin.kucuk(s)` | `(metin) -> metin` | Türkçe kurallarına duyarlı (`İ` $\rightarrow$ `i`, `I` $\rightarrow$ `ı`) küçük harfe çevirir |
+| `upp.metin.ingbuyuk(s)` | `(metin) -> metin` | İngilizce (ASCII) büyük harf: yalnızca `a-z` değişir; `i` $\rightarrow$ `I`, Türkçe harfler (`ı`, `ş`, `ö`…) olduğu gibi kalır. Dosya adı, protokol, onaltılık metin gibi yerel ayardan bağımsız işler için |
+| `upp.metin.ingkucuk(s)` | `(metin) -> metin` | İngilizce (ASCII) küçük harf: yalnızca `A-Z` değişir; `I` $\rightarrow$ `i` (Türkçedeki `ı` değil), `İ`, `Ş` gibi harfler korunur (`"LIMINE.CONF"` $\rightarrow$ `"limine.conf"`) |
 | `upp.metin.kirp(s)` | `(metin) -> metin` | Baştaki ve sondaki boşluk karakterlerini (` `, `\t`, `\r`, `\n`) temizler |
 | `upp.metin.baslar(s, on)` | `(metin, metin) -> mantik` | `s` metni `on` ile başlıyorsa `dogru` döndürür |
 | `upp.metin.biter(s, son)` | `(metin, metin) -> mantik` | `s` metni `son` ile bitiyorsa `dogru` döndürür |
@@ -401,6 +475,7 @@ Koleksiyonların değer semantiği (refcount + COW) ve desteklenen eleman türle
 | `L.bosalt()` | `bos` | Belleği erken serbest bırakır ve listeyi boşaltır |
 | `L[a..b]` | `&dilim[T]` | `liste[sayi]` ve `liste[ondalik]` üzerinde `[a, b)` yarı açık dilim görünümü verir |
 | `her (oto x in L)` | — | Elemanları sırasıyla gezer |
+| `her (sayi i in a..b)` | — | Aralık: `a` dahil, `b` hariç tamsayıları gezer (`0..n` → `0, 1, …, n-1`). Sınırlar bir kez hesaplanır, `a >= b` ise hiç dönmez. Değişken tamsayı türünde ya da `oto` (`sayi`) olur; gövdede değiştirilse de sonraki tur etkilenmez |
 
 ### `harita[K, V]` Metotları ve İşlemleri
 | Kullanım | Dönüş Türü | Açıklama |
@@ -550,6 +625,7 @@ Disk sektörleri, dosya sistemi yapıları (`ext4`, `FAT32`, `exFAT`) ve ikili p
 uppc <dosya.upp> [-o ad] [--sadece-derle | -c] [--hedef h] [--analiz] [--json-hata]
                  [--bicim | --bicim-kontrol] [--ast] [--runtime yol] [--disk imaj]...
                  [--onyukleyici multiboot|limine] [--disk-hazirla betik.sh]
+                 [--guvenlik-denetimi[=is]]
 
 # Proje yönetimi ve araçlar
 uppc yeni <ad> [--hedef cekirdek]     # Yeni proje iskeleti (upp.proje + kaynak/ana.upp) oluşturur
@@ -573,5 +649,6 @@ onyukleyici = limine         # Çekirdek ilk diskten Limine ile açılır; disk_
 ```
 
 - `--disk <imaj>` bayrağı (en çok 4 adet), `--hedef cekirdek` ile çalışırken QEMU'ya `-drive if=ide,format=raw` olarak disk imajı bağlar.
+- `--guvenlik-denetimi` programı sanitizer'larla derler. Linux'ta ASan + UBSan açılır: sınır dışı ve serbest bırakıldıktan sonra erişim, sızıntı ve tanımsız davranış ilk hatada kaynak satırıyla durur. `--guvenlik-denetimi=is` bunun yerine TSan ile `arkaplan` iş parçacıklarındaki yarışları arar. Windows/MinGW'de ASan çalışma zamanı olmadığı için yalnızca UBSan tuzak kipi açılır ve tanımsız davranış açıklayıcı bir mesajla durdurulur. Bayrak serbest ve çekirdek hedeflerinde kullanılamaz. Eski `UPP_SANITIZE` ortam değişkeni (ham gcc bayrakları) hâlâ geçerlidir.
 - `--onyukleyici limine` çekirdeği Limine protokolüyle üretir. QEMU `-kernel` olmadan, ilk diskten açılır; bu yüzden ilk `--disk` önyüklenebilir bir imaj olmalıdır.
 - `--disk-hazirla <betik>` çekirdek derlendikten sonra `sh <betik> <ilk diskin dizini> <çekirdek.elf>` komutunu çalıştırır (Windows'ta WSL içinde). Betik önyüklenebilir imajı üretir ya da içindeki çekirdeği günceller; örnek için [`src/os/disk_yap.sh`](../src/os/disk_yap.sh). `UPP_FS_ARACLAR` ortam değişkeni betiğe `FS_ARACLAR` olarak geçer.

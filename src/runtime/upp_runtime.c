@@ -1166,6 +1166,35 @@ static char* upp_metin_kucuk(const char* s) {
     return _upp_harf_cevir(s, 0);
 }
 
+/* İngilizce (ASCII) harf dönüşümü: yalnızca A-Z / a-z değişir; Türkçe harfler
+ * ve diğer UTF-8 dizileri (hepsi >= 0x80 baytlardır) olduğu gibi kalır.
+ * Dosya adları, protokoller, onaltılık metin gibi yerel ayardan bağımsız işler için. */
+static char* _upp_ascii_cevir(const char* s, int buyuk) {
+    size_t n, i;
+    char* p;
+    if (!s) s = UPP_LIT("");
+    n = upp_metin_nbayt(s);
+    p = _upp_m_yeni(n);
+    for (i = 0; i < n; i++) {
+        char c = s[i];
+        if (buyuk && c >= 'a' && c <= 'z') {
+            c = (char)(c - 32);
+        } else if (!buyuk && c >= 'A' && c <= 'Z') {
+            c = (char)(c + 32);
+        }
+        p[i] = c;
+    }
+    return p;
+}
+
+static char* upp_metin_ingbuyuk(const char* s) {
+    return _upp_ascii_cevir(s, 1);
+}
+
+static char* upp_metin_ingkucuk(const char* s) {
+    return _upp_ascii_cevir(s, 0);
+}
+
 static char* upp_metin_hex_coz(const char* hex) {
     size_t len = hex ? strlen(hex) : 0;
     size_t i, j = 0;
@@ -2244,9 +2273,28 @@ static bool upp_dosya_sil(const char* yol) {
 static int _upp_argc = 0;
 static char** _upp_argv = NULL;
 
+#if defined(UPP_GUVENLIK_DENETIMI) && UPP_WIN
+/* uppc --guvenlik-denetimi, Windows: MinGW'de ASan/UBSan çalışma zamanı yoktur;
+ * UBSan tuzak kipinde tanımsız davranış 'ud2' (geçersiz komut) olur. Sessiz bir
+ * çökme yerine ne olduğunu söyle. */
+#include <signal.h>
+static void _upp_ubsan_tuzak(int s) {
+    (void)s;
+    fputs("[u++ HATA] güvenlik denetimi: tanımsız davranış yakalandı (UBSan tuzağı: "
+          "işaretli tamsayı taşması, geçersiz kaydırma, hizasız erişim vb.).\n"
+          "  Yerini görmek için Linux/WSL'de 'uppc --guvenlik-denetimi' ile derleyin "
+          "(ASan + UBSan, kaynak satırıyla).\n", stderr);
+    fflush(stderr);
+    _exit(134);
+}
+#endif
+
 static void upp_argv_ayarla(int argc, char** argv) {
     _upp_argc = argc;
     _upp_argv = argv;
+#if defined(UPP_GUVENLIK_DENETIMI) && UPP_WIN
+    signal(SIGILL, _upp_ubsan_tuzak);
+#endif
 #if UPP_WIN
     {
         HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);

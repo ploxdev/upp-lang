@@ -154,6 +154,58 @@ guvensiz {
 
 The compiler rejects, with a compile error, any `c_kod` text that re-points a `metin` variable in scope (`s = ...`, `s += 1`, `s++`) or writes into its contents (`s[0] = ...`, `*s = ...`). A C local of the same name declared by the `c_kod` block itself (`char* s = ...`) and member accesses (`p->s`) are not affected. The check is lexical, so indirect assignment through a pointer (`char** p = &s; *p = "x";`) cannot be caught. In that case the header-less string stops with a `yönetilmeyen metin` panic on first use instead of silently corrupting memory.
 
+#### `c_harici` and `cmetin`: Type-Safe Calls into C
+Most of the time `c_kod` is unnecessary: declare a C function with its signature and call it from u++ like any other function.
+
+```upp
+c_harici fonk strlen(cmetin s) -> u64;
+c_harici fonk getenv(cmetin ad) -> cmetin;
+c_harici "abs" fonk c_mutlak(s32 x) -> s32;   // when the C symbol differs from the u++ name
+
+fonk ana() -> sayi {
+    guvensiz {
+        u64 n = strlen("merhaba");             // metin → cmetin is implicit (borrowed)
+        cmetin yol = getenv("PATH");
+        eger (yol != yok) {
+            metin kopya = (metin)yol;          // managed copy of the C string
+            upp.satir_yaz(kopya);
+        }
+    }
+    don 0;
+}
+```
+
+- **Declaration:** `c_harici [\"c_symbol\"] fonk name(params) -> type;` appears only at top level and has no body. The compiler emits `extern T _upp_c_name(...) __asm__("c_symbol");`. The GCC asm label binds the call straight to the symbol, so it never conflicts with a prototype from a header brought in by `c_ekle` (e.g. `size_t strlen(const char*)`). If the u++ name is not ASCII, the C symbol must be given explicitly.
+- **Allowed types:**
+  - Parameters: integers, `ondalik`, `mantik`, `cmetin`, `metin` (the data itself, borrowed), and pointers.
+  - Return: the same plus `bos`; `metin` cannot be returned.
+  - Lists, maps, classes, views, and `beklenen` cannot cross into C.
+- **Safety:** calling a `c_harici` function or taking it as a value (`fonk(cmetin) -> u64 f = strlen;`) is allowed only inside `guvensiz`; the compiler cannot verify the memory safety of C code.
+- **`cmetin`:** a header-less raw C string (`const char*`). It is not managed and never freed. Rules:
+  - **Assignment:** `metin` → `cmetin` is implicit and lends the data itself. `cmetin` → `metin` happens only via `(metin)c`, which copies; `NULL` becomes an empty string.
+  - **Comparison:** only `==` / `!=` against `yok` or another `cmetin` (pointer equality). No arithmetic, indexing, or printing; use `(metin)c` for the contents.
+  - **Where it can be used:** variables may be declared only inside `guvensiz`. It cannot be a class field or a collection element.
+  - **Temporaries:** a temporary string such as `cmetin c = a + b;` cannot be stored in a `cmetin` variable, because it is freed when the statement ends. Passing one as a function argument is safe.
+
+### Attributes: `@paketli`, `@hizali(N)`, `@bolum("name")`
+Written immediately before a top-level declaration and emitted as GCC `__attribute__((...))`. Intended for controlling memory layout in kernel and hardware code.
+
+| Attribute | Applies to | Effect |
+| :--- | :--- | :--- |
+| `@paketli` | `sinif` | No padding between fields (`packed`): `sinif Baslik { ubayt tur; u32 uzunluk; }` is 5 bytes |
+| `@hizali(N)` | `sinif`, top-level `fonk`, global variable | Aligns to `N` bytes (`aligned(N)`); `N` must be a power of two between 1 and 2^30 (e.g. `@hizali(4096)` for page tables) |
+| `@bolum("name")` | top-level `fonk`, global variable | Selects the linker section (`section("name")`); global variables also get `used`, so they are kept even if the code never references them. The name may contain only letters, digits, `.`, `_`, `$` (at most 64 characters; short names are recommended for Windows PE) |
+
+```upp
+@paketli
+sinif GdtGirdisi { u16 sinir; u16 taban_alt; ubayt taban_orta; ubayt erisim; ubayt bayrak; ubayt taban_ust; }
+
+@bolum(".limine_istekler") @hizali(8)
+u64 g_istek = 0;
+```
+
+An unknown attribute, a repeated attribute, or an attribute applied to an unsupported declaration is a compile error.
+
 ---
 
 ## 2. Type System, Casts, and `boyut(T)`
@@ -166,6 +218,7 @@ The compiler rejects, with a compile error, any `c_kod` text that re-points a `m
 | `bayt` / `s8`, `ubayt` / `u8` | `int8_t` / `uint8_t` | Signed (`-128..127`) and unsigned (`0..255`) 8-bit integers |
 | `ondalik` | `double` | Double-precision (64-bit IEEE 754) floating-point number |
 | `metin` | `char*` (with managed header) | Atomic reference-counted, Copy-on-Write UTF-8 string |
+| `cmetin` | `const char*` | Header-less raw C string; only inside `guvensiz` and in `c_harici` signatures (see [`c_harici` and `cmetin`](#c_harici-and-cmetin-type-safe-calls-into-c)) |
 | `mantik` | `bool` | Boolean value (`dogru` / `yanlis`) |
 | `bos` | `void` | Return type for functions that return no value |
 | `dizi[T, N]` | C array (`T[N]`) | Stack-allocated, runtime bounds-checked fixed array (`sayi a[] = [1, 2];`) |
@@ -186,17 +239,35 @@ Renk r = (Renk)2;
 - **Numeric / Boolean / Enum Casts:** Freely allowed in safe code between numeric types, `mantik`, and `secenek`. Integer narrowing truncates low bits just like C (`(ubayt)300 == 44`).
 - **`ondalik` $\rightarrow$ Integer Safety:** Converting a floating-point number to an integer panics explicitly at runtime if the value is `NaN` or outside the target integer type's range (avoiding C undefined behavior).
 - **Pointer Casts (`guvensiz`):** Pointer $\leftrightarrow$ pointer, pointer $\leftrightarrow$ integer, and function value $\leftrightarrow$ pointer/integer casts are permitted only inside `guvensiz` blocks: `u16* vga = (u16*)0xB8000;`.
-- `metin`, `sinif`, `liste`, `harita`, `beklenen`, and `dizi` types cannot be cast with `(T)x`.
+- `metin`, `sinif`, `liste`, `harita`, `beklenen`, and `dizi` types cannot be cast with `(T)x`. Exception: `(metin)c` copies a `cmetin` into a managed string, and `(cmetin)m` lends a string's data.
 - **`boyut(T)` and `boyut(variable)`:** Returns the size in bytes of a type or variable as a `sayi` (equivalent to C `sizeof`; returns the total byte size for fixed arrays). Evaluated as a compile-time constant and usable in top-level `sabit` declarations.
+
+### Character Literals
+A character literal such as `'a'` is a single Unicode code point and behaves like an unsuffixed integer literal: its type is `sayi`, and it can also be assigned to types like `ubayt` or `u16` when it fits (`ubayt b = 'z';`). Turkish letters are written directly (`'ş'` == 351, `'İ'` == 304).
+
+| Form | Value |
+| :--- | :--- |
+| `'a'`, `'ş'`, `'{'` | The character's code point |
+| `'\n'` `'\t'` `'\r'` `'\0'` | 10, 9, 13, 0 |
+| `'\\'` `'\''` `'\"'` `'\e'` | 92, 39, 34, 27 (ESC) |
+| `'\xHH'` | 2 hex digits (`'\x41'` == 65) |
+| `'\uHHHH'` | 4 hex digits (`'\u015f'` == `'ş'`); the UTF-16 surrogate range (D800–DFFF) is an error |
+
+Empty (`''`) or multi-character (`'ab'`) literals and unknown escapes are compile errors. Use `"..."` for strings.
+
+```upp
+eger (tus == 'q' || tus == '\e') { cik(); }
+```
 
 ---
 
 ## 3. String Interpolation and Standard I/O
 
-- **Expression Interpolation (`"... {expr} ..."`):** Inside any string literal, a `{` immediately followed by a letter, `_`, or `(` begins a full `u++` expression: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`. Invalid expressions produce a compile-time error.
+- **Expression Interpolation (`"... {expr} ..."`):** Inside any string literal, a `{` immediately followed by a letter, `_`, `(`, or a complete character literal (`'a'`, `'\n'`) begins a full `u++` expression: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`, `"{'}'}"`. Invalid expressions produce a compile-time error.
+- **Expression source:** the text inside `{...}` is parsed exactly as written; the outer string's escapes apply only to the literal parts. The single exception is a nested string's quote, written `\"` so it does not close the outer string (`"{f(\"abc\")}"`). This makes `"{'\n'}"` and `"{'\''}"` work as expected. An unclosed quote such as `'{' ile` is not a character literal and stays literal text.
 - **Escape Sequences:**
   - Use `{{` and `}}` to write literal braces (`{` followed by a space or digit is treated as a literal character automatically).
-  - Standard escapes: `\n`, `\t`, `\r`, `\\`, `\"`, `\e` (ESC - `0x1B`), `\xHH` (hex byte), and `\uHHHH` (4-digit Unicode code point, e.g. `\u00e7` $\rightarrow$ `ç`). Unrecognized escape sequences produce a compile error.
+  - Standard escapes: `\n`, `\t`, `\r`, `\\`, `\"`, `\'`, `\e` (ESC - `0x1B`), `\xHH` (hex byte), and `\uHHHH` (4-digit Unicode code point, e.g. `\u00e7` $\rightarrow$ `ç`). Unrecognized escape sequences produce a compile error.
 - **Printable Types:** All integer types, `ondalik`, `mantik`, `metin`, `&metin`, and `secenek` can be passed directly to `upp.yaz` and `upp.satir_yaz`.
 
 | Function | Signature | Description |
@@ -259,6 +330,8 @@ All `upp.metin.*` builtins are `libc`-independent and work across both hosted an
 | `upp.metin.kes(s, start, count)` | `(metin, sayi, sayi) -> metin` | Extracts a substring of `count` UTF-8 code points starting at code-point index `start` |
 | `upp.metin.buyuk(s)` | `(metin) -> metin` | Converts to uppercase using Turkish casing rules (`i` $\rightarrow$ `İ`, `ı` $\rightarrow$ `I`) |
 | `upp.metin.kucuk(s)` | `(metin) -> metin` | Converts to lowercase using Turkish casing rules (`İ` $\rightarrow$ `i`, `I` $\rightarrow$ `ı`) |
+| `upp.metin.ingbuyuk(s)` | `(metin) -> metin` | English (ASCII) uppercase: only `a-z` change; `i` $\rightarrow$ `I`, Turkish letters (`ı`, `ş`, `ö`…) are left untouched. For locale-independent text such as file names, protocols, and hex |
+| `upp.metin.ingkucuk(s)` | `(metin) -> metin` | English (ASCII) lowercase: only `A-Z` change; `I` $\rightarrow$ `i` (not Turkish `ı`), letters like `İ` and `Ş` are kept (`"LIMINE.CONF"` $\rightarrow$ `"limine.conf"`) |
 | `upp.metin.kirp(s)` | `(metin) -> metin` | Trims leading and trailing whitespace (` `, `\t`, `\r`, `\n`) |
 | `upp.metin.baslar(s, prefix)` | `(metin, metin) -> mantik` | Returns `dogru` if `s` starts with `prefix` |
 | `upp.metin.biter(s, suffix)` | `(metin, metin) -> mantik` | Returns `dogru` if `s` ends with `suffix` |
@@ -402,6 +475,7 @@ See [Collections](#collections) for value semantics (refcount + Copy-on-Write) a
 | `L.bosalt()` | `bos` | Releases backing memory early and leaves the list empty |
 | `L[a..b]` | `&dilim[T]` | Creates a half-open slice view `[a, b)` on `liste[sayi]` or `liste[ondalik]` |
 | `her (oto x in L)` | — | Iterates through all elements in order |
+| `her (sayi i in a..b)` | — | Range: iterates integers from `a` inclusive to `b` exclusive (`0..n` → `0, 1, …, n-1`). Bounds are evaluated once; nothing runs if `a >= b`. The variable is an integer type or `oto` (`sayi`); modifying it in the body does not affect the next iteration |
 
 ### `harita[K, V]` Methods and Operations
 | Usage | Return Type | Description |
@@ -551,6 +625,7 @@ Designed for parsing and constructing binary structures (disk sectors, `ext4` / 
 uppc <file.upp> [-o name] [--sadece-derle | -c] [--hedef target] [--analiz] [--json-hata]
                 [--bicim | --bicim-kontrol] [--ast] [--runtime path] [--disk image]...
                 [--onyukleyici multiboot|limine] [--disk-hazirla script.sh]
+                [--guvenlik-denetimi[=is]]
 
 # Project management and self-hosting
 uppc yeni <name> [--hedef cekirdek]   # Scaffold a new project (upp.proje + kaynak/ana.upp)
@@ -574,5 +649,6 @@ onyukleyici = limine         # Boot the kernel from the first disk with Limine; 
 ```
 
 - Passing `--disk <image>` (up to 4 times) on the `--hedef cekirdek` target attaches raw disk images to QEMU as `-drive if=ide,format=raw`.
+- `--guvenlik-denetimi` builds the program with sanitizers. On Linux this enables ASan + UBSan: out-of-bounds and use-after-free accesses, leaks, and undefined behavior stop at the first error with the source line. `--guvenlik-denetimi=is` instead uses TSan to look for races between `arkaplan` threads. Windows/MinGW has no ASan runtime, so only UBSan trap mode is enabled and undefined behavior stops with an explanatory message. The flag is not available for the serbest and cekirdek targets. The older `UPP_SANITIZE` environment variable (raw gcc flags) still works.
 - `--onyukleyici limine` builds the kernel for the Limine protocol. QEMU boots it from the first disk without `-kernel`, so the first `--disk` must be a bootable image.
 - `--disk-hazirla <script>` runs `sh <script> <directory of first disk> <kernel.elf>` after the kernel is built (inside WSL on Windows). The script creates the bootable image or updates the kernel inside it; see [`src/os/disk_yap.sh`](../src/os/disk_yap.sh). The `UPP_FS_ARACLAR` environment variable is passed to the script as `FS_ARACLAR`.

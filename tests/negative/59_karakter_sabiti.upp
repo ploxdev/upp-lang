@@ -1,0 +1,8 @@
+// Negatif: karakter sabiti tek bir karakter içermeli.
+// @icerir: [u++ HATA]
+// @icerir: Karakter sabiti tek bir karakter içermeli
+
+fonk ana() -> sayi {
+    sayi c = 'ab';
+    don 0;
+}

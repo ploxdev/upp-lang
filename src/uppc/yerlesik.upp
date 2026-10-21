@@ -53,6 +53,8 @@ fonk yerlesik_kur() -> bos {
     yk("metin.kes", "metin,sayi,sayi", "metin", "upp_metin_kes", 0);
     yk("metin.buyuk", "metin", "metin", "upp_metin_buyuk", 0);
     yk("metin.kucuk", "metin", "metin", "upp_metin_kucuk", 0);
+    yk("metin.ingbuyuk", "metin", "metin", "upp_metin_ingbuyuk", 0);
+    yk("metin.ingkucuk", "metin", "metin", "upp_metin_ingkucuk", 0);
     yk("metin.kirp", "metin", "metin", "upp_metin_kirp", 0);
     yk("metin.baslar", "metin,metin", "mantik", "upp_metin_baslar", 0);
     yk("metin.biter", "metin,metin", "mantik", "upp_metin_biter", 0);

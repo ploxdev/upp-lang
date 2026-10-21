@@ -31,6 +31,10 @@ fonk tip_yok_mi(sayi t) -> mantik {
 fonk tip_metin_mi(sayi t) -> mantik {
     don t != 0 && metin_esit(dugum_ad(t), "metin") && dugum_ptrd(t) == 0;
 }
+// cmetin: başlıksız ham C dizgisi (const char*); yönetilmez, bırakılmaz.
+fonk tip_cmetin_mi(sayi t) -> mantik {
+    don t != 0 && metin_esit(dugum_ad(t), "cmetin") && dugum_ptrd(t) == 0 && dugum_dims(t) == 0;
+}
 fonk tip_tamsayi_adi_mi(metin n) -> mantik {
     eger (metin_esit(n, "sayi") || metin_esit(n, "bayt") || metin_esit(n, "ubayt")) { don dogru; }
     eger (metin_esit(n, "s16") || metin_esit(n, "u16") || metin_esit(n, "s32") || metin_esit(n, "u32") || metin_esit(n, "u64")) { don dogru; }
@@ -125,8 +129,13 @@ fonk tip_atanir(sayi dst, sayi src) -> mantik {
     eger (dst == 0 || src == 0) { don yanlis; }
     eger (tip_void_mi(src) || tip_void_mi(dst)) { don yanlis; }
     eger (tip_yok_mi(src)) {
-        don tip_metin_mi(dst) || dugum_ptrd(dst) > 0 || tip_fonk_mi(dst);
+        don tip_metin_mi(dst) || dugum_ptrd(dst) > 0 || tip_fonk_mi(dst) || tip_cmetin_mi(dst);
     }
+    // metin → cmetin örtük (verinin kendisi; ödünç). cmetin → metin yalnızca (metin)c ile.
+    eger (tip_cmetin_mi(dst)) {
+        don tip_cmetin_mi(src) || tip_metin_mi(src);
+    }
+    eger (tip_cmetin_mi(src)) { don yanlis; }
     eger (tip_ref_metin_mi(dst)) {
         don tip_ref_metin_mi(src) || tip_metin_mi(src);
     }
@@ -170,7 +179,18 @@ fonk atama_uyumsuz_ver(sayi satir, sayi sutun, sayi dst, sayi expr) -> bos {
     hata_fmt_yaz("' beklenir, '");
     hata_fmt_yaz(sa);
     hata_fmt_yaz("' verildi.");
+    eger (tip_metin_mi(dst) && tip_cmetin_mi(tip_ifade(expr))) {
+        hata_fmt_yaz(" cmetin yönetilmeyen bir C dizgisidir; '(metin)c' ile kopyalayın.");
+    }
     hata_fmt_ver(satir, sutun);
+}
+
+// Geçici (sahipsiz) bir metin cmetin değişkenine konamaz: deyim bitince serbest kalır.
+fonk cmetin_gecici_denetle(sayi dst, sayi expr, sayi satir, sayi sutun) -> bos {
+    eger (!tip_cmetin_mi(dst) || expr == 0) { don; }
+    eger (ifade_rvalue_metin_mi(expr) || interp_dugum_mi(expr)) {
+        hata_ver(satir, sutun, "Geçici bir metin cmetin değişkenine konamaz (deyim bitince serbest kalır). Önce bir metin değişkenine atayın.");
+    }
 }
 
 fonk tip_ifade_atanir(sayi dst, sayi expr) -> mantik {
@@ -238,6 +258,9 @@ fonk ifade_rvalue_metin_mi(sayi e) -> mantik {
     eger (t == DugumTur.D_CAGRI || t == DugumTur.D_UCLU || t == DugumTur.D_HATA_YAY) {
         ty = tip_ifade(e);
         don tip_metin_mi(ty);
+    }
+    eger (t == DugumTur.D_DONUSUM) {
+        don tip_metin_mi(dugum_sayi(e)) && !tip_metin_mi(tip_ifade(dugum_a(e)));
     }
     don yanlis;
 }
@@ -534,6 +557,7 @@ fonk bg_ident_topla(sayi n, sayi declared, sayi used, sayi yer) -> bos {
     }
     eger (t == DugumTur.D_HER) {
         bg_ident_topla(dugum_b(n), declared, used, yer);
+        bg_ident_topla(dugum_d(n), declared, used, yer);
         inner = bg_ad_listesi_kopya(declared);
         liste_ekle(inner, kimlik_dugum(dugum_satir(n), dugum_sutun(n), dugum_ad(n)));
         bg_ident_topla(dugum_c(n), inner, used, yer);
@@ -1272,7 +1296,7 @@ fonk tur_bilinen_mi(sayi t) -> mantik {
     eger (t == 0) { don yanlis; }
     eger (dugum_ptrd(t) > 0) { don dogru; }
     oto n = dugum_ad(t);
-    eger (tip_tamsayi_adi_mi(n) || metin_esit(n, "ondalik") || metin_esit(n, "metin") || metin_esit(n, "mantik")) { don dogru; }
+    eger (tip_tamsayi_adi_mi(n) || metin_esit(n, "ondalik") || metin_esit(n, "metin") || metin_esit(n, "mantik") || metin_esit(n, "cmetin")) { don dogru; }
     eger (liste_tur_mi(n) || harita_tur_mi(n) || beklenen_tur_mi(n) || fonk_tur_mi(n) || tip_gorunum_mi(t)) { don dogru; }
     eger (tablo_bul(0, n) != 0 || tablo_bul(2, n) != 0) { don dogru; }
     don yanlis;
@@ -1328,6 +1352,10 @@ fonk tip_donusum(sayi e) -> sayi {
         don sonuc_t;
     }
     eger (metin_esit(dugum_ad(src), dugum_ad(dst)) && dugum_ptrd(src) == dugum_ptrd(dst)) { don sonuc_t; }
+    // (metin)c: C dizgisini yönetilen metne kopyalar (NULL → boş). (cmetin)m: verinin kendisi.
+    eger ((tip_metin_mi(dst) && (tip_cmetin_mi(src) || tip_yok_mi(src))) || (tip_cmetin_mi(dst) && tip_metin_mi(src))) {
+        don sonuc_t;
+    }
     mantik isd = tip_isaret_benzeri_mi(dst);
     mantik iss = tip_isaret_benzeri_mi(src) || tip_yok_mi(src);
     eger (isd || iss) {
@@ -1556,6 +1584,7 @@ fonk tip_cagri(sayi expr) -> sayi {
             oto name = dugum_ad(callee);
             sayi fn = tablo_bul(1, c_sembol(name, alias));
             eger (fn != 0) {
+                harici_cagri_denetle(fn, dugum_satir(expr), dugum_sutun(expr));
                 tip_args_ok(dugum_liste(fn), args, dugum_satir(expr), dugum_sutun(expr));
                 sayi rt = dugum_a(fn);
                 don tur_dugum(dugum_satir(fn), dugum_sutun(fn), dugum_ad(rt), dugum_ptrd(rt), 0);
@@ -1647,6 +1676,7 @@ fonk tip_cagri(sayi expr) -> sayi {
             hata_fmt_ver(dugum_satir(expr), dugum_sutun(expr));
             don tip_bos(dugum_satir(expr), dugum_sutun(expr));
         }
+        harici_cagri_denetle(fn, dugum_satir(expr), dugum_sutun(expr));
         sayi P = dugum_liste(fn);
         tip_args_ok(P, args, dugum_satir(expr), dugum_sutun(expr));
         sayi rt = dugum_a(fn);
@@ -1672,6 +1702,14 @@ fonk tip_ikil(sayi expr) -> sayi {
     }
     eger ((metin_esit(op, "&&") || metin_esit(op, "||")) && soru_icerir(dugum_b(expr))) {
         hata_ver(satir, sutun, "'&&' / '||' sağ tarafında '?' kullanılamaz; değeri önce bir değişkene alın.");
+        don tip_mantik(satir, sutun);
+    }
+    eger (tip_cmetin_mi(left) || tip_cmetin_mi(right)) {
+        mantik esit_op = metin_esit(op, "==") || metin_esit(op, "!=");
+        mantik uygun = (tip_cmetin_mi(left) || tip_yok_mi(left)) && (tip_cmetin_mi(right) || tip_yok_mi(right));
+        eger (!esit_op || !uygun) {
+            hata_ver(satir, sutun, "cmetin yalnızca 'yok' ya da başka bir cmetin ile '==' / '!=' karşılaştırılır (işaretçi eşitliği). İçerik için '(metin)c' ile kopyalayın.");
+        }
         don tip_mantik(satir, sutun);
     }
     eger ((tip_fonk_mi(left) || tip_fonk_mi(right)) && !metin_esit(op, "==") && !metin_esit(op, "!=")) {
@@ -1806,6 +1844,7 @@ fonk tip_ifade(sayi e) -> sayi {
                 hata_ver(dugum_satir(e), dugum_sutun(e), "'ana' fonksiyon değeri olarak kullanılamaz.");
                 don tip_bos(dugum_satir(e), dugum_sutun(e));
             }
+            harici_cagri_denetle(fdb, dugum_satir(e), dugum_sutun(e));
             don tur_dugum(dugum_satir(e), dugum_sutun(e), dugum_ad(fonk_imza_tur(fdb)), 0, 0);
         }
         sayi found = kapsam_bul(name);
@@ -1917,6 +1956,7 @@ fonk tip_ifade(sayi e) -> sayi {
         eger (!tip_ifade_atanir(tt, dugum_b(e))) {
             atama_uyumsuz_ver(dugum_satir(e), dugum_sutun(e), tt, dugum_b(e));
         }
+        cmetin_gecici_denetle(tt, dugum_b(e), dugum_satir(e), dugum_sutun(e));
         don tt;
     }
     eger (t == DugumTur.D_UCLU) {
@@ -2283,6 +2323,7 @@ fonk tip_yuru(sayi stmt) -> bos {
             eger (!tip_ifade_atanir(bound, dugum_c(stmt))) {
                 atama_uyumsuz_ver(dugum_satir(stmt), dugum_sutun(stmt), bound, dugum_c(stmt));
             }
+            cmetin_gecici_denetle(bound, dugum_c(stmt), dugum_satir(stmt), dugum_sutun(stmt));
         }
         kapsam_bagla_yeni(dugum_ad(stmt), bound, dugum_satir(stmt), dugum_sutun(stmt));
         don;
@@ -2347,6 +2388,27 @@ fonk tip_yuru(sayi stmt) -> bos {
             }
             i = i + 1;
         }
+        don;
+    }
+    eger (t == DugumTur.D_HER && (dugum_bayrak(stmt) & 2) != 0) {
+        // Aralık: her (T i in a..b); a ve b tamsayı, T tamsayı (oto → sayi).
+        sayi bas_t = tip_ifade(dugum_b(stmt));
+        sayi son_t = tip_ifade(dugum_d(stmt));
+        eger (hata_var()) { don; }
+        eger (!tip_tam_sayi_mi(bas_t) || !tip_tam_sayi_mi(son_t)) {
+            hata_ver(dugum_satir(stmt), dugum_sutun(stmt), "Aralık sınırları tamsayı olmalı: her (sayi i in a..b).");
+            don;
+        }
+        eger ((dugum_bayrak(stmt) & 1) != 0) {
+            dugum_yaz_a(stmt, tip_sayi(dugum_satir(stmt), dugum_sutun(stmt)));
+        } yoksa eger (!tip_tam_sayi_mi(dugum_a(stmt))) {
+            hata_ver(dugum_satir(stmt), dugum_sutun(stmt), "Aralık döngüsünün değişkeni tamsayı türünde olmalı (ya da 'oto').");
+            don;
+        }
+        kapsam_ac();
+        kapsam_bagla_yeni(dugum_ad(stmt), dugum_a(stmt), dugum_satir(stmt), dugum_sutun(stmt));
+        tip_yuru(dugum_c(stmt));
+        kapsam_kapat();
         don;
     }
     eger (t == DugumTur.D_HER) {
@@ -2501,11 +2563,79 @@ fonk tip_fn_govde_sinif(sayi fn, metin sinif_ad) -> bos {
     cur_class_yaz("");
 }
 
+// c_harici imzası: C ABI'sine doğrudan geçen türler.
+fonk harici_tur_uygun(sayi t, mantik donus) -> mantik {
+    eger (t == 0) { don yanlis; }
+    eger (dugum_dims(t) != 0) { don yanlis; }
+    eger (dugum_ptrd(t) > 0) { don dogru; }
+    oto n = dugum_ad(t);
+    eger (tip_tamsayi_adi_mi(n) || metin_esit(n, "ondalik") || metin_esit(n, "mantik") || metin_esit(n, "cmetin")) { don dogru; }
+    eger (donus) { don tip_void_mi(t); }
+    don metin_esit(n, "metin");
+}
+
+fonk harici_imza_denetle(sayi fn) -> bos {
+    sayi P = dugum_liste(fn);
+    dongu (sayi i = 0; i < liste_uzunluk(P); i += 1) {
+        sayi p = liste_al(P, i);
+        eger (dugum_c(p) != 0) {
+            hata_ver(dugum_satir(p), dugum_sutun(p), "c_harici parametresi varsayılan değer alamaz.");
+            don;
+        }
+        eger (!harici_tur_uygun(dugum_a(p), yanlis)) {
+            hata_fmt_basla();
+            hata_fmt_yaz("c_harici parametresi '");
+            hata_fmt_yaz(dugum_ad(p));
+            hata_fmt_yaz("' C'ye geçirilemeyen bir türde ('");
+            hata_fmt_yaz(tur_aciklama(dugum_a(p)));
+            hata_fmt_yaz("'). Tamsayı, ondalik, mantik, cmetin, metin ya da işaretçi kullanın.");
+            hata_fmt_ver(dugum_satir(p), dugum_sutun(p));
+            don;
+        }
+    }
+    sayi rt = dugum_a(fn);
+    eger (tip_metin_mi(rt)) {
+        hata_ver(dugum_satir(fn), dugum_sutun(fn), "c_harici 'metin' döndüremez (C dizgisi yönetilmez). 'cmetin' döndürüp '(metin)c' ile kopyalayın.");
+        don;
+    }
+    eger (!harici_tur_uygun(rt, dogru)) {
+        hata_fmt_basla();
+        hata_fmt_yaz("c_harici dönüş türü C'ye uygun değil ('");
+        hata_fmt_yaz(tur_aciklama(rt));
+        hata_fmt_yaz("'). bos, tamsayı, ondalik, mantik, cmetin ya da işaretçi kullanın.");
+        hata_fmt_ver(dugum_satir(fn), dugum_sutun(fn));
+    }
+}
+
+// c_harici çağrısı bellek güvenliğini derleyicinin denetleyemediği koda gider.
+// Yalnızca tür denetimi aşamasında: codegen de tip_ifade çağırır ama 'guvensiz'
+// derinliğini tutmaz.
+mantik g_tip_asamasi = yanlis;
+
+fonk harici_cagri_denetle(sayi fn, sayi satir, sayi sutun) -> bos {
+    eger (!g_tip_asamasi || !harici_mi(fn) || g_guvensiz_derin > 0) { don; }
+    hata_fmt_basla();
+    hata_fmt_yaz("c_harici fonksiyon '");
+    hata_fmt_yaz(dugum_ad(fn));
+    hata_fmt_yaz("' yalnızca 'guvensiz' blokta çağrılabilir ya da değer olarak alınabilir.");
+    hata_fmt_guvenlik(satir, sutun);
+}
+
 fonk tip_fn_govde(sayi fn) -> bos {
+    eger (harici_mi(fn)) {
+        harici_imza_denetle(fn);
+        don;
+    }
     tip_fn_govde_sinif(fn, "");
 }
 
 fonk tip_calistir(sayi program) -> bos {
+    g_tip_asamasi = dogru;
+    tip_calistir_govde(program);
+    g_tip_asamasi = yanlis;
+}
+
+fonk tip_calistir_govde(sayi program) -> bos {
     tablo_sifirla();
     tip_yerlesik_sinif("Yonelme", "pitch", "ondalik", "yaw", "ondalik", "", "");
     tip_yerlesik_sinif("EkranNokta", "x", "ondalik", "y", "ondalik", "gorunur", "sayi");

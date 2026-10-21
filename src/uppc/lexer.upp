@@ -208,6 +208,78 @@ fonk lex_metin() -> sayi {
     don 0;
 }
 
+// Karakter sabiti: 'a', 'ş', '\n', '\'', '\x41', 'ş'. Değeri tek bir Unicode
+// kod noktasıdır ve soneksiz tamsayı sabiti olarak üretilir (sayi; aralığa
+// sığıyorsa ubayt/u16 gibi türlere de atanır). Metin kaçışlarının hepsi geçerlidir,
+// ek olarak \' ve \0. Boş ya da birden fazla karakter derleme hatasıdır.
+fonk lex_karakter() -> sayi {
+    sayi satir = lex_satir();
+    sayi sutun = lex_sutun();
+    lex_ilerle();
+    eger (lex_bitis() || lex_cp() == 10) {
+        hata_ver(satir, sutun, "Kapatılmamış karakter sabiti.");
+        don 0;
+    }
+    eger (lex_cp() == 39) {
+        hata_ver(satir, sutun, "Boş karakter sabiti (''). Tek bir karakter yazın; boş metin için \"\" kullanın.");
+        don 0;
+    }
+    sayi v = lex_cp();
+    lex_ilerle();
+    eger (v == 92) {
+        eger (lex_bitis()) {
+            hata_ver(satir, sutun, "Karakter sabiti kaçış karakterinden sonra bitti.");
+            don 0;
+        }
+        sayi k = lex_cp();
+        lex_ilerle();
+        eger (k == 110) { v = 10; }
+        yoksa eger (k == 116) { v = 9; }
+        yoksa eger (k == 114) { v = 13; }
+        yoksa eger (k == 48) { v = 0; }
+        yoksa eger (k == 92) { v = 92; }
+        yoksa eger (k == 39) { v = 39; }
+        yoksa eger (k == 34) { v = 34; }
+        yoksa eger (k == 101) { v = 27; }
+        yoksa eger (k == 120 || k == 117) {
+            // \xHH (2 hane) ya da \uHHHH (4 hane)
+            sayi hane = 2;
+            eger (k == 117) { hane = 4; }
+            v = 0;
+            dongu (sayi i = 0; i < hane; i += 1) {
+                sayi h = hex_hane_deger(lex_cp());
+                eger (lex_bitis() || h < 0) {
+                    eger (k == 120) {
+                        hata_ver(satir, sutun, "'\\x' ardından 2 onaltılık hane gelmeli (ör. '\\x41').");
+                    } yoksa {
+                        hata_ver(satir, sutun, "'\\u' ardından 4 onaltılık hane gelmeli (ör. '\\u015f').");
+                    }
+                    don 0;
+                }
+                v = v * 16 + h;
+                lex_ilerle();
+            }
+            eger (v >= 55296 && v <= 57343) {
+                hata_ver(satir, sutun, "Karakter sabiti UTF-16 vekil aralığında (D800-DFFF) olamaz.");
+                don 0;
+            }
+        } yoksa {
+            hata_fmt_basla();
+            hata_fmt_yaz("Bilinmeyen kaçış dizisi '\\");
+            hata_fmt_yaz(upp.metin.karakter(k));
+            hata_fmt_yaz("'. Geçerli: \\n \\t \\r \\0 \\\\ \\' \\\" \\e \\xHH \\uHHHH");
+            hata_fmt_ver(satir, sutun);
+            don 0;
+        }
+    }
+    eger (lex_bitis() || lex_cp() != 39) {
+        hata_ver(satir, sutun, "Karakter sabiti tek bir karakter içermeli ve ' ile kapanmalı; metin için \"...\" kullanın.");
+        don 0;
+    }
+    lex_ilerle();
+    don jeton_yeni(JetonTur.J_SAYI, sayi_metin(v), satir, sutun);
+}
+
 fonk lex_harf_mi(sayi ch) -> mantik {
     don (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95;
 }
@@ -310,6 +382,10 @@ fonk lex_tara_govde() -> bos {
             lex_metin();
             devam;
         }
+        eger (ch == 39) {
+            lex_karakter();
+            devam;
+        }
         eger (ch >= 48 && ch <= 57) {
             lex_sayi();
             devam;
@@ -394,6 +470,13 @@ fonk lex_tara_govde() -> bos {
             jeton_yeni(JetonTur.J_MOD_ATAMA, "%=", satir, sutun);
             devam;
         }
+        eger (ch == 46 && lex_cp_ileri(1) == 46) {
+            lex_ilerle();
+            lex_ilerle();
+            jeton_yeni(JetonTur.J_ARALIK, "..", satir, sutun);
+            devam;
+        }
+        eger (ch == 64) { lex_ilerle(); jeton_yeni(JetonTur.J_AT, "@", satir, sutun); devam; }
         eger (ch == 63) { lex_ilerle(); jeton_yeni(JetonTur.J_SORU, "?", satir, sutun); devam; }
         eger (ch == 43) { lex_ilerle(); jeton_yeni(JetonTur.J_ARTI, "+", satir, sutun); devam; }
         eger (ch == 45) { lex_ilerle(); jeton_yeni(JetonTur.J_EKSI, "-", satir, sutun); devam; }

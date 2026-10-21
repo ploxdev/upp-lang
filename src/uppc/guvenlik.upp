@@ -64,6 +64,8 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
         sayi ty = dugum_a(node);
         eger (ty != 0 && dugum_ptrd(ty) > 0 && !unsafe) {
             hata_guvenlik(dugum_satir(node), dugum_sutun(node), "İşaretçi türü yalnızca 'guvensiz' blokta bildirilebilir.");
+        } yoksa eger (tip_cmetin_mi(ty) && !unsafe) {
+            hata_guvenlik(dugum_satir(node), dugum_sutun(node), "'cmetin' (ham C dizgisi) değişkeni yalnızca 'guvensiz' blokta bildirilebilir.");
         }
     }
     eger (t == DugumTur.D_SINIF) {
@@ -72,8 +74,8 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
         iken (i < liste_uzunluk(F)) {
             sayi f = liste_al(F, i);
             sayi ty = dugum_a(f);
-            eger (ty != 0 && dugum_ptrd(ty) > 0) {
-                hata_guvenlik(dugum_satir(f), dugum_sutun(f), "Ham işaretçi alanı sınıf içinde kullanılamaz.");
+            eger (ty != 0 && (dugum_ptrd(ty) > 0 || tip_cmetin_mi(ty))) {
+                hata_guvenlik(dugum_satir(f), dugum_sutun(f), "Ham işaretçi ya da 'cmetin' alanı sınıf içinde kullanılamaz.");
             }
             i = i + 1;
         }
@@ -102,7 +104,7 @@ fonk guven_yuru(sayi node, mantik unsafe) -> bos {
     eger (t != DugumTur.D_UYE) {
         guven_yuru(dugum_b(node), unsafe);
         guven_yuru(dugum_c(node), unsafe);
-        eger (t == DugumTur.D_DONGU) {
+        eger (t == DugumTur.D_DONGU || t == DugumTur.D_HER) {
             guven_yuru(dugum_d(node), unsafe);
         }
     }

@@ -23,6 +23,8 @@ export const YERLESIK: Yerlesik[] = [
   { ad: "metin.kes", param: "metin,sayi,sayi", donus: "metin", bayrak: 0 },
   { ad: "metin.buyuk", param: "metin", donus: "metin", bayrak: 0 },
   { ad: "metin.kucuk", param: "metin", donus: "metin", bayrak: 0 },
+  { ad: "metin.ingbuyuk", param: "metin", donus: "metin", bayrak: 0 },
+  { ad: "metin.ingkucuk", param: "metin", donus: "metin", bayrak: 0 },
   { ad: "metin.kirp", param: "metin", donus: "metin", bayrak: 0 },
   { ad: "metin.baslar", param: "metin,metin", donus: "mantik", bayrak: 0 },
   { ad: "metin.biter", param: "metin,metin", donus: "mantik", bayrak: 0 },

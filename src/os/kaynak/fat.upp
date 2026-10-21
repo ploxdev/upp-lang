@@ -115,27 +115,14 @@ fonk fat_lfn_parca(sayi t, sayi o) -> metin {
     don r;
 }
 
-// 8.3 adları ASCII'dir: Türkçe kurallı küçültme "LIMINE"yi "lımıne" yapardı.
-fonk fat_ascii_kucuk(metin s) -> metin {
-    metin r = "";
-    sayi n = upp.uzunluk(s);
-    sayi i = 0;
-    iken (i < n) {
-        sayi k = upp.metin.kod(s, i);
-        eger (k >= 65 && k <= 90) { k = k + 32; }
-        r += upp.metin.karakter(k);
-        i = i + 1;
-    }
-    don r;
-}
-
 fonk fat_kisa_ad(sayi t, sayi o) -> metin {
     metin taban = upp.metin.kirp(upp.tampon.metin(t, o, 8));
     metin uzanti = upp.metin.kirp(upp.tampon.metin(t, o + 8, 3));
     eger (upp.tampon.oku8(t, o) == 5) { taban = "?" + kes_son(taban, 1); }
+    // 8.3 adları ASCII'dir: Türkçe kurallı küçültme "LIMINE"yi "lımıne" yapardı.
     sayi nt = upp.tampon.oku8(t, o + 12);
-    eger ((nt / 8) % 2 == 1) { taban = fat_ascii_kucuk(taban); }
-    eger ((nt / 16) % 2 == 1) { uzanti = fat_ascii_kucuk(uzanti); }
+    eger ((nt / 8) % 2 == 1) { taban = upp.metin.ingkucuk(taban); }
+    eger ((nt / 16) % 2 == 1) { uzanti = upp.metin.ingkucuk(uzanti); }
     eger (uzanti == "") { don taban; }
     don taban + "." + uzanti;
 }

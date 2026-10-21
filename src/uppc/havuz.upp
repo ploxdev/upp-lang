@@ -1513,11 +1513,32 @@ fonk os_cmd_parca(metin s) -> metin {
     don s;
 }
 
+// uppc --guvenlik-denetimi[=is]: "" kapalı, "bellek" ASan + UBSan, "is" TSan.
+metin g_guvenlik_denetimi = "";
+
+// Denetim kipine göre gcc bayrakları. MinGW'de ASan/UBSan/TSan çalışma zamanı
+// yoktur: Windows hedefinde UBSan tuzak kipine düşülür (runtime SIGILL'i açıklar).
+fonk os_guvenlik_bayraklari(mantik linux_hedef) -> metin {
+    eger (metin_esit(g_guvenlik_denetimi, "")) { don ""; }
+    metin b = "-DUPP_GUVENLIK_DENETIMI=1 -g -fno-omit-frame-pointer ";
+    eger (!linux_hedef) {
+        don kat(b, "-fsanitize=undefined -fsanitize-trap=undefined ");
+    }
+    eger (metin_esit(g_guvenlik_denetimi, "is")) {
+        don kat(b, "-fsanitize=thread -O1 ");
+    }
+    don kat(b, "-fsanitize=address,undefined -fno-sanitize-recover=undefined -O1 ");
+}
+
 fonk os_gcc_cagir(metin gcc, metin c_yol, metin exe_yol) -> sayi {
     g_gcc_log = metin_kopya_yeni("");
     eger (gcc == yok || metin_esit(gcc, "") || c_yol == yok || exe_yol == yok) { don 1; }
     metin cmd = metin_kopya_yeni(os_cmd_parca(gcc));
     cmd += " -std=gnu11 ";
+    cmd += os_guvenlik_bayraklari(os_hedef_al() != 0);
+    eger (!metin_esit(g_guvenlik_denetimi, "") && os_hedef_al() == 0) {
+        upp.satir_yaz("[u++] güvenlik denetimi: Windows/MinGW'de ASan yok; yalnızca UBSan tuzak kipi açık. Tam denetim (ASan + UBSan, satır bilgisiyle) için Linux/WSL'de derleyin.");
+    }
     oto san = upp.sistem.ortam_al("UPP_SANITIZE");
     eger (san != yok && !metin_esit(san, "")) {
         cmd += san;
@@ -1661,6 +1682,12 @@ fonk bicim_kaynak(metin src) -> metin {
                     eger (ch == 34) {
                         in_str = dogru;
                         i = i + 1;
+                        devam;
+                    }
+                    // '{', '}', '"' gibi karakter sabitleri derinliği ve metin durumunu etkilemez
+                    sayi ks = kar_sabiti_son(line, i);
+                    eger (ks > 0) {
+                        i = ks;
                         devam;
                     }
                     eger (ch == 47 && nxt == 47) { dur; }

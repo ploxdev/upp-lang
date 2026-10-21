@@ -415,6 +415,8 @@ fonk ana() -> sayi {
             upp.satir_yaz("  --disk <imaj>      cekirdek: ham disk imajını QEMU'ya IDE disk olarak ekle (en çok 4)");
             upp.satir_yaz("  --onyukleyici <o>  cekirdek: multiboot (varsayılan, QEMU -kernel) | limine (64-bit higher-half, diskten açılır)");
             upp.satir_yaz("  --disk-hazirla <b> cekirdek: derlemeden sonra 'sh b <ilk disk dizini> <çekirdek.elf>' çalıştır");
+            upp.satir_yaz("  --guvenlik-denetimi[=is]  ASan + UBSan ile derle (bellek hatası, sızıntı, tanımsız davranış);");
+            upp.satir_yaz("                     '=is': TSan (iş parçacığı yarışları). Windows/MinGW'de yalnızca UBSan tuzak kipi.");
             upp.satir_yaz("  -v, --surum        Sürüm: u++ 3.0.1");
             upp.satir_yaz("  --json             --surum ile makine-okur JSON");
             upp.satir_yaz("  -h, --yardim       Bu yardım mesajını göster");
@@ -440,6 +442,12 @@ fonk ana() -> sayi {
         yoksa eger (metin_esit(a, "--disk")) {
             i = i + 1;
             eger (i < argn) { g_ck_diskler.ekle(upp.arguman(i)); }
+        }
+        yoksa eger (metin_esit(a, "--guvenlik-denetimi")) { g_guvenlik_denetimi = "bellek"; }
+        yoksa eger (metin_esit(a, "--guvenlik-denetimi=is")) { g_guvenlik_denetimi = "is"; }
+        yoksa eger (metin_uzun(a) > 20 && metin_esit(intern_dilim(a, 0, 20), "--guvenlik-denetimi=")) {
+            upp.satir_yaz("[u++ HATA] bilinmeyen güvenlik denetimi: " + a + " (--guvenlik-denetimi ya da --guvenlik-denetimi=is)");
+            don 1;
         }
         yoksa eger (metin_esit(a, "--disk-hazirla")) {
             i = i + 1;
@@ -485,6 +493,10 @@ fonk ana() -> sayi {
         upp.yaz("[u++ HATA] Bilinmeyen hedef: '");
         upp.yaz(hedef_ad);
         upp.satir_yaz("'. Seçenekler: windows, linux, serbest, cekirdek.");
+        don 1;
+    }
+    eger (serbest_mi() && !metin_esit(g_guvenlik_denetimi, "")) {
+        upp.satir_yaz("[u++ HATA] --guvenlik-denetimi yalnızca barındırılan hedeflerde (windows, linux) kullanılabilir; serbest/cekirdek hedefinde sanitizer çalışma zamanı yoktur.");
         don 1;
     }
     eger (hedef_linux) {
