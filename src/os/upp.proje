@@ -2,5 +2,6 @@ ad = uppix
 giris = kaynak/ana.upp
 hedef = cekirdek
 cikti = derleme/uppix
-diskler = derleme/uppix-kok.img, derleme/usb-fat32.img, derleme/usb-exfat.img
+onyukleyici = limine
+diskler = derleme/uppix.img, derleme/usb-fat32.img, derleme/usb-exfat.img
 disk_hazirla = disk_yap.sh

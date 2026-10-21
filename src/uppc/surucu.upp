@@ -413,6 +413,8 @@ fonk ana() -> sayi {
             upp.satir_yaz("  --linux            Linux hedefi için derle");
             upp.satir_yaz("  --hedef <h>        windows | linux | serbest (libc'siz .o) | cekirdek (x86_64 ELF + QEMU)");
             upp.satir_yaz("  --disk <imaj>      cekirdek: ham disk imajını QEMU'ya IDE disk olarak ekle (en çok 4)");
+            upp.satir_yaz("  --onyukleyici <o>  cekirdek: multiboot (varsayılan, QEMU -kernel) | limine (64-bit higher-half, diskten açılır)");
+            upp.satir_yaz("  --disk-hazirla <b> cekirdek: derlemeden sonra 'sh b <ilk disk dizini> <çekirdek.elf>' çalıştır");
             upp.satir_yaz("  -v, --surum        Sürüm: u++ 3.0.1");
             upp.satir_yaz("  --json             --surum ile makine-okur JSON");
             upp.satir_yaz("  -h, --yardim       Bu yardım mesajını göster");
@@ -438,6 +440,22 @@ fonk ana() -> sayi {
         yoksa eger (metin_esit(a, "--disk")) {
             i = i + 1;
             eger (i < argn) { g_ck_diskler.ekle(upp.arguman(i)); }
+        }
+        yoksa eger (metin_esit(a, "--disk-hazirla")) {
+            i = i + 1;
+            eger (i < argn) { g_ck_hazirla = upp.arguman(i); }
+        }
+        yoksa eger (metin_esit(a, "--onyukleyici")) {
+            i = i + 1;
+            eger (i < argn) {
+                oto oy = upp.arguman(i);
+                eger (metin_esit(oy, "limine")) {
+                    g_ck_limine = dogru;
+                } yoksa eger (!metin_esit(oy, "multiboot")) {
+                    upp.satir_yaz("[u++ HATA] bilinmeyen önyükleyici: " + oy + " (limine | multiboot)");
+                    don 1;
+                }
+            }
         }
         yoksa eger (metin_esit(a, "--cikti") || metin_esit(a, "-o")) {
             i = i + 1;

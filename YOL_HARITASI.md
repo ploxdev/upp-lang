@@ -58,10 +58,11 @@
 - [x] Multiboot bellek haritası: yığın kullanılabilir RAM'e yayılır (`bellek_toplam`, `yigin_boyut`, `yigin_kullanilan`).
 - [x] İşbirlikçi görevler: `gorev_baslat(fonk(sayi) -> bos, arg, ad)`, `sira_ver`, `gorev_listesi/ad/durum/baslama/oldur`. `uyut` ve girdi beklemesi sırayı verir.
 - [x] CMOS saati (`tarih`), ACPI kapatma, 8042 yeniden başlatma, CPUID (`islemci`), `ekran_temizle`. VGA'da ANSI renk/imleç dizileri ve kutu çizgi karakterleri; klavyede Ctrl ve ok tuşları.
-- [x] **Uppix** (`uppix/`): u++ ile yazılmış Unix benzeri işletim sistemi. İçinde `uppsh` kabuğu (boru, yönlendirme, `&&`/`||`, `&`, değişkenler, joker, takma ad, betik), `/proc` ve `/dev` içeren ramfs, satır düzenleyici (geçmiş, Tab) ve 70 komut var. QEMU testi: `tests/cekirdek/08_uppix.upp`.
+- [x] **Uppix** (`src/os/`): u++ ile yazılmış Unix benzeri işletim sistemi. İçinde `uppsh` kabuğu (boru, yönlendirme, `&&`/`||`, `&`, değişkenler, joker, takma ad, betik), `/proc` ve `/dev` içeren ramfs, satır düzenleyici (geçmiş, Tab) ve 70 komut var. QEMU testi: `tests/cekirdek/08_uppix.upp`.
 - [x] Diskler: ATA PIO sürücüsü (`upp.cekirdek.disk_*`), güvenli bayt tamponları (`upp.tampon.*`: LE okuma/yazma, UTF-16, CRC32C), `uppc --disk` ve `upp.proje` içinde `diskler` / `disk_hazirla`.
 - [x] Uppix 0.2: VFS bağlama tablosu ve fonksiyon değerli sürücü arayüzü. **ext4 kök** (okuma/yazma, extent, metadata_csum), **FAT32** (LFN) ve **exFAT** okuma/yazma, MBR/GPT bölümleri. `mount`, `umount`, `lsblk`, `blkid`, gerçek `df`. Yazılan imajlar `e2fsck`, `fsck.fat` ve `fsck.exfat`'tan temiz geçer (`tests/cekirdek/09_uppix_disk.upp`, `10_uppix_kalici.upp`).
-- [ ] Sonraki: diskten önyükleme (GRUB/kendi önyükleyicimiz), ext4 günlüğü ve büyük dosyalar için extent ağacı yazımı, AHCI/virtio-blk, kesintili zamanlama (runtime kilitleri), kullanıcı modu + sistem çağrıları + ELF yükleyici, `uppc`'nin Uppix içinde çalışması (doğrudan makine kodu arka ucu).
+- [x] Uppix 0.3: **Limine ile diskten 64-bit açılış** (BIOS ve UEFI). Limine v11.4.1 depoya gömülü (`src/os/onyukleyici/limine`). `uppc --onyukleyici limine` higher-half ELF64 üretir; runtime Limine isteklerinden bellek haritası, çerçeve tamponu ve HHDM alır, kendi GDT'sini ve sayfa tablolarını kurar, yerel APIC'i kapatır. Çerçeve tamponu konsolu (Terminus 8x16, Türkçe). `--disk-hazirla` ve `upp.proje` `onyukleyici = limine`. `uppix.img`: FAT32 `/boot` + ext4 kök (`tests/cekirdek/11_uppix_limine.upp`).
+- [ ] Sonraki: ext4 günlüğü ve büyük dosyalar için extent ağacı yazımı, AHCI/virtio-blk, kesintili zamanlama (runtime kilitleri), kullanıcı modu + sistem çağrıları + ELF yükleyici, `uppc`'nin Uppix içinde çalışması (doğrudan makine kodu arka ucu).
 
 ## Faz 4 — Derleme asistanı ✅
 
@@ -70,5 +71,5 @@
 
 ## Faz 5 — Belgeler ve testler
 
-- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 120 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
+- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 121 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
 - [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.

@@ -1,3 +1,5 @@
 # Disk imajına giren dosyalar ve kabuk betikleri her platformda LF kalmalı.
 *.sh text eol=lf
 kok/** text eol=lf
+onyukleyici/limine/*.sys binary
+onyukleyici/limine/*.EFI binary

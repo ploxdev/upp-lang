@@ -52,6 +52,56 @@ fonk ck_ld() -> metin {
     don o;
 }
 
+// --onyukleyici limine: Limine protokolü. Limine çekirdeği 64-bit long mode'da,
+// higher-half (0xffffffff80000000) adreste başlatır. İstekler .limine_istekler
+// bölümündedir (başlangıç/bitiş işaretleri arasında); yanıtları runtime'daki
+// _upp_limine_kur() okur ve kendi sayfa tablolarımıza geçer.
+fonk ck_limine_s() -> metin {
+    metin o = "/* u++ çekirdek önyükleyicisi (uppc gömülü) — Limine protokolü, x86_64 higher-half */\n";
+    o += ".section .limine_istekler, \"aw\"\n.balign 8\n";
+    o += "    .quad 0xf6b8f4b39de7d1ae, 0xfab91a6940fcb9cf, 0x785c6ed015d3e316, 0x181e920a7852b9d9\n";
+    o += ".global _upp_limine_surum\n_upp_limine_surum:\n    .quad 0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, 6\n";
+    o += ".global _upp_limine_bilgi\n_upp_limine_bilgi:\n    .quad 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, 0xf55038d8e2a1202f, 0x279426fcf5f59740, 0, 0\n";
+    o += ".global _upp_limine_hhdm\n_upp_limine_hhdm:\n    .quad 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, 0x48dcf1cb8ad2b852, 0x63984e959a98244b, 0, 0\n";
+    o += ".global _upp_limine_harita\n_upp_limine_harita:\n    .quad 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, 0x67cf3d9d378a806f, 0xe304acdfc50c3c62, 0, 0\n";
+    o += ".global _upp_limine_adres\n_upp_limine_adres:\n    .quad 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, 0x71ba76863cc55f63, 0xb2644a48c516a487, 0, 0\n";
+    o += ".global _upp_limine_fb\n_upp_limine_fb:\n    .quad 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, 0x9d5827dcd881dd75, 0xa3148604f6fab11b, 0, 0\n";
+    o += "    .quad 0xadc0e0531bb10d03, 0x9572709f31764c62\n";
+    o += "\n.section .bss\n.balign 16\nck_yigin_alt: .skip 65536\nck_yigin_ust:\n";
+    // GDT yazılabilir bölümde: segment yüklenince işlemci "erişildi" bitini yazar
+    // (salt-okunur sayfada #PF olur); bitler baştan da 1.
+    o += "\n.section .data\n.balign 8\nck_gdt:\n";
+    o += "    .quad 0\n    .quad 0x00AF9B000000FFFF\n    .quad 0x00CF93000000FFFF\nck_gdt_son:\n";
+    o += "ck_gdt_ptr:\n    .word ck_gdt_son - ck_gdt - 1\n    .quad ck_gdt\n";
+    o += "\n.section .text\n.code64\n.global _start\n_start:\n";
+    o += "    cli\n    lea ck_yigin_ust(%rip), %rsp\n";
+    o += "    /* SSE: CR0.EM=0, CR0.MP=1, CR4.OSFXSR|OSXMMEXCPT (Limine kapalı bırakır) */\n";
+    o += "    mov %cr0, %rax\n    and $~0x4, %rax\n    or $0x2, %rax\n    mov %rax, %cr0\n";
+    o += "    mov %cr4, %rax\n    or $0x600, %rax\n    mov %rax, %cr4\n";
+    o += "    /* Kendi GDT'miz: kod 0x08, veri 0x10 (IDT kapıları 0x08 kullanır) */\n";
+    o += "    lgdt ck_gdt_ptr(%rip)\n    pushq $0x08\n    lea 1f(%rip), %rax\n    pushq %rax\n    lretq\n1:\n";
+    o += "    mov $0x10, %ax\n    mov %ax, %ds\n    mov %ax, %es\n    mov %ax, %ss\n";
+    o += "    xor %eax, %eax\n    mov %ax, %fs\n    mov %ax, %gs\n";
+    o += "    call _upp_limine_kur\n    call upp_cekirdek_giris\n2:\n    cli\n    hlt\n    jmp 2b\n";
+    o += "\n.section .note.GNU-stack, \"\", @progbits\n";
+    don o;
+}
+
+fonk ck_limine_ld() -> metin {
+    metin o = "/* u++ çekirdek bağlayıcı betiği (uppc gömülü) — Limine, higher-half */\n";
+    o += "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(_start)\n";
+    o += "PHDRS\n{\n    metin PT_LOAD FLAGS(5);\n    salt PT_LOAD FLAGS(4);\n    veri PT_LOAD FLAGS(6);\n}\n";
+    o += "SECTIONS\n{\n    . = 0xffffffff80000000;\n    _upp_cekirdek_bas = .;\n";
+    o += "    .text : ALIGN(4K) { *(.text .text.*) } :metin\n";
+    o += "    .rodata : ALIGN(4K) { *(.rodata .rodata.*) } :salt\n";
+    o += "    .data : ALIGN(4K) { KEEP(*(.limine_istekler)) *(.data .data.*) } :veri\n";
+    o += "    .bss : ALIGN(4K) { *(COMMON) *(.bss .bss.*) } :veri\n";
+    o += "    _upp_cekirdek_son = .;\n";
+    o += "    /DISCARD/ : { *(.eh_frame*) *(.note .note.*) *(.comment) }\n";
+    o += "}\n";
+    don o;
+}
+
 // C:\a\b → /mnt/c/a/b (WSL üzerinden derlerken)
 fonk ck_wsl_yol(metin p) -> metin {
     oto g = upp.metin.degistir(os_yol_gercek(p), "\\", "/");
@@ -63,6 +113,8 @@ fonk ck_wsl_yol(metin p) -> metin {
 }
 
 liste[metin] g_ck_diskler;
+mantik g_ck_limine = yanlis;
+metin g_ck_hazirla = "";
 metin g_ck_onek = "";
 metin g_ck_gcc = "";
 metin g_ck_ld = "";
@@ -129,26 +181,56 @@ fonk cekirdek_derle(metin c_yol, metin kok, mantik calistir) -> sayi {
     oto dizin = upp.yol.dizin(kok);
     oto boot_s = upp.yol.birlestir(dizin, "upp_boot.S");
     oto ld_yol = upp.yol.birlestir(dizin, "upp_cekirdek.ld");
-    os_dosya_yaz(boot_s, ck_boot_s());
-    os_dosya_yaz(ld_yol, ck_ld());
+    eger (g_ck_limine) {
+        os_dosya_yaz(boot_s, ck_limine_s());
+        os_dosya_yaz(ld_yol, ck_limine_ld());
+    } yoksa {
+        os_dosya_yaz(boot_s, ck_boot_s());
+        os_dosya_yaz(ld_yol, ck_ld());
+    }
     oto boot_o = kok + "_boot.o";
     oto prog_o = kok + ".o";
     oto elf = kok + ".elf";
     oto elf32 = kok + "32.elf";
     metin bayrak = " -std=gnu11 -O2 -m64 -ffreestanding -fno-stack-protector -fno-pic -fno-pie -mno-red-zone -fno-asynchronous-unwind-tables -nostdlib -Wno-unused-function";
+    eger (g_ck_limine) { bayrak += " -mcmodel=kernel"; }
     upp.yaz("[u++] çekirdek derleniyor (");
     eger (g_ck_wsl) { upp.yaz("WSL "); }
     upp.yaz(g_ck_gcc);
+    eger (g_ck_limine) { upp.yaz(", Limine protokolü"); }
     upp.satir_yaz(")...");
     eger (ck_calistir(g_ck_gcc + bayrak + " -c " + ck_yol(boot_s) + " -o " + ck_yol(boot_o)) != 0) { don 1; }
     eger (ck_calistir(g_ck_gcc + bayrak + " -c " + ck_yol(c_yol) + " -o " + ck_yol(prog_o)) != 0) { don 1; }
-    eger (ck_calistir(g_ck_ld + " -n -nostdlib -T " + ck_yol(ld_yol) + " -o " + ck_yol(elf) + " " + ck_yol(boot_o) + " " + ck_yol(prog_o)) != 0) { don 1; }
-    eger (ck_calistir(g_ck_objcopy + " -O elf32-i386 " + ck_yol(elf) + " " + ck_yol(elf32)) != 0) { don 1; }
-    upp.yaz("[u++] ÇEKİRDEK HAZIR: ");
-    upp.yaz(elf);
-    upp.yaz(" (QEMU için: ");
-    upp.yaz(elf32);
-    upp.satir_yaz(")");
+    eger (g_ck_limine) {
+        eger (ck_calistir(g_ck_ld + " -nostdlib -static -z max-page-size=0x1000 -T " + ck_yol(ld_yol) + " -o " + ck_yol(elf) + " " + ck_yol(boot_o) + " " + ck_yol(prog_o)) != 0) { don 1; }
+        upp.yaz("[u++] ÇEKİRDEK HAZIR: ");
+        upp.yaz(elf);
+        upp.satir_yaz(" (Limine, ELF64 higher-half)");
+    } yoksa {
+        eger (ck_calistir(g_ck_ld + " -n -nostdlib -T " + ck_yol(ld_yol) + " -o " + ck_yol(elf) + " " + ck_yol(boot_o) + " " + ck_yol(prog_o)) != 0) { don 1; }
+        eger (ck_calistir(g_ck_objcopy + " -O elf32-i386 " + ck_yol(elf) + " " + ck_yol(elf32)) != 0) { don 1; }
+        upp.yaz("[u++] ÇEKİRDEK HAZIR: ");
+        upp.yaz(elf);
+        upp.yaz(" (QEMU için: ");
+        upp.yaz(elf32);
+        upp.satir_yaz(")");
+    }
+    // Disk hazırlama betiği: sh <betik> <ilk diskin dizini> <çekirdek.elf>
+    eger (!metin_esit(g_ck_hazirla, "")) {
+        metin hdizin = dizin;
+        eger (g_ck_diskler.uzunluk() > 0) { hdizin = upp.yol.dizin(g_ck_diskler[0]); }
+        upp.yol.dizin_olustur(hdizin);
+        metin hk = "sh " + ck_yol(g_ck_hazirla) + " " + ck_yol(hdizin) + " " + ck_yol(elf);
+        oto araclar = upp.sistem.ortam_al("UPP_FS_ARACLAR");
+        eger (araclar != yok && !metin_esit(araclar, "")) { hk = "env FS_ARACLAR=" + os_tirnak(araclar) + " " + hk; }
+        upp.satir_yaz("[u++] disk imajı hazırlanıyor: " + g_ck_hazirla);
+        SurecCikti hr = upp.sistem.calistir(g_ck_onek + hk);
+        eger (hr.cikti != yok) { upp.yaz(hr.cikti); }
+        eger (hr.kod != 0) {
+            upp.satir_yaz("[u++ HATA] disk hazırlama betiği başarısız (kod {hr.kod}): " + g_ck_onek + hk);
+            don 1;
+        }
+    }
     eger (!calistir) { don 0; }
     oto q = ck_qemu_komut();
     eger (metin_esit(q, "")) {
@@ -171,8 +253,17 @@ fonk cekirdek_derle(metin c_yol, metin kok, mantik calistir) -> sayi {
         diskler += " -drive " + os_tirnak("file=" + dy + ",format=raw,if=ide,index=" + sayi_metin(di));
         di = di + 1;
     }
+    // Limine: çekirdek ilk diskteki önyükleyiciden açılır (-kernel yok).
+    metin cekirdek_arg = " -kernel " + hedef;
+    eger (g_ck_limine) {
+        eger (di == 0) {
+            upp.satir_yaz("[u++ HATA] Limine ile açmak için önyüklenebilir bir disk gerekir (--disk imaj, ilk disk).");
+            don 1;
+        }
+        cekirdek_arg = "";
+    }
     upp.satir_yaz("==================================================");
-    sayi kod = upp.sistem.kos(q + " -kernel " + hedef + diskler + " -serial stdio -display none -no-reboot -device isa-debug-exit,iobase=0xf4,iosize=0x04");
+    sayi kod = upp.sistem.kos(q + cekirdek_arg + diskler + " -serial stdio -display none -no-reboot -device isa-debug-exit,iobase=0xf4,iosize=0x04");
     // isa-debug-exit: çıkış kodu (deger << 1) | 1
     eger (kod == 1 || kod == 0) { don 0; }
     don kod / 2;

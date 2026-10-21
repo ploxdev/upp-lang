@@ -1,7 +1,7 @@
 // Çekirdek: Uppix ext4 kökten açılır, FAT32 (MBR bölümü) ve exFAT diskleri tanır, üçüne de yazar.
 // Yazılanlar QEMU kapandıktan sonra Linux araçlarıyla (e2fsck, debugfs, fsck.fat, mtools, fsck.exfat) denetlenir.
 // @gerek: mkfs.ext4 e2fsck debugfs sfdisk mkfs.fat fsck.fat mcopy mtype mkfs.exfat fsck.exfat
-// @hazirla: rm -rf tests/_cikti/disk && sh uppix/disk_yap.sh tests/_cikti/disk
+// @hazirla: rm -rf tests/_cikti/disk && sh src/os/disk_yap.sh tests/_cikti/disk
 // @bayrak: --disk tests/_cikti/disk/uppix-kok.img --disk tests/_cikti/disk/usb-fat32.img --disk tests/_cikti/disk/usb-exfat.img
 // @girdi: lsblk
 // @girdi: mount | grep sd
@@ -37,7 +37,7 @@
 // @denetle: ! mtype -i tests/_cikti/disk/usb-fat32.img@@1M ::/BENIOKU.TXT >/dev/null 2>&1
 // @denetle: fsck.exfat -n tests/_cikti/disk/usb-exfat.img
 
-kullan "../../uppix/kaynak/uppix.upp";
+kullan "../../src/os/kaynak/uppix.upp";
 
 fonk ana() -> sayi {
     uppix_baslat();

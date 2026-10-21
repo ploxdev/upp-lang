@@ -24,7 +24,7 @@
 // @denetle: e2fsck -fn tests/_cikti/disk/uppix-kok.img
 // @denetle: fsck.exfat -n tests/_cikti/disk/usb-exfat.img
 
-kullan "../../uppix/kaynak/uppix.upp";
+kullan "../../src/os/kaynak/uppix.upp";
 
 fonk ana() -> sayi {
     uppix_baslat();

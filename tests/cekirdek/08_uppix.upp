@@ -42,11 +42,11 @@
 // @icerir: Bu betik 1 argüman aldı: Uppix
 // @icerir: arkada-bitti
 // @icerir: Bitti (0)
-// @icerir: Uppix 0.2.0
+// @icerir: Uppix 0.3.0
 // @icerir: -rw-r--r--
 // @icerir: Sistem kapatılıyor...
 
-kullan "../../uppix/kaynak/uppix.upp";
+kullan "../../src/os/kaynak/uppix.upp";
 
 fonk ana() -> sayi {
     uppix_baslat();

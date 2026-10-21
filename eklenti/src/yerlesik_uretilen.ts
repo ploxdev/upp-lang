@@ -162,6 +162,8 @@ export const YERLESIK: Yerlesik[] = [
   { ad: "cekirdek.yeniden_baslat", param: "", donus: "bos", bayrak: 64 },
   { ad: "cekirdek.ekran_temizle", param: "", donus: "bos", bayrak: 64 },
   { ad: "cekirdek.islemci", param: "", donus: "metin", bayrak: 64 },
+  { ad: "cekirdek.onyukleyici", param: "", donus: "metin", bayrak: 64 },
+  { ad: "cekirdek.ekran", param: "", donus: "metin", bayrak: 64 },
   { ad: "cekirdek.disk_var", param: "sayi", donus: "mantik", bayrak: 64 },
   { ad: "cekirdek.disk_sektor", param: "sayi", donus: "sayi", bayrak: 64 },
   { ad: "cekirdek.disk_model", param: "sayi", donus: "metin", bayrak: 64 },

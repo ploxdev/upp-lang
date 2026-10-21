@@ -4,12 +4,17 @@ fonk boyut_metni(sayi b) -> metin => boyut_insan(b);
 
 fonk k_lsblk(liste[metin] a, metin girdi) -> sayi {
     satir("AD      BOYUT TÜR   FSTÜR  ETİKET           BAĞLAMA");
-    her (oto b in g_blok) {
+    sayi bn = g_blok.uzunluk();
+    dongu (sayi bi = 0; bi < bn; bi += 1) {
+        oto b = g_blok[bi];
         metin tur = "disk";
         metin ad = b.ad;
         eger (b.bolum > 0) {
             tur = "part";
-            ad = "└─" + b.ad;
+            // Bölümler diskin hemen ardından gelir; sonuncusu └─, öncekiler ├─.
+            mantik son = bi == bn - 1 || g_blok[bi + 1].bolum == 0;
+            ad = "├─" + b.ad;
+            eger (son) { ad = "└─" + b.ad; }
         }
         metin nokta = "";
         dongu (sayi i = 0; i < g_bag.uzunluk(); i += 1) {

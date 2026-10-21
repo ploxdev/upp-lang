@@ -200,6 +200,8 @@ fonk yerlesik_kur() -> bos {
     yk("cekirdek.yeniden_baslat", "", "bos", "upp_cekirdek_yeniden_baslat", 64);
     yk("cekirdek.ekran_temizle", "", "bos", "upp_cekirdek_ekran_temizle", 64);
     yk("cekirdek.islemci", "", "metin", "upp_cekirdek_islemci", 64);
+    yk("cekirdek.onyukleyici", "", "metin", "upp_cekirdek_onyukleyici", 64);
+    yk("cekirdek.ekran", "", "metin", "upp_cekirdek_ekran", 64);
     yk("cekirdek.disk_var", "sayi", "mantik", "upp_cekirdek_disk_var", 64);
     yk("cekirdek.disk_sektor", "sayi", "sayi", "upp_cekirdek_disk_sektor", 64);
     yk("cekirdek.disk_model", "sayi", "metin", "upp_cekirdek_disk_model", 64);

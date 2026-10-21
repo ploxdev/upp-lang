@@ -1,0 +1,34 @@
+// Çekirdek: Uppix Limine ile 64-bit long mode'da diskten açılır (higher-half ELF64, kendi sayfa tabloları,
+// çerçeve tamponu konsolu). İmaj: 1. bölüm FAT32 "UPPIXBOOT" (Limine + çekirdek, /boot), 2. bölüm ext4 kök.
+// @gerek: cc mkfs.ext4 e2fsck debugfs sfdisk mkfs.fat fsck.fat mcopy mtype
+// @hazirla: rm -rf tests/_cikti/limine
+// @bayrak: --onyukleyici limine --disk tests/_cikti/limine/uppix.img --disk-hazirla src/os/disk_yap.sh
+// @girdi: dmesg | grep -c Limine
+// @girdi: lsblk
+// @girdi: mount | grep sda
+// @girdi: ls /boot /boot/limine | tr '\n' ' '
+// @girdi: grep protocol /boot/limine/limine.conf
+// @girdi: echo "Uppix'ten /boot'a" > /boot/uppix_notu.txt
+// @girdi: echo "ext4 kök" > /root/limine.txt
+// @girdi: poweroff
+// @icerir: önyükleyici: Limine
+// @icerir: ekran: çerçeve tamponu
+// @icerir: ├─sda1    64M part  vfat   UPPIXBOOT        /boot
+// @icerir: └─sda2   127M part  ext4   uppix-kok        /
+// @icerir: /dev/sda2 on / type ext4 (rw)
+// @icerir: /dev/sda1 on /boot type vfat (rw)
+// @icerir: /boot: EFI limine uppix.elf  /boot/limine: limine-bios.sys limine.conf
+// @icerir: protocol: limine
+// @icerir: Sistem kapatılıyor...
+// @denetle: dd if=tests/_cikti/limine/uppix.img of=/tmp/upp_limine_p2.img bs=1M skip=65 status=none && e2fsck -fn /tmp/upp_limine_p2.img
+// @denetle: debugfs -R 'cat /root/limine.txt' /tmp/upp_limine_p2.img 2>/dev/null | grep -q 'ext4 kök'
+// @denetle: dd if=tests/_cikti/limine/uppix.img of=/tmp/upp_limine_p1.img bs=1M skip=1 count=64 status=none && fsck.fat -n /tmp/upp_limine_p1.img
+// @denetle: mtype -i tests/_cikti/limine/uppix.img@@1M ::/uppix_notu.txt | grep -q "Uppix'ten /boot'a"
+// @denetle: rm -f /tmp/upp_limine_p1.img /tmp/upp_limine_p2.img
+
+kullan "../../src/os/kaynak/uppix.upp";
+
+fonk ana() -> sayi {
+    uppix_baslat();
+    don 0;
+}

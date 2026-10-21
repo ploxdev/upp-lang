@@ -16,7 +16,7 @@ kullan "komut_metin.upp";
 kullan "komut_sistem.upp";
 kullan "komut_disk.upp";
 
-sabit metin UPPIX_SURUM = "0.2.0";
+sabit metin UPPIX_SURUM = "0.3.0";
 
 liste[metin] g_dmesg;
 
@@ -207,13 +207,22 @@ fonk diger_diskleri_bagla() -> bos {
             eger (x.etkin && x.aygit == "/dev/" + g_blok[i].ad) { bagli = dogru; }
         }
         eger (bagli) { devam; }
-        sayi d = fs_yeni(mnt, g_blok[i].ad, D_DIZIN, 493);
+        // Önyükleme bölümü (Limine imajında "UPPIXBOOT") /boot'a bağlanır.
+        mantik boot_bolumu = g_blok[i].fs == "vfat" && g_blok[i].etiket == "UPPIXBOOT";
+        sayi d = -1;
+        metin hedef = "/mnt/" + g_blok[i].ad;
+        eger (boot_bolumu) {
+            d = fs_dizin("/boot", 493);
+            hedef = "/boot";
+        } yoksa {
+            d = fs_yeni(mnt, g_blok[i].ad, D_DIZIN, 493);
+        }
         eger (d < 0) { devam; }
         eger (fs_bagla(g_blok[i].fs, "/dev/" + g_blok[i].ad, i, d, yanlis) < 0) {
             klog(g_blok[i].fs + ": /dev/" + g_blok[i].ad + " bağlanamadı: " + g_fs_hata);
-            fs_sil(d);
+            eger (!boot_bolumu) { fs_sil(d); }
         } yoksa {
-            klog(g_blok[i].fs + ": /dev/" + g_blok[i].ad + " → /mnt/" + g_blok[i].ad);
+            klog(g_blok[i].fs + ": /dev/" + g_blok[i].ad + " → " + hedef);
         }
     }
 }
@@ -232,7 +241,10 @@ fonk ortam_kur() -> bos {
 fonk uppix_baslat() -> bos {
     upp.cekirdek.ekran_temizle();
     upp.satir_yaz("\e[1;36mUppix " + UPPIX_SURUM + "\e[0m — u++ ile yazılmış Unix benzeri işletim sistemi");
-    klog("Uppix " + UPPIX_SURUM + " çekirdeği başlıyor (x86_64, Multiboot)");
+    metin onyukleyici = upp.cekirdek.onyukleyici();
+    eger (onyukleyici == "") { onyukleyici = "bilinmiyor"; }
+    klog("Uppix " + UPPIX_SURUM + " çekirdeği başlıyor (x86_64 long mode, önyükleyici: " + onyukleyici + ")");
+    klog("ekran: " + upp.cekirdek.ekran());
     klog("işlemci: " + upp.cekirdek.islemci());
     klog("bellek: {upp.cekirdek.bellek_toplam() / 1048576} MiB RAM, çekirdek yığını {upp.cekirdek.yigin_boyut() / 1048576} MiB");
     klog("kesmeler: IDT 48 giriş, PIC yeniden eşlendi, PIT 1000 Hz");

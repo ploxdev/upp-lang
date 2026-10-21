@@ -111,8 +111,20 @@ fonk pj_derle(metin dizin, mantik calistir) -> sayi {
     eger (!calistir) { cmd += " --sadece-derle"; }
     // diskler = a.img, b.img  (proje dizinine göre; çekirdek hedefinde QEMU'ya IDE disk)
     // disk_hazirla = betik.sh (bir disk eksikse proje dizininde sh ile çalışır)
+    // onyukleyici = limine   (çekirdek ilk diskten Limine ile açılır; betik her
+    //                         derlemeden sonra 'sh betik <disk dizini> <çekirdek.elf>' ile çalışır)
     oto diskler = pj_al("diskler", "");
-    eger (calistir && !metin_esit(diskler, "")) {
+    mantik limine = metin_esit(pj_al("onyukleyici", ""), "limine");
+    eger (limine) {
+        cmd += " --onyukleyici limine";
+        oto lbetik = pj_al("disk_hazirla", "");
+        eger (!metin_esit(lbetik, "")) { cmd += " --disk-hazirla " + os_cmd_parca(upp.yol.birlestir(dizin, lbetik)); }
+        her (oto p in upp.metin.bol(diskler, ",")) {
+            oto t = upp.metin.kirp(p);
+            eger (!metin_esit(t, "")) { cmd += " --disk " + os_cmd_parca(upp.yol.birlestir(dizin, t)); }
+        }
+    }
+    eger (!limine && calistir && !metin_esit(diskler, "")) {
         mantik eksik = yanlis;
         liste[metin] yollar;
         her (oto p in upp.metin.bol(diskler, ",")) {

@@ -1,38 +1,66 @@
 # u++ Standart Kütüphane ve API Referansı (v3.1 beta)
 
-Bu belge `upp.*` yerleşiklerini, türleri, bellek modelini, hedefleri ve derleyici komut satırını tanımlar. Yerleşiklerin tek doğru kaynağı [`src/uppc/yerlesik.upp`](../src/uppc/yerlesik.upp) tablosudur: tür denetimi argüman sayısını, argüman türlerini, dönüş türünü, `guvensiz` zorunluluğunu ve hedef uygunluğunu oradan okur. Bu belge o tabloyla birebir eşleşir.
+Bu belge; **u++** dilinin bellek modelini, tür sistemini, hata yönetimi mekanizmalarını, `upp.*` standart kütüphane yerleşiklerini, derleme hedeflerini ve komut satırı araçlarını tanımlar.
 
-Öğrenme rehberi: [OGREN.md](../OGREN.md) · Derleyici mimarisi: [derleyici.md](../derleyici.md) · English: [API_en.md](API_en.md)
+> [!NOTE]
+> Yerleşik fonksiyonların derleyici içindeki tek doğru kaynağı [`src/uppc/yerlesik.upp`](../src/uppc/yerlesik.upp) tablosudur. Tür denetleyici; argüman sayısını, parametre ve dönüş türlerini, `guvensiz` bloğu zorunluluğunu ve hedef uyumluluğunu (`barındırılan` / `serbest` / `windows` / `linux`) doğrudan bu tablodan okur. Bu referans belgesi söz konusu tabloyla birebir eşleşir.
+
+📚 **İlgili Belgeler:** [Öğrenme Rehberi (OGREN.md)](../OGREN.md) · [Derleyici Mimarisi (derleyici.md)](../derleyici.md) · [Uppix İşletim Sistemi](../src/os/README.md) · [English Reference (API_en.md)](API_en.md)
 
 ---
 
-## 1. Bellek Modeli
+## 📑 İçindekiler
 
-### Metin sahipliği (otomatik drop)
-- Her `metin` yönetilen bir nesnedir: başlığında atomik referans sayısı, bayt uzunluğu, kapasite ve kod noktası bilgisi bulunur. Veri, NUL ile biten ve C uyumlu bir `char*` olarak kalır.
-- Kopya O(1)'dir (referans artışı). `+=` tek sahipli metni yerinde büyütür, paylaşılan metinde copy-on-write yapar.
-- Derleyici metinleri kapsam sonunda, `dur`/`devam` ile çıkarken ve `don` ile dönerken bırakır. Elle bırakma yoktur.
-- `upp.uzunluk(s)` O(1)'dir. ASCII metinde `s[i]` de O(1)'dir. ASCII olmayan metin kendi kod noktası tablosunu taşır.
-- Metin sabitleri, başlığı derleme anında doldurulmuş ölümsüz nesnelerdir.
+1. [Bellek Modeli ve Dil Mekanizmaları](#1-bellek-modeli-ve-dil-mekanizmaları)
+2. [Tür Sistemi, Dönüşümler ve `boyut(T)`](#2-tür-sistemi-dönüşümler-ve-boyutt)
+3. [Metin İnterpolasyonu ve Standart Çıktı/Girdi](#3-metin-i̇nterpolasyonu-ve-standart-çıktıgirdi)
+4. [Genel Yerleşikler (`upp.*`)](#4-genel-yerleşikler-upp)
+5. [Metin ve UTF-8 İşlemleri (`upp.metin`)](#5-metin-ve-utf-8-i̇şlemleri-uppmetin)
+6. [Dosya İşlemleri (`upp.dosya`)](#6-dosya-i̇şlemleri-uppdosya)
+7. [Yol ve Dizin İşlemleri (`upp.yol`)](#7-yol-ve-dizin-i̇şlemleri-uppyol)
+8. [Sistem, Süreç ve Standart G/Ç (`upp.sistem`, `upp.stdio`)](#8-sistem-süreç-ve-standart-gç-uppsistem-uppstdio)
+9. [Platforma Özgü API'ler (`upp.linux`, `upp.windows`)](#9-platforma-özgü-apiler-upplinux-uppwindows)
+10. [Matematik ve Geometri (`upp.matematik`)](#10-matematik-ve-geometri-uppmatematik)
+11. [Dinamik Koleksiyonlar (`liste[T]` ve `harita[K, V]`)](#11-dinamik-koleksiyonlar-listet-ve-haritak-v)
+12. [JSON İşlemleri (`upp.json`)](#12-json-i̇şlemleri-uppjson)
+13. [Eşzamanlılık (`arkaplan` ve `Kilit`)](#13-eşzamanlılık-arkaplan-ve-kilit)
+14. [Çekirdek, Donanım ve İkili Tamponlar (`upp.cekirdek`, `upp.tampon`)](#14-çekirdek-donanım-ve-i̇kili-tamponlar-uppcekirdek-upptampon)
+15. [Derleme Hedefleri](#15-derleme-hedefleri)
+16. [Komut Satırı (`uppc`) ve `upp.proje`](#16-komut-satırı-uppc-ve-uppproje)
 
-### Sahipli sınıflar
-`metin` alanı (ya da sahipli sınıf alanı) taşıyan sınıflar için derleyici `T__birak` ve `T__kopya` üretir:
-- Değişkenden kopyalama referans artırır. Geçici değerler (kurucu, çağrı sonucu) taşınır.
-- Atama eski değeri bırakır. Parametreler girişte sahiplenilir, `don` taşıyarak döner.
-- Yerel değişkenler kapsam sonunda bırakılır.
+---
 
-### Görünümler: `&metin`, `&dilim[T]`
-Kopyasız, salt okunur ödünç bakışlardır: `fonk yaz(&metin v)`, `&dilim[sayi] d = dizi[1..4]`. Alanları `v.uzunluk` (metinde UTF-8 bayt sayısı) ve `v.veri` (yalnızca `&metin`). Görünüm döndürülemez, sınıf alanı ya da üst düzey değişken olamaz, `arkaplan` içine yakalanamaz.
+## 1. Bellek Modeli ve Dil Mekanizmaları
 
-### Koleksiyonlar
-`liste[T]` ve `harita[K,V]` değer türüdür: kopya O(1)'dir (referans artışı), yazma anında paylaşılan kopya ayrılır (copy-on-write). `M = L` sonrası `M.ekle(x)` `L`'yi değiştirmez; parametreye geçen liste çağıranınkini değiştirmez. Derleyici koleksiyonları da kapsam sonunda bırakır; `.bosalt()` yalnızca belleği erken geri vermek içindir ve koleksiyonu boş bırakır.
+### Metin Sahipliği (Yönetilen UTF-8 ve Otomatik Drop)
+- Her `metin` yönetilen bir nesnedir: verinin hemen önünde yer alan gizli başlıkta (`UppMetinBas`) atomik referans sayacı, bayt uzunluğu, kapasite, kod noktası sayısı ve tembel UTF-8 indeks tablosu bulunur. Metin verisinin kendisi NUL (`\0`) ile biten, C uyumlu bir `char*` işaretçisi olarak kalır.
+- **Kopyalama ve Büyütme:** Atama ve kopyalama işlemleri $O(1)$ sürede çalışır (yalnızca referans sayacı artırılır). `+=` operatörü tek sahipli metni yerinde büyütür; birden fazla değişken tarafından paylaşılan metinlerde ise yazma anında kopyalama (**Copy-on-Write / COW**) yapar.
+- **Otomatik Temizlik:** Derleyici; blok sonlarında, `dur` / `devam` ile döngüden çıkarken ve `don` ile fonksiyondan dönerken metin bırakma (`release`) kodunu otomatik olarak enjekte eder. Kullanıcı elle bellek boşaltmaz.
+- **Hızlı UTF-8 Erişimi:** `upp.uzunluk(s)` $O(1)$ sürede çalışır. ASCII metinlerde `s[i]` indekslemesi doğrudan $O(1)$'dir; ASCII dışı UTF-8 metinler ise kendi kod noktası tablosunu önbelleğe alır.
+- **Ölümsüz Sabitler:** Kaynak koddaki metin sabitleri (`"merhaba"`), başlığı derleme anında doldurulmuş ölümsüz nesnelerdir; çalışma anında `malloc` veya `free` tetiklemezler.
 
-Eleman türü işaretçi ve görünüm dışında her değer türü olabilir: sayısal türler, `metin`, `sinif`, `liste[...]`, `harita[...]`, `fonk(...)`. Harita anahtarı `metin` ya da `sayi` olur. `L[i][j] = x`, `K[0].ad += "!"`, `K[1].yaslan()` yerinde çalışır.
+### Sahipli Sınıflar
+İçinde `metin`, koleksiyon veya başka bir sahipli sınıf alanı barındıran sınıflar için derleyici otomatik olarak `T__birak` ve `T__kopya` yardımcıları üretir:
+- Bir değişkenden kopyalama yapıldığında iç alanların referans sayıları artırılır; geçici değerler (kurucu veya fonksiyon çağrısı sonuçları) kopyalanmadan taşınır (move).
+- Üzerine atama yapıldığında eski değer güvenle bırakılır. Fonksiyon parametreleri girişte sahiplenilir, `don` edilen değerler taşınarak dışarı aktarılır ve yerel sınıf değişkenleri kapsam sonunda otomatik olarak temizlenir.
 
-`JSONDeger` tutamaçtır, `upp.json.bosalt()` ile kapatılır.
+### Görünümler (`&metin` ve `&dilim[T]`)
+Bellek ayırmayan ve kopyalama yapmayan salt okunur ödünç bakışlardır (Fat Pointer / View):
+- Örnek: `fonk yaz_gorunum(&metin v)`, `&dilim[sayi] d = dizi[1..4];`
+- **Alanlar:** `v.uzunluk` (`&metin` için UTF-8 **bayt** sayısı; `&dilim[T]` için eleman sayısı) ve `v.veri` (yalnızca `&metin` üzerinde mevcuttur).
+- **Güvenlik Kuralları (Ömür Sarkması Koruması):** Görünüm türleri fonksiyondan `don` ile döndürülemez, `sinif` alanı olamaz, üst düzey (küresel) değişken olarak tanımlanamaz ve `arkaplan` blokları içine yakalanamaz.
 
-### Fonksiyon değerleri
-`fonk(P1, P2) -> R` bir türdür (`-> R` yazılmazsa `bos`). Üst düzey fonksiyonlar adlarıyla değer olur; değişkende, parametrede, dönüş değerinde, sınıf alanında ve koleksiyonda saklanabilir:
+<a id="koleksiyonlar"></a>
+### Koleksiyonlar (`liste[T]` ve `harita[K, V]`)
+`liste[T]` ve `harita[K, V]` **değer türüdür**:
+- Kopyalama işlemi $O(1)$'dir (referans artışı); koleksiyon üzerinde değişiklik yapıldığında paylaşılan gövde otomatik olarak ayrılır (**Copy-on-Write**). Örneğin `M = L;` atamasından sonra `M.ekle(x)` çağrılması `L`'yi etkilemez; bir fonksiyona parametre olarak verilen liste çağıranın listesini değiştirmez.
+- Derleyici yerel koleksiyonları kapsam sonunda otomatik olarak bırakır. `.bosalt()` metodu yalnızca belleği kapsam bitmeden erken geri vermek içindir ve koleksiyonu boş durumda bırakır.
+- **Desteklenen Eleman Türleri:** İşaretçi ve görünüm türleri dışında her değer türü koleksiyon elemanı olabilir (`sayi`, `ondalik`, `mantik`, `metin`, `sinif`, iç içe `liste[...]`, `harita[...]`, `fonk(...)`, `beklenen[...]`). Harita anahtarları `metin` veya `sayi` olabilir.
+- **Yerinde Değiştirme:** `L[i][j] = x`, `K[0].ad += "!"` ve `K[1].yaslan()` gibi zincirleme indeks ve metot çağrıları doğrudan yerinde (in-place) çalışır.
+- `JSONDeger` bir tutamaçtır (handle); işi bittiğinde `upp.json.bosalt(kok)` ile kapatılır.
+
+### Fonksiyon Değerleri (`fonk(P...) -> R`)
+`fonk(P1, P2) -> R` birinci sınıf bir türdür (`-> R` kısmı yazılmazsa dönüş türü `bos` kabul edilir). Üst düzey fonksiyonlar adlarıyla değer olarak alınabilir; değişkende, parametrede, dönüş değerinde, sınıf alanında ve koleksiyon içinde saklanabilir:
 
 ```upp
 fonk ikiye(sayi x) -> sayi => x * 2;
@@ -40,310 +68,492 @@ fonk uygula(fonk(sayi) -> sayi f, sayi x) -> sayi => f(x);
 
 fonk(sayi) -> sayi f = ikiye;
 upp.satir_yaz("{uygula(f, 5)}");
+
 harita[metin, fonk(sayi, sayi) -> sayi] komutlar;
 komutlar.koy("carp", fonk(sayi a, sayi b) -> sayi => a * b);
 upp.satir_yaz("{komutlar.al(\"carp\")(3, 4)}");
 ```
 
-- Anonim fonksiyon: `fonk(sayi x) -> sayi => x * 2` ya da `fonk(...) -> T { ... }`. Yakalama yoktur; dış yerel değişkene erişmek derleme hatasıdır, değeri parametreyle geçin.
-- Atanmamış fonksiyon değeri `yok`'tur. `f == yok` ile denetlenir; `yok` çağrılırsa program açık bir panikle durur.
-- İmzalar birebir eşleşmelidir. Fonksiyon değerleriyle yalnızca `==` ve `!=` kullanılır. Metotlar ve `ana` değer olarak alınamaz.
-- C karşılığı düz fonksiyon işaretçisidir; serbest ve çekirdek hedeflerinde de çalışır (kesme/komut işleyici tabloları).
+- **Anonim Fonksiyonlar:** `fonk(sayi x) -> sayi => x * 2` (kısa ifade gövdeli) veya `fonk(...) -> T { ... }` (blok gövdeli) olarak yazılır. Dış yerel değişkenleri yakalama (closure capture) yoktur; dış kapsamdaki bir yerel değişkene erişmek derleme hatası verir (değerleri parametre olarak geçirin).
+- **Boş Değer (`yok`):** İlk değer atanmamış fonksiyon değişkeni `yok` değerindedir. `f == yok` ile denetlenebilir; değeri `yok` olan bir fonksiyon çağrılırsa program açık bir panik mesajıyla durur.
+- **Kısıtlar ve Hedef Uyumu:** İmzalar birebir eşleşmelidir. Fonksiyon değerleriyle yalnızca `==` ve `!=` karşılaştırmaları yapılabilir. Sınıf metotları ve `ana` fonksiyonu değer olarak alınamaz. C karşılığı düz fonksiyon işaretçisi olduğundan `--hedef serbest` ve `--hedef cekirdek` hedeflerinde de sıfır maliyetle çalışır.
 
-### Hata yönetimi: `beklenen`, `?`, `ertele`
-`beklenen[T, H]` ya bir `T` değeri ya da bir `H` hatası taşır; `beklenen[T]`, `beklenen[T, metin]` kısaltmasıdır. C'de bir bayrak ve birlikten (`union`) oluşan düz bir yapıdır: değer olarak döner, gizli bellek ayırma yoktur. Hata türü `secenek` ise heap'e hiç dokunulmaz.
+### Hata Yönetimi (`beklenen`, `?`, `ertele` ve `hata_ertele`)
+`beklenen[T, H]` türü ya başarılı bir `T` değeri ya da `H` türünde bir hata taşır (`beklenen[T]` yazımı `beklenen[T, metin]` için kısaltmadır). C tarafında bir etiket bayrağı ve `union` yapısına dönüşür; değer olarak döndürülür ve gizli bellek ayırması (`malloc`) yapmaz. Hata türü bir `secenek` olduğunda yığın belleğe (heap) hiç dokunulmaz.
 
 ```upp
 secenek DiskHata { YOK, BOZUK, DOLU }
 
 fonk sektor(sayi no) -> beklenen[sayi, DiskHata] {
     eger (no > 100) { don hata(DiskHata.DOLU); }
-    don no * 512;                     // T değeri: başarı
+    don no * 512;                     // Doğrudan T değeri döndürmek başarıdır
 }
 
 fonk iki_sektor(sayi a, sayi b) -> beklenen[sayi, DiskHata] {
-    sayi x = sektor(a)?;              // hata ise temizleyip aynı hatayı döndürür
+    sayi x = sektor(a)?;              // Hata varsa yerel kapsamı temizler ve hatayı yukarı döndürür
     sayi y = sektor(b)?;
     don x + y;
 }
 ```
 
-- **Kurma:** `beklenen` dönen fonksiyonda `don x;` başarı, `don hata(e);` hata döndürür. Aynısı ilk değer, atama ve argümanda da geçerlidir: `beklenen[sayi] r = 5;`, `r = hata("x");`. İlk değeri olmayan değişken başarı + sıfır değerdir.
-- **`beklenen[bos, H]`:** değer taşımaz; `don;` ya da fonksiyonun sonuna gelmek başarıdır.
-- **Metotlar:** `tamam_mi()`, `hata_mi()`, `deger()` (hata varsa panik; `H` metinse mesajı yazar), `hata()` (hata yoksa panik), `deger_yoksa(v)`.
-- **`e?`:** yalnızca `beklenen` dönen ve aynı `H` türünü kullanan fonksiyonda yazılır. Döngü koşulunda, `&&`/`||` sağ tarafında ve `?:` dallarında kullanılamaz.
-- **Yok sayma yasak:** `f();` biçiminde atılan `beklenen` sonucu derleme hatasıdır; `?` ile yayın ya da denetleyin.
-- **Kısıtlar:** `beklenen` sınıf alanı olamaz, `arkaplan` içine yakalanamaz, üst düzey değişkeni ilk değer almaz. `hata(...)` `oto` ile kullanılamaz.
+- **Oluşturma ve Dönüş:** `beklenen` döndüren bir fonksiyonda `don x;` başarılı değer, `don hata(e);` ise hata döndürür. Aynı kural değişken başlatmada, atamada ve fonksiyon argümanlarında da geçerlidir (`beklenen[sayi] r = 5;`, `r = hata("x");`). İlk değer verilmeyen `beklenen` değişkeni başarılı sıfır değerle başlar.
+- **`beklenen[bos, H]`:** Başarı durumunda veri taşımaz; `don;` yazmak veya fonksiyonun sonuna ulaşmak başarı sayılır.
+- **Metotlar:**
+  - `r.tamam_mi() -> mantik`: Başarılı değer taşıyorsa `dogru`.
+  - `r.hata_mi() -> mantik`: Hata taşıyorsa `dogru`.
+  - `r.deger() -> T`: Başarılı değeri döndürür; hata varsa panik verir (`H` türü `metin` ise hata mesajını da yazar).
+  - `r.hata() -> H`: Hata değerini döndürür; hata yoksa panik verir.
+  - `r.deger_yoksa(varsayilan) -> T`: Başarılıysa değeri, hatalıysa `varsayilan` değerini döndürür.
+- **`e?` (Hata Yayma Operatörü):** Yalnızca `beklenen` döndüren ve aynı `H` hata türünü kullanan fonksiyonların içinde kullanılabilir. Döngü koşulunda, `&&` / `||` operatörlerinin sağ tarafında ve `?:` üçlü ifadelerinin dallarında kullanılamaz.
+- **Sonucu Yok Sayma Yasağı:** `beklenen` döndüren bir çağrının sonucunu `f();` şeklinde kullanmadan atmak derleme hatasıdır; sonucu `?` ile yayın veya bir değişkene alıp denetleyin.
+- **Kısıtlar:** `beklenen` sınıf alanı olamaz, `arkaplan` içine yakalanamaz ve üst düzey (küresel) değişkende başlatıcı alamaz. `hata(...)` ifadesi doğrudan `oto` ile kullanılamaz (başarı türü belli olmadığı için).
 
-`ertele` gövdesi bulunduğu kapsamdan her çıkışta (blok sonu, `dur`, `devam`, `don`, `?`) ters sırayla çalışır. `hata_ertele` yalnızca fonksiyon hata döndürürken çalışır (`don hata(...)`, `?`, ya da çalışma anında hata taşıyan bir `beklenen` döndürülürken). Gövde `ertele ifade;` ya da `ertele { ... }` olabilir; içinden `don`, `?` ya da dışarıya `dur`/`devam` ile çıkılamaz. Dönüş değeri `ertele` çalışmadan önce hesaplanır.
+#### `ertele` ve `hata_ertele`
+- **`ertele`:** Bulunduğu kapsamdan **nasıl çıkılırsa çıkılsın** (normal blok sonu, `dur`, `devam`, `don`, `?`) kayıt sırasının tersiyle (LIFO) çalıştırılır.
+- **`hata_ertele`:** Yalnızca fonksiyondan **hata ile çıkılırken** (`don hata(...)`, `?` ile erken çıkış veya çalışma anında hata taşıyan bir `beklenen` değişkeni `don r;` ile döndürülürken) çalıştırılır.
+- Her ikisi de `ertele ifade;` veya `ertele { ... }` biçiminde yazılabilir. İçlerinden `don`, `?` veya dış döngüye `dur`/`devam` ile çıkılamaz. Fonksiyonun dönüş değeri, `ertele` blokları çalışmadan önce hesaplanır.
 
 ```upp
 fonk ac(metin ad) -> beklenen[Dosya] {
     oto d = dosya_ac(ad)?;
-    hata_ertele d.kapat();            // yalnızca aşağıdaki adımlardan biri başarısız olursa
+    hata_ertele d.kapat();            // Yalnızca aşağıdaki adımlardan biri hata verirse çalışır
     baslik_oku(d)?;
     don d;
 }
 ```
 
-### Tamsayı bölme
-`/` ve `%` sıfıra bölmede ve `EN_KUCUK / -1` taşmasında açık panik verir (çekirdekte de). Sabit bölen sıfırsa derleme hatasıdır.
+### Güvenli Tamsayı Bölme
+`/` ve `%` işlemleri sıfıra bölmede ve `EN_KUCUK / -1` (`LLONG_MIN / -1`) taşmasında tanımsız davranışa (UB) girmek yerine açık panik verir (çekirdek hedefi dahil). Bölen derleme anında sabit `0` ise derleme hatası üretilir.
 
-### `guvensiz`
-Şunlar yalnızca `guvensiz { }` içinde serbesttir: işaretçiler (`*`, `&`), `bellek_ayir` / `bellek_bosalt`, `c_kod { }`, süreç belleği erişimi ve donanım erişimi (`upp.cekirdek.*`). `c_kod` ile bir `metin` değişkenine ham C işaretçisi yazılırsa runtime onu asla serbest bırakmaz. Yönetilen değer yazmak için `upp_metin_ata(&s, UPP_LIT("..."))` kullanın.
+### `guvensiz` Blokları
+Aşağıdaki işlemler yalnızca açıkça `guvensiz { ... }` bloğu içinde yapılabilir:
+- Ham işaretçi türleri ve işlemleri (`*`, `&`) ile işaretçi tür dönüşümleri (`(u16*)0xB8000`),
+- `bellek_ayir` / `bellek_bosalt` ve gömülü `c_kod { ... }` blokları,
+- Harici süreç belleği erişimleri (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`),
+- Doğrudan donanım port ve MMIO erişimleri (`upp.cekirdek.port_*`, `bellek_*`, `dur`, `kesme_ac/kapat`, `yigin_kur`).
 
----
-
-## 2. Türler
-
-| Tür | C karşılığı | Açıklama |
-|---|---|---|
-| `sayi` / `s64` | `long long` | İşaretli 64 bit; soneksiz tamsayı sabitinin türü |
-| `u64` / `usayi` | `unsigned long long` | İşaretsiz 64 bit (`5u64`) |
-| `s32` / `u32`, `s16` / `u16` | `int32_t`… | Dar tamsayılar (`7u32`) |
-| `bayt` / `s8`, `ubayt` / `u8` | `int8_t` / `uint8_t` | 8 bit; sabit taşması derleme hatası |
-| `ondalik` | `double` | IEEE 754 |
-| `metin` | `char*` (yönetilen) | UTF-8 |
-| `mantik` | `bool` | `dogru` / `yanlis` |
-| `bos` | `void` | Değer döndürmeyen fonksiyon |
-| `dizi[T, N]` | C dizisi | `sayi a[] = [1, 2]`, sınır denetimli |
-| `liste[T]`, `harita[K,V]` | değer (refcount + COW) | Dinamik koleksiyon |
-| `fonk(P...) -> R` | fonksiyon işaretçisi | Fonksiyon değeri, `yok` olabilir |
-| `beklenen[T, H]`, `beklenen[T]` | yapı (bayrak + union) | Değer ya da hata; `?` ile yayılır |
-| `&metin`, `&dilim[T]` | görünüm | Kopyasız bakış |
-| `sinif`, `secenek` | `struct`, `enum` | Kullanıcı türleri |
-
-### Tür dönüşümü `(T)x` ve `boyut(T)`
-C ile aynı yazım: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.9;` (3), `Renk r = (Renk)2;`.
-
-- Sayısal türler, `mantik` ve `secenek` arasında serbesttir. Tamsayı daraltma C gibi keser (`(ubayt)300` = 44).
-- `ondalik` → tamsayı: sonuç hedef aralığa sığmıyorsa ya da değer NaN ise açık panik verir (C'de belirsiz davranıştır).
-- İşaretçi ↔ işaretçi, işaretçi ↔ tamsayı ve fonksiyon değeri ↔ işaretçi/tamsayı dönüşümleri yalnızca `guvensiz` içinde: `u16* vga = (u16*)0xB8000;`.
-- `metin`, sınıf, koleksiyon ve dizi dönüştürülemez.
-
-`boyut(T)` türün bayt boyutunu `sayi` olarak verir (C `sizeof`); `boyut(degisken)` değişkenin boyutunu verir (dizide tüm dizi). Derleme anı sabitidir, `sabit` ifadelerinde kullanılabilir.
+> [!TIP]
+> `c_kod` bloğu içinden bir `metin` değişkenine ham C işaretçisi atanırsa, önünde `UPP_METIN_SIHIR` başlığı bulunmadığı için çalışma zamanı bu işaretçiyi asla `free` etmez. C içinden yönetilen bir metin atamak için `upp_metin_ata(&s, UPP_LIT("..."))` kullanabilirsiniz.
 
 ---
 
-## 3. İnterpolasyon ve Çıktı
+## 2. Tür Sistemi, Dönüşümler ve `boyut(T)`
 
-- `"... {ifade} ..."`: `{` hemen ardından harf, `_` ya da `(` gelirse tam ifade başlar: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`. Ayrıştırılamayan ifade hata verir.
-- `{{` ve `}}` her metinde `{` ve `}` anlamına gelir. `{` ardından boşluk ya da rakam gelirse olduğu gibi kalır.
-- Metin kaçışları: `\n \t \r \\ \" \e` (ESC), `\xHH` (bayt) ve `\uHHHH` (Unicode kod noktası, ör. `\u00e7` = ç). Bilinmeyen bir kaçış (ör. `\q`) derleme hatasıdır.
-- Yazdırılabilir türler: tamsayılar, `ondalik`, `mantik`, `metin`, `&metin`, `secenek`.
+| Tür | C Karşılığı | Açıklama |
+| :--- | :--- | :--- |
+| `sayi` / `s64` | `long long` | İşaretli 64 bit tamsayı (soneksiz tamsayı sabitlerinin varsayılan türü) |
+| `u64` / `usayi` | `unsigned long long` | İşaretsiz 64 bit tamsayı (ör. `5u64`) |
+| `s32` / `u32`, `s16` / `u16` | `int32_t`, `uint32_t`, `int16_t`, `uint16_t` | Sabit genişlikli dar tamsayılar (ör. `7u32`, `100u16`) |
+| `bayt` / `s8`, `ubayt` / `u8` | `int8_t` / `uint8_t` | İşaretli (`-128..127`) ve işaretsiz (`0..255`) 8 bit tamsayı |
+| `ondalik` | `double` | Çift duyarlıklı (64 bit IEEE 754) kayan noktalı sayı |
+| `metin` | `char*` (yönetilen başlık) | Atomik referans sayılı, COW destekli UTF-8 metin |
+| `mantik` | `bool` | Mantıksal değer (`dogru` / `yanlis`) |
+| `bos` | `void` | Değer döndürmeyen fonksiyon dönüş türü |
+| `dizi[T, N]` | C dizisi (`T[N]`) | Yığında (stack) yaşayan, çalışma anı sınır denetimli sabit dizi (`sayi a[] = [1, 2];`) |
+| `liste[T]`, `harita[K, V]` | `UppKolListe`, `UppKolHarita` | Değer semantikli (refcount + COW) dinamik koleksiyonlar |
+| `fonk(P...) -> R` | Fonksiyon işaretçisi | Birinci sınıf fonksiyon değeri (`yok` olabilir) |
+| `beklenen[T, H]`, `beklenen[T]` | Etiketli `struct` + `union` | Değer veya hata taşıyan sonuç türü (`?` ile yayılır) |
+| `&metin`, `&dilim[T]` | `upp_ref_metin`, `upp_ref_dilim_*` | Kopyasız ve sıfır ayırmalı salt okunur görünümler |
+| `sinif`, `secenek` | `struct`, `enum` | Kullanıcı tanımlı yapı ve numaralandırma türleri |
+
+### Açık Tür Dönüşümü `(T)x` ve `boyut(T)`
+C dilindeki dönüşüm sözdizimiyle yazılır:
+```upp
+ubayt b = (ubayt)x;
+u16 p = (u16)70000;
+sayi n = (sayi)3.9;      // 3
+Renk r = (Renk)2;
+```
+- **Sayısal / Mantıksal / Seçenek Dönüşümleri:** Sayısal türler, `mantik` ve `secenek` arasında güvenli kodda serbesttir. Tamsayı daraltmaları C gibi alt bitleri koruyarak keser (`(ubayt)300 == 44`).
+- **`ondalik` $\rightarrow$ Tamsayı Güvenliği:** Kayan noktalı sayı hedef tamsayı türünün aralığına sığmıyorsa veya `NaN` ise (C'deki tanımsız davranış yerine) çalışma zamanında açık panik verir.
+- **İşaretçi Dönüşümleri (`guvensiz`):** İşaretçi $\leftrightarrow$ işaretçi, işaretçi $\leftrightarrow$ tamsayı ve fonksiyon değeri $\leftrightarrow$ işaretçi/tamsayı dönüşümleri yalnızca `guvensiz` bloğu içinde yapılabilir: `u16* vga = (u16*)0xB8000;`.
+- `metin`, `sinif`, `liste`, `harita`, `beklenen` ve `dizi` türleri `(T)x` ile dönüştürülemez.
+- **`boyut(T)` ve `boyut(degisken)`:** Bir türün veya değişkenin bellekte kapladığı bayt sayısını `sayi` olarak döndürür (C `sizeof` karşılığı; sabit dizilerde tüm dizinin bayt boyutunu verir). Derleme anı sabitidir ve üst düzey `sabit` ifadelerinde kullanılabilir.
+
+---
+
+## 3. Metin İnterpolasyonu ve Standart Çıktı/Girdi
+
+- **İfade İnterpolasyonu (`"... {ifade} ..."`):** Metin sabiti içinde `{` karakterinden hemen sonra bir harf, `_` veya `(` gelirse derleyici içeriği tam bir `u++` ifadesi olarak ayrıştırır: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`. Hatalı ifadeler derleme anında yakalanır.
+- **Kaçış Dizileri:**
+  - Metin içinde düz süslü parantez yazmak için `{{` ve `}}` kullanılır (`{` sonrasında boşluk veya rakam varsa kaçışa gerek olmadan düz metin sayılır).
+  - Standart kaçışlar: `\n`, `\t`, `\r`, `\\`, `\"`, `\e` (ESC - `0x1B`), `\xHH` (onaltılık bayt) ve `\uHHHH` (4 basamaklı Unicode kod noktası, ör. `\u00e7` $\rightarrow$ `ç`). Tanımsız kaçış dizileri derleme hatası verir.
+- **Yazdırılabilir Türler:** Tüm tamsayı türleri, `ondalik`, `mantik`, `metin`, `&metin` ve `secenek` doğrudan `upp.yaz` / `upp.satir_yaz` fonksiyonlarına verilebilir.
 
 | Fonksiyon | İmza | Açıklama |
-|---|---|---|
-| `upp.yaz(x)`, `upp.satir_yaz(x)` | `(yazdırılabilir) -> bos` | stdout (serbest hedefte seri port + VGA); `upp.satir_yaz(42)` geçerli |
-| `upp.hata_yaz(x)`, `upp.hata_satir_yaz(x)` | `(yazdırılabilir) -> bos` | stderr |
-| `upp.giris()` | `() -> metin` | stdin'den bir satır (çekirdekte klavye/seri port) |
+| :--- | :--- | :--- |
+| `upp.yaz(x)` | `(yazdırılabilir) -> bos` | Değeri satır sonu eklemeden standart çıktıya (çekirdekte COM1 + ekran konsoluna) yazar |
+| `upp.satir_yaz(x)` | `(yazdırılabilir) -> bos` | Değeri yazıp sonuna yeni satır (`\n`) ekler (`upp.satir_yaz(42)` geçerlidir) |
+| `upp.hata_yaz(x)` | `(yazdırılabilir) -> bos` | Değeri satır sonu eklemeden standart hata akışına (`stderr`) yazar |
+| `upp.hata_satir_yaz(x)` | `(yazdırılabilir) -> bos` | Değeri standart hata akışına (`stderr`) satır sonuyla birlikte yazar |
+| `upp.giris()` | `() -> metin` | Standart girdiden (çekirdekte PS/2 klavye veya seri porttan) bir satır okur |
 
-Bu fonksiyonlar en fazla bir argüman alır, birden çok değer için interpolasyon kullanılır. printf biçim dizgeleri yoktur.
-
----
-
-## 4. Genel (`upp.*`)
-
-| Fonksiyon | İmza | Not |
-|---|---|---|
-| `upp.uzunluk(x)` | `metin / dizi / liste / harita / görünüm -> sayi` | |
-| `upp.metinden_sayiya(s)` | `(metin) -> sayi` | |
-| `upp.sayidan_metin(n)` | `(sayi) -> metin` | |
-| `upp.ondalikdan_metin(d)` | `(ondalik) -> metin` | 17 anlamlı basamak |
-| `upp.metinden_ondalik(s)` | `(metin) -> ondalik` | barındırılan |
-| `upp.min`, `upp.max`, `upp.mutlak` | `sayi` | |
-| `upp.zaman()` | `() -> sayi` | ms, monotonik (çekirdekte de var) |
-| `upp.uyut(ms)` | `(sayi) -> bos` | çekirdekte de var |
-| `upp.rastgele(a, b)` | `(sayi, sayi) -> sayi` | `[a, b]` |
-| `upp.platform()` | `() -> metin` | `"windows"` / `"linux"` |
-| `upp.arguman_sayisi()`, `upp.arguman(i)` | | Komut satırı |
-| `upp.mesaj`, `upp.hata`, `upp.ses_cal` | | Windows'ta iletişim kutusu/ses |
-
-Bu bölümdeki her şey, `uzunluk`/`min`/`max`/`mutlak`/`sayidan_metin`/`metinden_sayiya`/`ondalikdan_metin` dışında, barındırılandır.
-
-**Kaldırılanlar** (yerine ne yazılacağını söyleyen derleme hatası verir):
-- `upp.metin_bosalt`.
-- Düz dosya adları `upp.dosya_oku/yaz/ekle/var_mi/sil/boyut` → `upp.dosya.*`.
-- `upp.ortam_al/yaz` → `upp.sistem.*`.
-- `upp.metin.icinde` → `upp.metin.bul`.
-- `upp.yol.klasor_olustur` → `upp.yol.dizin_olustur`.
-- `upp.matematik.sin/cos/tan` → `sinus/kosinus/tanjant`.
-- `upp.json.dizi_eleman` → `upp.json.indeks_al`.
-- `upp.bellek.*`, `upp.girdi.*`, `upp.cizim.*` kısayolları → `upp.windows.*`.
+> [!IMPORTANT]
+> Çıktı fonksiyonları tek bir argüman alır (`printf` tarzı çoklu argüman veya `%d` biçim dizgeleri kullanılmaz). Birden fazla değeri birleştirmek için metin interpolasyonu (`"{a} ve {b}"`) kullanılır.
 
 ---
 
-## 5. `upp.metin`
+## 4. Genel Yerleşikler (`upp.*`)
 
-| Fonksiyon | İmza |
-|---|---|
-| `kes(s, bas, adet)` | `(metin, sayi, sayi) -> metin`; kod noktası cinsinden başlangıç ve adet |
-| `buyuk(s)`, `kucuk(s)` | Türkçe kurallı: i↔İ, ı↔I |
-| `kirp(s)` | Baştaki ve sondaki boşluk |
-| `baslar(s, on)`, `biter(s, son)` | `-> mantik` |
-| `bul(s, aranan)` | `-> sayi`; kod noktası indeksi, yoksa -1 |
-| `degistir(s, eski, yeni)` | `-> metin` |
-| `bol(s, ayirac)` | `-> liste[metin]` |
-| `birlestir(liste, ayirac)` | `(liste[metin], metin) -> metin` |
-| `kod(s, i)`, `ileri(s, i)` | Kod noktası değeri / bayt uzunluğu |
-| `hex_coz(h)`, `hex_kodla(s)` | Onaltılık ↔ bayt |
-| `karakter(kod)` | `sayi -> metin`: kod noktasından tek karakterlik metin (geçersizse boş) |
-| `tekrar(s, n)` | `(metin, sayi) -> metin`: `s`'yi `n` kez yan yana yazar |
+| Fonksiyon | İmza | Hedef | Açıklama |
+| :--- | :--- | :---: | :--- |
+| `upp.uzunluk(x)` | `(metin \| dizi \| liste \| harita \| görünüm) -> sayi` | Tümü | Metinlerde UTF-8 karakter (kod noktası) sayısını, koleksiyon ve dizilerde eleman sayısını, `&metin`'de kod noktası sayısını döndürür |
+| `upp.metinden_sayiya(s)` | `(metin) -> sayi` | Tümü | Metni işaretli 64 bit tamsayıya çevirir |
+| `upp.sayidan_metin(n)` | `(sayi) -> metin` | Tümü | Tamsayıyı metne çevirir |
+| `upp.ondalikdan_metin(d)` | `(ondalik) -> metin` | Tümü | Kayan noktalı sayıyı 17 anlamlı basamak hassasiyetiyle metne çevirir |
+| `upp.metinden_ondalik(s)` | `(metin) -> ondalik` | Barındırılan | Metni kayan noktalı sayıya (`ondalik`) çevirir |
+| `upp.min(a, b)` | `(sayi, sayi) -> sayi` | Tümü | İki tamsayıdan küçük olanı döndürür |
+| `upp.max(a, b)` | `(sayi, sayi) -> sayi` | Tümü | İki tamsayıdan büyük olanı döndürür |
+| `upp.mutlak(x)` | `(sayi) -> sayi` | Tümü | Tamsayının mutlak değerini döndürür (`LLONG_MIN` taşmasına karşı korumalıdır) |
+| `upp.zaman()` | `() -> sayi` | Tümü | Milisaniye cinsinden monotonik zaman sayacı (çekirdekte PIT üzerinden çalışır) |
+| `upp.uyut(ms)` | `(sayi) -> bos` | Tümü | Geçerli iş parçacığını veya çekirdek görevini `ms` milisaniye bekletir |
+| `upp.rastgele(alt, ust)` | `(sayi, sayi) -> sayi` | Barındırılan | `[alt, ust]` kapalı aralığında rastgele tamsayı üretir |
+| `upp.platform()` | `() -> metin` | Barındırılan | Çalışılan işletim sistemini (`"windows"` veya `"linux"`) döndürür |
+| `upp.arguman_sayisi()` | `() -> sayi` | Barındırılan | Komut satırı argümanlarının sayısını (`argc`) döndürür |
+| `upp.arguman(i)` | `(sayi) -> metin` | Barındırılan | `i`. komut satırı argümanını (`argv[i]`) döndürür |
+| `upp.mesaj(baslik, icerik)` | `(metin, metin) -> bos` | Barındırılan | Bilgi penceresi gösterir (Windows'ta `MessageBox`, Linux'ta konsol çıktısı) |
+| `upp.hata(baslik, icerik)` | `(metin, metin) -> bos` | Barındırılan | Hata penceresi/mesajı gösterir |
+| `upp.ses_cal(yol)` | `(metin) -> mantik` | Barındırılan | `.wav` ses dosyasını çalar |
 
-## 6. `upp.dosya` (barındırılan)
+<details>
+<summary><strong>⚠️ Kaldırılan Eski API Adları ve Yeni Karşılıkları</strong></summary>
 
-- `oku(yol) -> metin`
-- `yaz(yol, icerik) -> mantik`, `ekle(yol, icerik) -> mantik`
-- `var_mi(yol) -> mantik`, `sil(yol) -> mantik`
-- `boyut(yol) -> sayi` (yoksa -1)
-- `listele(dizin) -> liste[metin]`
+Aşağıdaki eski adlar `v3.1 beta` ile kaldırılmıştır; kullanıldıklarında derleyici doğrudan yeni adını öneren bir hata mesajı üretir:
+- `upp.metin_bosalt` $\rightarrow$ Kaldırıldı (metinler kapsam sonunda otomatik bırakılır).
+- `upp.dosya_oku / yaz / ekle / var_mi / sil / boyut` $\rightarrow$ `upp.dosya.oku`, `upp.dosya.yaz`, ...
+- `upp.ortam_al / ortam_yaz` $\rightarrow$ `upp.sistem.ortam_al`, `upp.sistem.ortam_yaz`
+- `upp.metin.icinde` $\rightarrow$ `upp.metin.bul` (`>= 0` kontrolü ile)
+- `upp.yol.klasor_olustur` $\rightarrow$ `upp.yol.dizin_olustur`
+- `upp.matematik.sin / cos / tan` $\rightarrow$ `upp.matematik.sinus / kosinus / tanjant`
+- `upp.json.dizi_eleman` $\rightarrow$ `upp.json.indeks_al`
+- `upp.bellek.*`, `upp.girdi.*`, `upp.cizim.*` $\rightarrow$ `upp.windows.bellek.*`, `upp.windows.girdi.*`, `upp.windows.cizim.*`
+</details>
 
-## 7. `upp.yol` (barındırılan)
+---
 
-- `birlestir(a, b)`, `dizin(yol)`, `dosya_adi(yol)`, `uzanti(yol)` (`".txt"`)
-- `mutlak_mi(yol)`, `gercek(yol)`, `calisma()`
-- `dizin_var_mi(yol)`, `dizin_olustur(yol)` (iç içe oluşturur)
+## 5. Metin ve UTF-8 İşlemleri (`upp.metin`)
 
-## 8. `upp.sistem` ve `upp.stdio` (barındırılan)
+Tüm `upp.metin.*` fonksiyonları `libc`'den bağımsızdır; hem barındırılan hedeflerde hem de `--hedef serbest` / `--hedef cekirdek` altında çalışır.
 
 | Fonksiyon | İmza | Açıklama |
-|---|---|---|
-| `sistem.calistir(komut)` | `-> SurecCikti { kod, cikti, basarili }` | stdout ve stderr'i yakalar |
-| `sistem.kos(komut)` | `-> sayi` | Konsolu devralır (etkileşimli); çıkış kodunu döner |
-| `sistem.komut_bul(ad)` | `-> metin` | PATH'te arar |
-| `sistem.exe_dizin()`, `sistem.pid()` | | |
-| `sistem.ortam_al(ad)`, `sistem.ortam_yaz(ad, deger)` | | Ortam değişkeni |
-| `sistem.cikis(kod)` | `-> bos` | Süreci sonlandırır |
-| `stdio.gelen_oku()`, `stdio.yaz(json)` | | LSP `Content-Length` çerçeveleme |
-
-## 9. Platform API'leri
-
-- **`upp.linux.*`** (yalnızca `--hedef linux`): `pid()`, `sinyal_gonder(pid, sinyal)`, `proc_oku(pid, dosya)`. `guvensiz` içinde: `sayi_oku(pid, adres)`, `sayi_yaz(pid, adres, deger)`.
-- **`upp.windows.*`** (yalnızca Windows):
-  - `mesaj`, `hata`, `ses_cal`
-  - `girdi.fare_tasi(x, y)`, `girdi.fare_tikla()`, `girdi.tus_bas(tus)`
-  - `cizim.baslat(pencere)`, `cizim.temizle()`, `cizim.kutu(x, y, g, y, renk)`, `cizim.yazi(x, y, metin, renk)`
-- **`upp.windows.bellek.*`** (`guvensiz`):
-  - `baglan(surec) -> sayi`, `modul_bul(dll) -> sayi`
-  - `sayioku(adres)`, `sayiyaz(adres, deger)`, `oku_ondalik`, `yaz_ondalik`, `oku_metin(adres, uzunluk)`
-  - `zincir_oku(taban, [ofsetler])`, `yama_yap(adres, hex)`, `koruma_degistir(adres, boyut, izin)`
-  - `son_hata()`, `okundu()`
-
-## 10. `upp.matematik`
-
-- `karekok`, `us(a, b)`, `sinus`, `kosinus`, `tanjant`, `atan2(y, x)` → `ondalik`
-- `taban`, `tavan`, `yuvarla` → `sayi`
-- `mutlak`, `sinirla(x, a, b)`, `yumusat(a, b, t)`, `pi()`, `e()` (serbest hedefte de var)
-- `mesafe(Vektor3, Vektor3)`, `mesafe_3d(...)`, `aci_hesapla(...) -> Yonelme`, `dunya_ekran(...) -> EkranNokta`
-
-## 11. `liste[T]` ve `harita[K,V]`
-
-- **`liste`**: `ekle(x)`, `al(i)`, `yaz(i, x)`, `sil(i)`, `temizle()`, `uzunluk()`, `bosalt()`. `L[i]` okur ve yazar (sınır denetimli), `L[a..b]` (sayi/ondalik) dilim verir. `her (oto x in L)` elemanları gezer.
-- **`harita`**: `koy(k, v)`, `al(k)` (anahtar yoksa türün sıfır değeri), `var_mi(k)`, `sil(k)`, `temizle()`, `uzunluk()`, `anahtarlar()` (eklenme sırasıyla), `bosalt()`. `her (oto k in h)` anahtarları eklenme sırasıyla gezer.
-- Eleman ve anahtar türleri için bkz. [Koleksiyonlar](#koleksiyonlar).
-
-## 12. `upp.json` (barındırılan)
-
-- Ayrıştırma ve yazma: `ayristir(metin) -> JSONDeger`, `olustur(d) -> metin`
-- Sorgu: `tur(d)` (`"nesne"`, `"dizi"`, `"metin"`, `"sayi"`, `"mantik"`, `"bosluk"`), `anahtar_al(d, k)`, `indeks_al(d, i)`, `anahtarlar(d)`, `uzunluk(d)`, `var_mi(d)`
-- Değer alma: `metin_al`, `sayi_al`, `ondalik_al`, `mantik_al`
-- Kurma: `nesne()`, `dizi()`, `metin_yap`, `sayi_yap`, `ondalik_yap`, `mantik_yap`, `yok_yap`, `koy(nesne, k, d)`, `ekle(dizi, d)`
-- `bosalt(kok)`
-
-## 13. `arkaplan` ve `Kilit` (barındırılan)
-
-`oto is = arkaplan { ... }; is.bekle();` biçiminde kullanılır. `metin` ve sayısal değerler iş parçacığına derin kopya olarak aktarılır. Koleksiyonlar, `JSONDeger` ve görünümler yakalanamaz. Kilit kullanımı: `Kilit k; k.kilitle(); ... k.birak();`
-
-## 14. `upp.cekirdek` — donanım (yalnızca `--hedef serbest|cekirdek`)
-
-Donanıma doğrudan dokunan satırlar `guvensiz` ister:
-
-| Fonksiyon (`guvensiz`) | Açıklama |
-|---|---|
-| `port_yaz8/16/32(port, deger)`, `port_oku8/16/32(port) -> sayi` | x86 G/Ç portları |
-| `bellek_yaz8/16/32/64(adres, deger)`, `bellek_oku8/16/32/64(adres) -> sayi` | volatile MMIO |
-| `dur()`, `kesme_kapat()`, `kesme_ac()` | `hlt`, `cli`, `sti` |
-| `yigin_kur(adres, boyut)` | Metin/koleksiyon ayırıcısına bellek bölgesi verir |
-
-Geri kalanı güvenli koddan çağrılır:
-
-| Fonksiyon | Açıklama |
-|---|---|
-| `kesmeler_kur()` | IDT, PIC ve 1000 Hz PIT'i kurar (açılışta kendiliğinden çağrılır) |
-| `tik() -> sayi` | Açılıştan beri zamanlayıcı tıkı (1 ms) |
-| `tus_oku() -> sayi` | Klavye (PS/2, Türkçe Q) ya da seri porttan bir kod noktası; yoksa 0. Ok/Home/End/Delete tuşları `ESC [ A` biçiminde gelir, Ctrl+harf kontrol kodudur. Seride CR ve CR LF tek satır sonudur |
-| `tus_bekle() -> sayi` | Bir tuş gelene kadar bekler; bu sırada hazır görevler çalışır |
-| `bellek_toplam() -> sayi` | Multiboot bellek haritasındaki kullanılabilir RAM (bayt) |
-| `yigin_boyut() -> sayi`, `yigin_kullanilan() -> sayi` | Ayırıcı bölgesinin boyutu ve kullanılan bayt |
-| `gorev_baslat(f, arg, ad) -> sayi` | `fonk(sayi) -> bos` türündeki `f`'yi yeni görevde `f(arg)` olarak başlatır; kimliği (PID) döner, tablo doluysa -1 |
-| `sira_ver()` | Sırayı başka bir hazır göreve verir |
-| `gorev_kimlik() -> sayi` | Çalışan görevin kimliği (ana akış 1) |
-| `gorev_listesi() -> liste[sayi]` | Yaşayan görevlerin kimlikleri |
-| `gorev_ad(id) -> metin`, `gorev_durum(id) -> metin`, `gorev_baslama(id) -> sayi` | Ad; `"çalışıyor"` / `"hazır"` / `"uyuyor"` (yoksa `""`); başlama zamanı (ms) |
-| `gorev_oldur(id) -> mantik` | Görevi sonlandırır (ana akış 1 sonlandırılamaz) |
-| `tarih() -> metin` | CMOS saati: `"YYYY-AA-GG SS:DD:ss"` |
-| `kapat()`, `yeniden_baslat()` | ACPI ile kapatma (QEMU, Bochs, VirtualBox; olmazsa isa-debug-exit); 8042 ile sıfırlama |
-| `ekran_temizle()` | VGA ekranını ve seri terminali temizler |
-| `islemci() -> metin` | CPUID marka adı |
-| `disk_var(d) -> mantik`, `disk_sektor(d) -> sayi`, `disk_model(d) -> metin` | ATA diski `d` (0–3: birincil/ikincil kanal, ana/yardımcı; QEMU `-drive if=ide,index=d`); sektör sayısı (512 bayt) ve model adı |
-| `disk_oku(d, lba, adet, tampon, ofs) -> mantik`, `disk_yaz(...)` | `adet` sektörü tampona okur / tampondan yazar (PIO, LBA28/LBA48, yazmadan sonra önbellek boşaltma) |
-
-**Bellek:** Açılışta yığın, Multiboot bellek haritasındaki en büyük boş bölgeye taşınır (ilk 1 GiB içinde; QEMU'nun varsayılan 128 MiB'ında yaklaşık 122 MiB). Önyükleyici bilgisi yoksa 4 MiB'lık `.bss` alanı kullanılır.
-
-**Görevler** işbirlikçidir. Geçiş yalnızca `upp.uyut`, `sira_ver` ve girdi beklerken (`tus_bekle`, `upp.giris`) olur. Bu yüzden runtime'ın paylaşılan durumu kilitsiz güvendedir, ama uzun hesap yapan bir görev arada `sira_ver()` çağırmalıdır. Her görevin 64 KiB yığını vardır, en çok 32 görev olabilir. Biten görevin yığını bir sonraki geçişte geri verilir.
-
-Çekirdek hedefinde `upp.giris()` (klavye ve seri porttan satır okur, yankılar, geri silmeyi destekler), `upp.zaman()` ve `upp.uyut(ms)` da çalışır. VGA ekranı ANSI renklerini (`\e[1;32m`), `\e[2J`, `\e[H`, `\e[K`, `\e[nC`, `\e[nD` dizilerini ve kutu çizgi karakterlerini (`├ └ │ ─`) gösterir. İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe adı ve RIP ile panik verir. QEMU'da panik 3 koduyla çıkar.
-
-Bu yerleşiklerle yazılmış eksiksiz bir örnek: [Uppix](../uppix/README.md), u++ ile yazılmış Unix benzeri işletim sistemi (ext4 kök, FAT32/exFAT).
-
-### `upp.tampon` — bayt tamponları (her hedefte)
-
-İkili veriyi (disk sektörleri, dosya sistemi yapıları, ağ paketleri) güvenli kodda işlemek içindir. Tampon, `sayi` bir tutamaçla gösterilir. Her erişim sınır denetimlidir: geçersiz tutamaç ya da taşma açık panik verir. Çok baytlı değerler küçük sonludur (little-endian). Tamponlar elle bırakılır (`birak`).
-
-| Fonksiyon | Açıklama |
-|---|---|
-| `yeni(boyut) -> sayi`, `birak(t)`, `boyut(t) -> sayi` | Sıfırlanmış tampon; bırakma; boyut |
-| `oku8/16/32/64(t, ofs) -> sayi`, `yaz8/16/32/64(t, ofs, deger)` | Küçük sonlu tamsayı (32 bit işaretsiz okunur; 64 bit ham bit deseni) |
-| `metin(t, ofs, n) -> metin`, `metin_yaz(t, ofs, s) -> sayi` | Ham bayt ↔ metin (UTF-8 baytları; yazılan bayt sayısı döner) |
-| `utf16_metin(t, ofs, n) -> metin`, `utf16_yaz(t, ofs, s, sinir) -> sayi` | UTF-16LE ↔ metin (vekil çiftler dahil; 0x0000'da durur; yazılan kod birimi sayısı) |
-| `kopyala(hedef, hofs, kaynak, kofs, n)`, `doldur(t, ofs, n, deger)` | Örtüşmeye dayanıklı kopya; doldurma |
-| `crc32c(t, ofs, n, baslangic) -> sayi` | CRC32C (Castagnoli), son XOR'suz (ext4 biçimi); standart değer için `^ 4294967295` |
+| :--- | :--- | :--- |
+| `upp.metin.kes(s, bas, adet)` | `(metin, sayi, sayi) -> metin` | `s` metninden UTF-8 kod noktası (karakter) cinsinden `bas` indeksinden başlayarak `adet` karakter kesip döndürür |
+| `upp.metin.buyuk(s)` | `(metin) -> metin` | Türkçe kurallarına duyarlı (`i` $\rightarrow$ `İ`, `ı` $\rightarrow$ `I`) büyük harfe çevirir |
+| `upp.metin.kucuk(s)` | `(metin) -> metin` | Türkçe kurallarına duyarlı (`İ` $\rightarrow$ `i`, `I` $\rightarrow$ `ı`) küçük harfe çevirir |
+| `upp.metin.kirp(s)` | `(metin) -> metin` | Baştaki ve sondaki boşluk karakterlerini (` `, `\t`, `\r`, `\n`) temizler |
+| `upp.metin.baslar(s, on)` | `(metin, metin) -> mantik` | `s` metni `on` ile başlıyorsa `dogru` döndürür |
+| `upp.metin.biter(s, son)` | `(metin, metin) -> mantik` | `s` metni `son` ile bitiyorsa `dogru` döndürür |
+| `upp.metin.bul(s, aranan)` | `(metin, metin) -> sayi` | İlk eşleşmenin UTF-8 karakter (kod noktası) indeksini döndürür; bulunamazsa `-1` döner |
+| `upp.metin.degistir(s, eski, yeni)` | `(metin, metin, metin) -> metin` | `s` içindeki tüm `eski` parçalarını `yeni` ile değiştirir |
+| `upp.metin.bol(s, ayirac)` | `(metin, metin) -> liste[metin]` | Metni `ayirac` dizgesine göre parçalayıp yeni bir `liste[metin]` döndürür |
+| `upp.metin.birlestir(L, ayirac)` | `(liste[metin], metin) -> metin` | Listedeki metinleri aralarına `ayirac` koyarak tek metinde birleştirir |
+| `upp.metin.kod(s, i)` | `(metin, sayi) -> sayi` | `i`. UTF-8 karakterinin Unicode kod noktası değerini döndürür |
+| `upp.metin.ileri(s, i)` | `(metin, sayi) -> sayi` | `i`. UTF-8 karakterinin bellekte kaç bayt (1–4) kapladığını döndürür |
+| `upp.metin.karakter(kod)` | `(sayi) -> metin` | Verilen Unicode kod noktasından tek karakterlik UTF-8 metin üretir (geçersizse `""`) |
+| `upp.metin.tekrar(s, n)` | `(metin, sayi) -> metin` | `s` metnini `n` kez yan yana tekrarlayarak yeni bir metin üretir |
+| `upp.metin.hex_kodla(s)` | `(metin) -> metin` | Metnin ham baytlarını küçük harfli onaltılık (hex) dizgeye çevirir |
+| `upp.metin.hex_coz(hex)` | `(metin) -> metin` | Onaltılık (hex) dizgeyi çözerek ham baytlarını içeren metni döndürür |
 
 ---
 
-## 15. Hedefler
+## 6. Dosya İşlemleri (`upp.dosya`)
 
-| Hedef | Çıktı | Açıklama |
-|---|---|---|
-| (varsayılan) | `.exe` / `.out` | Bu işletim sistemi |
-| `--hedef windows`, `--hedef linux` | | Çapraz ABI |
-| `--hedef serbest` | ELF `.o` | libc'siz; giriş noktası `upp_cekirdek_giris()` |
-| `--hedef cekirdek` | `ad.elf` + `ad32.elf` | Multiboot ile açılan x86_64 çekirdeği; çıktı COM1 + VGA'ya gider, QEMU varsa çalıştırır |
+> *Yalnızca barındırılan (Windows / Linux) hedeflerde kullanılabilir.*
 
-Serbest ve çekirdek hedeflerinde işletim sistemi isteyen ("barındırılan") yerleşikler, `arkaplan` ve `Kilit` derleme hatası verir. Araç zinciri: Linux'ta `gcc`, Windows'ta `x86_64-elf-gcc` ya da WSL içinde `gcc`. Çalıştırmak için `qemu-system-x86_64` gerekir.
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `upp.dosya.oku(yol)` | `(metin) -> metin` | Dosyanın tüm içeriğini okur; dosya yoksa veya okunamazsa `yok` döndürür |
+| `upp.dosya.yaz(yol, icerik)` | `(metin, metin) -> mantik` | İçeriği dosyaya yazar (varsa üzerine yazar); başarılıysa `dogru` döner |
+| `upp.dosya.ekle(yol, icerik)` | `(metin, metin) -> mantik` | İçeriği dosyanın sonuna ekler; başarılıysa `dogru` döner |
+| `upp.dosya.var_mi(yol)` | `(metin) -> mantik` | Belirtilen yolda bir dosya varsa `dogru` döndürür |
+| `upp.dosya.sil(yol)` | `(metin) -> mantik` | Dosyayı siler; başarılıysa `dogru` döndürür |
+| `upp.dosya.boyut(yol)` | `(metin) -> sayi` | Dosyanın bayt cinsinden boyutunu döndürür (dosya yoksa `-1`) |
+| `upp.dosya.listele(dizin)` | `(metin) -> liste[metin]` | Dizindeki dosya ve alt klasör adlarını (`"."` ve `".."` hariç) listeler |
 
-## 16. Komut Satırı
+---
 
-```text
+## 7. Yol ve Dizin İşlemleri (`upp.yol`)
+
+> *Yalnızca barındırılan (Windows / Linux) hedeflerde kullanılabilir.*
+
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `upp.yol.birlestir(a, b)` | `(metin, metin) -> metin` | İki yol parçasını platformun dizin ayracıyla birleştirir |
+| `upp.yol.dizin(yol)` | `(metin) -> metin` | Yolun üst dizin kısmını döndürür (`/` ve `\` ayraçlarını birlikte tanır) |
+| `upp.yol.dosya_adi(yol)` | `(metin) -> metin` | Yoldaki son bileşeni (dosya veya dizin adını) döndürür |
+| `upp.yol.uzanti(yol)` | `(metin) -> metin` | Dosya uzantısını nokta dahil döndürür (ör. `".upp"`, uzantı yoksa `""`) |
+| `upp.yol.mutlak_mi(yol)` | `(metin) -> mantik` | Yol mutlak bir yol ise `dogru` döndürür |
+| `upp.yol.gercek(yol)` | `(metin) -> metin` | Sembolik bağları ve göreli parçaları çözerek tam (canonical) yolu döndürür |
+| `upp.yol.calisma()` | `() -> metin` | Geçerli çalışma dizinini (`cwd`) döndürür |
+| `upp.yol.dizin_var_mi(yol)` | `(metin) -> mantik` | Belirtilen yolda bir dizin varsa `dogru` döndürür |
+| `upp.yol.dizin_olustur(yol)` | `(metin) -> mantik` | Dizini (gerekirse eksik üst dizinleriyle birlikte) oluşturur |
+
+---
+
+## 8. Sistem, Süreç ve Standart G/Ç (`upp.sistem`, `upp.stdio`)
+
+> *Yalnızca barındırılan (Windows / Linux) hedeflerde kullanılabilir.*
+
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `upp.sistem.calistir(komut)` | `(metin) -> SurecCikti` | Alt süreci çalıştırır (`stdin` kapalıdır), hem `stdout` hem `stderr` çıktısını yakalar ve `SurecCikti { sayi kod; metin cikti; mantik basarili; }` döndürür |
+| `upp.sistem.kos(komut)` | `(metin) -> sayi` | Alt süreci mevcut terminalin standart girdi/çıktı tutamaçlarını devralarak etkileşimli çalıştırır ve çıkış kodunu döndürür |
+| `upp.sistem.komut_bul(ad)` | `(metin) -> metin` | Komutu sistem `PATH` dizinlerinde arar; bulursa tam yolunu, bulamazsa `""` döndürür |
+| `upp.sistem.exe_dizin()` | `() -> metin` | Çalışmakta olan ikili dosyanın bulunduğu dizini döndürür |
+| `upp.sistem.pid()` | `() -> sayi` | Geçerli sürecin işletim sistemi kimliğini (PID) döndürür |
+| `upp.sistem.cikis(kod)` | `(sayi) -> bos` | Süreci belirtilen çıkış koduyla derhal sonlandırır |
+| `upp.sistem.ortam_al(ad)` | `(metin) -> metin` | Ortam değişkeninin değerini döndürür (tanımsızsa `""`) |
+| `upp.sistem.ortam_yaz(ad, deger)` | `(metin, metin) -> mantik` | Ortam değişkenini ayarlar |
+| `upp.stdio.gelen_oku()` | `() -> metin` | Standart girdiden LSP `Content-Length` çerçeveli JSON-RPC mesajı okur |
+| `upp.stdio.yaz(json)` | `(metin) -> bos` | Standart çıktıya LSP `Content-Length` başlıklı JSON-RPC mesajı yazar |
+
+---
+
+## 9. Platforma Özgü API'ler (`upp.linux`, `upp.windows`)
+
+### `upp.linux.*` *(Yalnızca `--hedef linux`)*
+| Fonksiyon | İmza | Güvenlik | Açıklama |
+| :--- | :--- | :---: | :--- |
+| `upp.linux.pid()` | `() -> sayi` | Güvenli | Geçerli süreç kimliğini döndürür |
+| `upp.linux.sinyal_gonder(pid, sinyal)` | `(sayi, sayi) -> mantik` | Güvenli | Hedef sürece POSIX sinyali (`kill`) gönderir |
+| `upp.linux.proc_oku(pid, dosya)` | `(sayi, metin) -> metin` | Güvenli | `/proc/<pid>/<dosya>` içeriğini okur |
+| `upp.linux.sayi_oku(pid, adres)` | `(sayi, sayi) -> sayi` | `guvensiz` | Hedef sürecin belleğinden tamsayı okur |
+| `upp.linux.sayi_yaz(pid, adres, deger)` | `(sayi, sayi, sayi) -> mantik` | `guvensiz` | Hedef sürecin belleğine tamsayı yazar |
+
+### `upp.windows.*` *(Yalnızca Windows Hedefi)*
+| Fonksiyon | İmza | Güvenlik | Açıklama |
+| :--- | :--- | :---: | :--- |
+| `upp.windows.mesaj(baslik, icerik)` | `(metin, metin) -> bos` | Güvenli | Windows bilgi kutusu gösterir |
+| `upp.windows.hata(baslik, icerik)` | `(metin, metin) -> bos` | Güvenli | Windows hata kutusu gösterir |
+| `upp.windows.ses_cal(yol)` | `(metin) -> mantik` | Güvenli | `.wav` ses dosyasını çalar |
+| `upp.windows.girdi.fare_tasi(x, y)` | `(sayi, sayi) -> bos` | Güvenli | Fare imlecini ekran koordinatlarına taşır |
+| `upp.windows.girdi.fare_tikla()` | `() -> bos` | Güvenli | Sol fare tıklaması gönderir |
+| `upp.windows.girdi.tus_bas(tus)` | `(metin) -> bos` | Güvenli | Sanal tuş vuruşu gönderir |
+| `upp.windows.cizim.baslat(pencere)` | `(metin) -> sayi` | Güvenli | Hedef pencere üzerinde GDI çizim katmanı başlatır |
+| `upp.windows.cizim.temizle()` | `() -> bos` | Güvenli | Çizim katmanını temizler |
+| `upp.windows.cizim.kutu(x, y, g, y, renk)` | `(sayi, sayi, sayi, sayi, metin) -> bos` | Güvenli | Belirtilen renkte dikdörtgen kutu çizer |
+| `upp.windows.cizim.yazi(x, y, yazi, renk)` | `(sayi, sayi, metin, metin) -> bos` | Güvenli | Belirtilen koordinata metin çizer |
+
+### `upp.windows.bellek.*` *(Yalnızca `guvensiz` Blokta)*
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `baglan(surec_adi)` | `(metin) -> sayi` | Sürece bağlanır ve süreç kimliğini döndürür |
+| `modul_bul(dll_adi)` | `(metin) -> sayi` | Bağlı süreçteki modülün taban adresini döndürür |
+| `sayioku(adres)` / `sayiyaz(adres, deger)` | `(sayi) -> sayi` / `(sayi, sayi) -> mantik` | Adresten tamsayı okur / adrese tamsayı yazar |
+| `oku_ondalik(adres)` / `yaz_ondalik(adres, d)` | `(sayi) -> ondalik` / `(sayi, ondalik) -> mantik` | Adresten ondalık okur / adrese ondalık yazar |
+| `oku_metin(adres, uzunluk)` | `(sayi, sayi) -> metin` | Adresten belirtilen uzunlukta metin okur |
+| `zincir_oku(taban, [ofsetler])` | `(sayi, dizi) -> sayi` | Çok seviyeli işaretçi zincirini takip ederek son adresi çözer |
+| `yama_yap(adres, hex)` | `(sayi, metin) -> mantik` | Adrese onaltılık bayt dizisi yazar |
+| `koruma_degistir(adres, boyut, kip)` | `(sayi, sayi, metin) -> mantik` | Bellek sayfası koruma bayraklarını değiştirir (`koruma_degistir_sayi` sayısal bayrak alır) |
+| `son_hata()` / `okundu()` | `() -> sayi` | Son Win32 hata kodunu / okunan bayt sayısını döndürür |
+
+---
+
+## 10. Matematik ve Geometri (`upp.matematik`)
+
+| Fonksiyon | İmza | Hedef | Açıklama |
+| :--- | :--- | :---: | :--- |
+| `pi()`, `e()` | `() -> ondalik` | Tümü | $\pi$ ve $e$ matematiksel sabitleri |
+| `mutlak(x)` | `(ondalik) -> ondalik` | Tümü | Ondalık sayının mutlak değeri |
+| `sinirla(x, alt, ust)` | `(ondalik, ondalik, ondalik) -> ondalik` | Tümü | Değeri `[alt, ust]` aralığına kıstırır (`clamp`) |
+| `yumusat(a, b, t)` | `(ondalik, ondalik, ondalik) -> ondalik` | Tümü | Doğrusal ara değerleme (`lerp`) |
+| `karekok(x)`, `us(taban, us)` | `(ondalik) -> ondalik` / `(ondalik, ondalik) -> ondalik` | Barındırılan | Karekök ve üs alma |
+| `sinus(x)`, `kosinus(x)`, `tanjant(x)` | `(ondalik) -> ondalik` | Barındırılan | Radyan cinsinden trigonometrik fonksiyonlar |
+| `atan2(y, x)` | `(ondalik, ondalik) -> ondalik` | Barındırılan | İki argümanlı arktanjant |
+| `taban(x)`, `tavan(x)`, `yuvarla(x)` | `(ondalik) -> sayi` | Barındırılan | Aşağı, yukarı ve en yakın tamsayıya yuvarlama |
+| `mesafe(v1, v2)` / `mesafe_3d(...)` | `(Vektor3, Vektor3) -> ondalik` | Barındırılan | 3 boyutlu Öklid mesafesi |
+| `aci_hesapla(x1, y1, z1, x2, y2, z2)` | `(ondalik x 6) -> Yonelme` | Barındırılan | İki 3B nokta arasındaki yönelim açılarını (`pitch`, `yaw`) hesaplar |
+| `dunya_ekran(matris, nokta, g, y)` | `(ondalik[16], Vektor3, sayi, sayi) -> EkranNokta` | Barındırılan | 3B dünya koordinatını 2B ekran koordinatına izdüşürür |
+
+---
+
+## 11. Dinamik Koleksiyonlar (`liste[T]` ve `harita[K, V]`)
+
+Koleksiyonların değer semantiği (refcount + COW) ve desteklenen eleman türleri için [Koleksiyonlar](#koleksiyonlar) bölümüne bakın.
+
+### `liste[T]` Metotları ve İşlemleri
+| Kullanım | Dönüş Türü | Açıklama |
+| :--- | :--- | :--- |
+| `L.ekle(deger)` | `bos` | Listenin sonuna eleman ekler |
+| `L[i]` / `L.al(i)` | `T` | `i`. elemanı okur (sınır denetimlidir; taşmada panik verir). `L[i] = x` yerinde yazar |
+| `L.yaz(i, deger)` | `bos` | `i`. indeksteki elemanı günceller |
+| `L.sil(i)` | `bos` | `i`. indeksteki elemanı siler ve sonraki elemanları kaydırır |
+| `L.uzunluk()` | `sayi` | Listedeki eleman sayısını döndürür |
+| `L.temizle()` | `bos` | Tüm elemanları siler (uzunluk `0` olur) |
+| `L.bosalt()` | `bos` | Belleği erken serbest bırakır ve listeyi boşaltır |
+| `L[a..b]` | `&dilim[T]` | `liste[sayi]` ve `liste[ondalik]` üzerinde `[a, b)` yarı açık dilim görünümü verir |
+| `her (oto x in L)` | — | Elemanları sırasıyla gezer |
+
+### `harita[K, V]` Metotları ve İşlemleri
+| Kullanım | Dönüş Türü | Açıklama |
+| :--- | :--- | :--- |
+| `H.koy(anahtar, deger)` | `bos` | Anahtar-değer çiftini ekler veya günceller (eklenme sırası korunur) |
+| `H.al(anahtar)` | `V` | Anahtara karşılık gelen değeri döndürür; anahtar yoksa `V` türünün sıfır/varsayılan değerini döner |
+| `H.var_mi(anahtar)` | `mantik` | Anahtar haritada mevcutsa `dogru` döndürür |
+| `H.sil(anahtar)` | `bos` | Anahtarı ve değerini haritadan siler |
+| `H.uzunluk()` | `sayi` | Kayıtlı anahtar-değer çifti sayısını döndürür |
+| `H.anahtarlar()` | `liste[K]` | Tüm anahtarları eklenme sırasıyla bir liste olarak döndürür |
+| `H.temizle()` / `H.bosalt()` | `bos` | Haritayı temizler / belleğini erken serbest bırakır |
+| `her (oto k in H)` | — | Anahtarları eklenme sırasıyla gezer |
+
+---
+
+## 12. JSON İşlemleri (`upp.json`)
+
+> *Yalnızca barındırılan (Windows / Linux) hedeflerde kullanılabilir.*
+
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `ayristir(metin)` / `olustur(d)` | `(metin) -> JSONDeger` / `(JSONDeger) -> metin` | JSON metnini ayrıştırır / `JSONDeger` ağacını metne dönüştürür |
+| `tur(d)` | `(JSONDeger) -> metin` | Düğüm türünü döndürür: `"nesne"`, `"dizi"`, `"metin"`, `"sayi"`, `"mantik"`, `"bosluk"` |
+| `var_mi(d)` / `uzunluk(d)` | `(JSONDeger) -> mantik` / `sayi` | Düğümün geçerli olup olmadığını / dizi veya nesne eleman sayısını döndürür |
+| `anahtar_al(d, anahtar)` | `(JSONDeger, metin) -> JSONDeger` | Nesneden belirtilen anahtarın alt düğümünü alır |
+| `anahtarlar(d)` | `(JSONDeger) -> JSONDeger` | Nesnenin anahtarlarını bir JSON dizisi olarak döndürür |
+| `indeks_al(d, i)` | `(JSONDeger, sayi) -> JSONDeger` | JSON dizisinden `i`. elemanı alır |
+| `metin_al(d)`, `sayi_al(d)`, `ondalik_al(d)`, `mantik_al(d)` | `(JSONDeger) -> ...` | Düğümün içindeki temel değeri okur |
+| `nesne()`, `dizi()`, `yok_yap()` | `() -> JSONDeger` | Yeni boş JSON nesnesi, dizisi veya `null` düğümü oluşturur |
+| `metin_yap(s)`, `sayi_yap(n)`, `ondalik_yap(d)`, `mantik_yap(b)` | `(...) -> JSONDeger` | Temel değerden yeni JSON düğümü oluşturur |
+| `koy(nesne, anahtar, deger)` | `(JSONDeger, metin, JSONDeger) -> bos` | JSON nesnesine alan ekler |
+| `ekle(dizi, deger)` | `(JSONDeger, JSONDeger) -> bos` | JSON dizisine eleman ekler |
+| `bosalt(kok)` | `(JSONDeger) -> bos` | JSON ağacının belleğini serbest bırakır |
+
+---
+
+## 13. Eşzamanlılık (`arkaplan` ve `Kilit`)
+
+> *Yalnızca barındırılan (Windows / Linux) hedeflerde kullanılabilir.*
+
+```upp
+Kilit k;
+oto gorev = arkaplan {
+    k.kilitle();
+    upp.satir_yaz("Arka planda güvenli çalışma");
+    k.birak();
+};
+gorev.bekle();
+```
+
+- `arkaplan { ... }` bloğu yeni bir işletim sistemi iş parçacığı (thread) başlatır ve `bekle()` metoduna sahip bir görev nesnesi döndürür.
+- Dış kapsamdaki sayısal değişkenler ve `metin` değişkenleri iş parçacığına derin kopya olarak aktarılır (`Kilit` nesneleri paylaşımlı tutulur).
+- Koleksiyonlar (`liste`, `harita`), `beklenen`, `JSONDeger` ve görünümler (`&metin`, `&dilim`) `arkaplan` bloğu içine yakalanamaz.
+
+---
+
+## 14. Çekirdek, Donanım ve İkili Tamponlar (`upp.cekirdek`, `upp.tampon`)
+
+### `upp.cekirdek.*` *(Yalnızca `--hedef serbest` ve `--hedef cekirdek`)*
+
+Doğrudan işlemci kayıtçılarına, G/Ç portlarına veya fiziksel adreslere dokunan düşük seviye fonksiyonlar **`guvensiz`** bloğu gerektirir:
+
+| Fonksiyon (`guvensiz` Zorunlu) | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `port_yaz8 / 16 / 32(port, deger)` | `(sayi, sayi) -> bos` | x86 donanım G/Ç portuna (`outb`, `outw`, `outl`) veri yazar |
+| `port_oku8 / 16 / 32(port)` | `(sayi) -> sayi` | x86 donanım G/Ç portundan (`inb`, `inw`, `inl`) veri okur |
+| `bellek_yaz8 / 16 / 32 / 64(adres, deger)` | `(sayi, sayi) -> bos` | Fiziksel/sanal adrese `volatile` MMIO yazması yapar |
+| `bellek_oku8 / 16 / 32 / 64(adres)` | `(sayi) -> sayi` | Fiziksel/sanal adresten `volatile` MMIO okuması yapar |
+| `dur()`, `kesme_kapat()`, `kesme_ac()` | `() -> bos` | İşlemci yönergeleri: `hlt` (bekle), `cli` (kesmeleri kapat), `sti` (kesmeleri aç) |
+| `yigin_kur(adres, boyut)` | `(sayi, sayi) -> bos` | Çalışma zamanı yığın ayırıcısına (heap) yeni bellek bölgesi tanımlar |
+
+Aşağıdaki çekirdek servisleri ise **güvenli koddan** doğrudan çağrılabilir:
+
+| Fonksiyon (Güvenli) | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `kesmeler_kur()` | `() -> bos` | 48 vektörlük IDT, PIC ve 1000 Hz PIT zamanlayıcıyı kurar (açılışta otomatik çağrılır) |
+| `tik()` | `() -> sayi` | Açılıştan bu yana geçen 1 ms'lik PIT zamanlayıcı tık sayısı |
+| `tus_oku()` | `() -> sayi` | PS/2 klavye (Türkçe Q) veya seri porttan bir kod noktası okur; tuş yoksa `0` döner. Özel tuşlar ANSI dizisi (`ESC [ A` vb.) olarak gelir |
+| `tus_bekle()` | `() -> sayi` | Bir tuş gelene kadar bekler; beklerken diğer hazır görevlere sıra verir |
+| `bellek_toplam()` | `() -> sayi` | Limine/Multiboot bellek haritasındaki toplam kullanılabilir RAM miktarı (bayt) |
+| `yigin_boyut()` / `yigin_kullanilan()` | `() -> sayi` | Çekirdek yığın ayırıcısının toplam kapasitesi ve kullanımda olan bayt miktarı |
+| `gorev_baslat(fn, arg, ad)` | `(fonk(sayi)->bos, sayi, metin) -> sayi` | 64 KiB yığınla yeni bir işbirlikçi görev başlatır ve görev kimliğini (PID) döndürür (doluysa `-1`) |
+| `sira_ver()` | `() -> bos` | İşlemci sırasını bekleyen bir sonraki hazır göreve devreder (`yield`) |
+| `gorev_kimlik()` | `() -> sayi` | O anda çalışan görevin kimliğini döndürür (ana çekirdek akışı `1`'dir) |
+| `gorev_listesi()` | `() -> liste[sayi]` | Yaşayan tüm görevlerin kimlik numaralarını döndürür |
+| `gorev_ad(id)` / `gorev_durum(id)` | `(sayi) -> metin` | Görevin adını ve durumunu (`"çalışıyor"`, `"hazır"`, `"uyuyor"`, yoksa `""`) döndürür |
+| `gorev_baslama(id)` | `(sayi) -> sayi` | Görevin başladığı zamanı (ms) döndürür |
+| `gorev_oldur(id)` | `(sayi) -> mantik` | Belirtilen görevi sonlandırır (ana akış `1` sonlandırılamaz) |
+| `tarih()` | `() -> metin` | CMOS gerçek zaman saatini `"YYYY-AA-GG SS:DD:ss"` biçiminde döndürür |
+| `islemci()` | `() -> metin` | CPUID üzerinden işlemci marka dizgesini döndürür |
+| `ekran_temizle()` | `() -> bos` | Ekran konsolunu (VGA metin ya da çerçeve tamponu) ve seri terminali temizler |
+| `onyukleyici()` | `() -> metin` | Çekirdeği açan önyükleyici: `"Limine 11.4.1"` gibi ad ve sürüm, `"Multiboot 1"` ya da bilinmiyorsa `""` |
+| `ekran()` | `() -> metin` | Ekran konsolunun tanımı: `"çerçeve tamponu 1280x800x32, 160x50 karakter"` ya da `"VGA metin 80x25"` |
+| `kapat()` / `yeniden_baslat()` | `() -> bos` | ACPI (veya QEMU `isa-debug-exit`) ile makineyi kapatır / 8042 üzerinden yeniden başlatır |
+| `disk_var(d)` | `(sayi) -> mantik` | `d` numaralı (`0..3`) ATA IDE diskinin takılı olup olmadığını döndürür |
+| `disk_sektor(d)` / `disk_model(d)` | `(sayi) -> sayi` / `metin` | Diskin toplam sektör sayısını (512 baytlık) ve model adını döndürür |
+| `disk_oku(d, lba, adet, tampon, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Diskten `lba` sektöründen başlayarak `adet` sektörü `upp.tampon` içindeki `ofs` ofsetine okur |
+| `disk_yaz(d, lba, adet, tampon, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Tampondaki veriyi diske yazar ve donanım önbelleğini boşaltır (LBA28/LBA48 PIO) |
+
+> [!NOTE]
+> **Çekirdek Ortamı Notları:**
+> - **Bellek:** Açılışta yığın ayırıcı (heap), bellek haritasındaki en büyük boş RAM bölgesine otomatik olarak kurulur (Multiboot'ta ilk 1 GiB, Limine'de 1 MiB–4 GiB arası; 128 MiB QEMU'da ~122 MiB).
+> - **Konsol:** Multiboot ile VGA metin ekranı (CP437 Türkçe eşleme), Limine ile çerçeve tamponuna çizilen metin konsolu (Terminus 8x16 yazı tipi, Türkçe karakterler dahil) kullanılır. İkisi de kutu çizim karakterlerini (`├ └ │ ─`) ve ANSI kaçış dizilerini (`\e[1;32m`, `\e[2J`, `\e[H`, `\e[K`) destekler.
+> - **Limine:** `--onyukleyici limine` ile çekirdek `0xffffffff80000000`'da duran bir ELF64 olur (`-mcmodel=kernel`). Açılışta Limine protokolü (taban revizyon 6) istekleriyle bellek haritası, çerçeve tamponu, HHDM ve çekirdek adresi alınır; çekirdek kendi GDT'sini ve sayfa tablolarını (ilk 4 GiB birebir + çekirdek) kurar, SSE'yi açar ve 8259 PIC kesmeleri için yerel APIC'i kapatır.
+> - **İstisnalar:** İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe istisna adı, `RIP` ve `CR2` adresiyle panik verir.
+
+### `upp.tampon.*` — Güvenli İkili Bayt Tamponları *(Tüm Hedeflerde)*
+
+Disk sektörleri, dosya sistemi yapıları (`ext4`, `FAT32`, `exFAT`) ve ikili protokolleri `guvensiz` bloğuna ihtiyaç duymadan işlemek için kullanılır. Her tampon bir `sayi` tutamacıyla temsil edilir ve **tüm okuma/yazma işlemleri sınır denetimlidir** (taşma veya geçersiz tutamaçta açık panik verir). Çok baytlı tamsayılar küçük sonlu (**little-endian**) düzende okunur ve yazılır.
+
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `upp.tampon.yeni(boyut)` | `(sayi) -> sayi` | Sıfırlanmış yeni bir bayt tamponu ayırır ve tutamacını döndürür |
+| `upp.tampon.birak(t)` | `(sayi) -> bos` | Tampon belleğini serbest bırakır |
+| `upp.tampon.boyut(t)` | `(sayi) -> sayi` | Tamponun bayt cinsinden boyutunu döndürür |
+| `upp.tampon.oku8 / 16 / 32 / 64(t, ofs)` | `(sayi, sayi) -> sayi` | `ofs` bayt ofsetinden küçük sonlu tamsayı okur (`8/16/32` işaretsiz genişler, `64` ham bit desenidir) |
+| `upp.tampon.yaz8 / 16 / 32 / 64(t, ofs, deger)` | `(sayi, sayi, sayi) -> bos` | `ofs` bayt ofsetine küçük sonlu tamsayı yazar |
+| `upp.tampon.metin(t, ofs, n)` | `(sayi, sayi, sayi) -> metin` | Tampondaki `n` baytı UTF-8 metin olarak kopyalar |
+| `upp.tampon.metin_yaz(t, ofs, s)` | `(sayi, sayi, metin) -> sayi` | `s` metninin UTF-8 baytlarını tampona yazar ve yazılan bayt sayısını döndürür |
+| `upp.tampon.utf16_metin(t, ofs, n)` | `(sayi, sayi, sayi) -> metin` | `n` adet 16 bitlik UTF-16LE kod birimini (`0x0000`'da durarak, vekil çiftler dahil) UTF-8 metne çevirir |
+| `upp.tampon.utf16_yaz(t, ofs, s, sinir)` | `(sayi, sayi, metin, sayi) -> sayi` | Metni en çok `sinir` adet UTF-16LE kod birimi olarak yazar ve yazılan birim sayısını döndürür |
+| `upp.tampon.kopyala(hedef, hofs, kaynak, kofs, n)` | `(sayi x 5) -> bos` | İki tampon (veya aynı tampon) arasında `n` baytı örtüşmeye dayanıklı (`memmove`) kopyalar |
+| `upp.tampon.doldur(t, ofs, n, deger)` | `(sayi, sayi, sayi, sayi) -> bos` | Tamponun `[ofs, ofs + n)` aralığını `deger` baytıyla doldurur |
+| `upp.tampon.crc32c(t, ofs, n, baslangic)` | `(sayi, sayi, sayi, sayi) -> sayi` | `n` bayt üzerinde Castagnoli **CRC32C** hesaplar (son XOR uygulanmamış `ext4` biçimi; standart CRC32C için sonucu `4294967295` ile XOR'layın) |
+
+---
+
+## 15. Derleme Hedefleri
+
+| Hedef Bayrağı | Üretilen Çıktı | Açıklama |
+| :--- | :--- | :--- |
+| *(varsayılan)* / `--hedef yerel` | `.exe` / `.out` | Derleyicinin çalıştığı işletim sistemi için bağımsız uygulama |
+| `--hedef windows` / `--hedef linux` | `.exe` / `.out` | Hedef işletim sistemi ABI'si ve platform API'leri |
+| `--hedef serbest` | ELF `.o` | `libc` bağımlılığı olmayan nesne dosyası (giriş noktası: `upp_cekirdek_giris()`) |
+| `--hedef cekirdek` | `<ad>.elf` + `<ad>32.elf` | Multiboot 1 ile önyüklenen x86_64 işletim sistemi çekirdeği (QEMU kuruluysa otomatik çalıştırır) |
+| `--hedef cekirdek --onyukleyici limine` | `<ad>.elf` | Limine ile diskten 64-bit açılan higher-half ELF64 çekirdek (BIOS ve UEFI) |
+
+> [!WARNING]
+> `--hedef serbest` ve `--hedef cekirdek` modlarında işletim sistemi gerektiren ("barındırılan") `upp.dosya`, `upp.yol`, `upp.sistem`, `upp.json` modülleri ile `arkaplan` ve `Kilit` yapıları kullanılamaz; kullanıldığında derleme hatası verilir.
+
+---
+
+## 16. Komut Satırı (`uppc`) ve `upp.proje`
+
+```bash
+# Tekil dosya derleme ve çalıştırma
 uppc <dosya.upp> [-o ad] [--sadece-derle | -c] [--hedef h] [--analiz] [--json-hata]
                  [--bicim | --bicim-kontrol] [--ast] [--runtime yol] [--disk imaj]...
-uppc yeni <ad> [--hedef cekirdek]     # upp.proje + kaynak/ana.upp
-uppc derle [dizin]                    # upp.proje'yi derle
-uppc calistir [dizin]                 # derle ve çalıştır (çekirdekte QEMU)
-uppc asistan [dizin]                  # menülü derleme asistanı
-uppc kendini-derle [--hizli]          # self-host: 3 aşama + sabit nokta + bootstrap/uppc.c
+                 [--onyukleyici multiboot|limine] [--disk-hazirla betik.sh]
+
+# Proje yönetimi ve araçlar
+uppc yeni <ad> [--hedef cekirdek]     # Yeni proje iskeleti (upp.proje + kaynak/ana.upp) oluşturur
+uppc derle [dizin]                    # Projeyi upp.proje ayarlarına göre derler
+uppc calistir [dizin]                 # Projeyi derler ve çalıştırır (çekirdek hedefinde QEMU başlatır)
+uppc asistan [dizin]                  # Etkileşimli terminal derleme asistanını açar
+uppc kendini-derle [--hizli]          # Derleyiciyi kendisiyle yeniden derler ve bootstrap/uppc.c'yi günceller
 ```
 
-`upp.proje` biçimi:
+### `upp.proje` Yapılandırma Biçimi
 
-```text
+```ini
 ad = merhaba
 giris = kaynak/ana.upp
-hedef = yerel        # yerel | windows | linux | serbest | cekirdek
+hedef = yerel                 # yerel | windows | linux | serbest | cekirdek
 cikti = derleme/merhaba
-bayraklar =          # isteğe bağlı ek uppc bayrakları
-diskler = a.img, b.img   # çekirdek: QEMU'ya IDE disk olarak (sırayla sda, sdb...)
-disk_hazirla = disk_yap.sh  # bir disk imajı eksikse proje dizininde sh ile çalışır
+bayraklar =                   # İsteğe bağlı ek uppc bayrakları
+diskler = a.img, b.img        # Çekirdek hedefinde QEMU'ya bağlanacak ham IDE disk imajları (sda, sdb...)
+disk_hazirla = disk_yap.sh    # Disk imajlarından biri eksikse proje dizininde sh ile çalıştırılacak betik
+onyukleyici = limine         # Çekirdek ilk diskten Limine ile açılır; disk_hazirla her derlemeden sonra çalışır
 ```
 
-`--disk imaj` (en çok 4) ham disk imajını çekirdek hedefinde QEMU'ya `-drive if=ide,format=raw` olarak ekler.
+- `--disk <imaj>` bayrağı (en çok 4 adet), `--hedef cekirdek` ile çalışırken QEMU'ya `-drive if=ide,format=raw` olarak disk imajı bağlar.
+- `--onyukleyici limine` çekirdeği Limine protokolüyle üretir. QEMU `-kernel` olmadan, ilk diskten açılır; bu yüzden ilk `--disk` önyüklenebilir bir imaj olmalıdır.
+- `--disk-hazirla <betik>` çekirdek derlendikten sonra `sh <betik> <ilk diskin dizini> <çekirdek.elf>` komutunu çalıştırır (Windows'ta WSL içinde). Betik önyüklenebilir imajı üretir ya da içindeki çekirdeği günceller; örnek için [`src/os/disk_yap.sh`](../src/os/disk_yap.sh). `UPP_FS_ARACLAR` ortam değişkeni betiğe `FS_ARACLAR` olarak geçer.
