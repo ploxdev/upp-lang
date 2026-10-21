@@ -395,9 +395,14 @@ static long long upp_dizi_idx(long long i, long long n) {
  *   - nbayt/kap: uzunluk O(1), += yerinde büyür (ref == 1 iken).
  *   - ncp/off: kod noktası sayısı ve cp→bayt tablosu tembel ve metne özel;
  *     küresel önbellek yok, metinler arasında gidip gelmek ucuz.
- *   - sihir: başlığın son alanı, verinin hemen önündeki 4 bayt. Bu yüzden
- *     yönetilmeyen bir işaretçinin (C sabiti, c_kod) yalnızca 4 baytı okunur
- *     ve böyle bir işaretçi asla serbest bırakılmaz.
+ *   - sihir: başlığın son alanı, verinin hemen önündeki 4 bayt.
+ *
+ * Sözleşme: bir metin değeri (değişken, alan, koleksiyon elemanı, parametre)
+ * HER ZAMAN yönetilir; başlığı sorgulamadan önce "yönetiliyor mu" diye
+ * tahmin edilmez. Ham C dizgileri (argv, getenv, C tamponları, c_kod) metne
+ * yalnızca kopyalanarak girer: _upp_m_c / upp_metin_ata_c. Derleyici, c_kod
+ * içinde metin değişkenine doğrudan atamayı reddeder. Sihir bir bütünlük
+ * denetimidir: tutmazsa (ham işaretçi, serbest bırakılmış metin) panik.
  * ===================================================================== */
 #define UPP_METIN_SIHIR 0xF5C3A71Du
 #define UPP_MB_ASCII 1u
@@ -416,16 +421,17 @@ typedef struct UppMetinBas {
 
 static void upp_panik(const char* mesaj);
 
+/* Yönetilen metnin başlığı; NULL (boş metin) için NULL. */
 static UppMetinBas* _upp_mb(const char* s) {
-    uint32_t sh;
+    UppMetinBas* b;
     if (!s) {
         return NULL;
     }
-    memcpy(&sh, s - sizeof(uint32_t), sizeof(uint32_t));
-    if (sh != UPP_METIN_SIHIR) {
-        return NULL;
+    b = (UppMetinBas*)(void*)(s - sizeof(UppMetinBas));
+    if (b->sihir != UPP_METIN_SIHIR) {
+        upp_panik("yönetilmeyen metin: başlık yok ya da metin serbest bırakılmış (c_kod içinde ham C dizgisi için upp_metin_ata_c kullanın)");
     }
-    return (UppMetinBas*)(void*)(s - sizeof(UppMetinBas));
+    return b;
 }
 
 /* Runtime içindeki C sabitleri için ölümsüz yönetilen metin. */
@@ -468,7 +474,7 @@ static char* _upp_m_yeni(size_t n) {
 static char* _upp_m_boy(char* s, size_t n) {
     UppMetinBas* b = _upp_mb(s);
     if (!b) {
-        return s;
+        return NULL;
     }
     if (n + 1u > b->kap) {
         upp_panik("metin boyu kapasiteyi aşıyor");
@@ -502,10 +508,7 @@ static char* _upp_m_c(const char* s) {
 
 static size_t upp_metin_nbayt(const char* s) {
     UppMetinBas* b = _upp_mb(s);
-    if (b) {
-        return b->nbayt;
-    }
-    return s ? strlen(s) : 0u;
+    return b ? b->nbayt : 0u;
 }
 
 /* malloc ile üretilmiş ham tamponu yönetilen metne çevirip ham tamponu bırakır. */
@@ -520,18 +523,14 @@ static char* _upp_m_sahiplen(char* ham) {
 }
 
 static char* upp_metin_kopya(const char* s) {
-    UppMetinBas* b;
-    if (!s) {
+    UppMetinBas* b = _upp_mb(s);
+    if (!b) {
         return NULL;
     }
-    b = _upp_mb(s);
-    if (b) {
-        if (!(b->bayrak & UPP_MB_SABIT)) {
-            __atomic_add_fetch(&b->ref, 1, __ATOMIC_RELAXED);
-        }
-        return (char*)s;
+    if (!(b->bayrak & UPP_MB_SABIT)) {
+        __atomic_add_fetch(&b->ref, 1, __ATOMIC_RELAXED);
     }
-    return _upp_m_bayttan(s, strlen(s));
+    return (char*)s;
 }
 
 /* Paylaşımsız, bağımsız kopya (iş parçacığına aktarım için). */
@@ -612,7 +611,7 @@ static long long _upp_m_ncp(const char* s) {
     UppMetinBas* b = _upp_mb(s);
     long long k;
     if (!b) {
-        return s ? _upp_utf8_say(s, strlen(s)) : 0;
+        return 0;
     }
     k = __atomic_load_n(&b->ncp, __ATOMIC_RELAXED);
     if (k >= 0) {
@@ -633,11 +632,8 @@ static size_t _upp_m_cpbayt(const char* s, long long cp) {
     UppMetinBas* b = _upp_mb(s);
     long long ncp;
     size_t* off;
-    if (cp <= 0 || !s) {
+    if (cp <= 0 || !b) {
         return 0;
-    }
-    if (!b) {
-        return _upp_utf8_bayt(s, strlen(s), cp);
     }
     ncp = _upp_m_ncp(s);
     if (cp >= ncp) {
@@ -831,6 +827,18 @@ static void upp_metin_ata(char** dst, const char* src) {
     *dst = yeni;
 }
 
+/* c_kod için: ham C dizgisini (NUL ile biten, başlıksız) metne kopyalayarak
+ * atar ve eski değeri bırakır. c, *dst'nin içini gösterebilir: önce kopya. */
+static void upp_metin_ata_c(char** dst, const char* c) {
+    char* yeni;
+    if (!dst) {
+        return;
+    }
+    yeni = _upp_m_c(c);
+    upp_metin_release(*dst);
+    *dst = yeni;
+}
+
 static void upp_metin_tasi(char** dst, char** src) {
     char* yeni;
     if (!dst) {
@@ -846,9 +854,6 @@ static void upp_metin_tasi(char** dst, char** src) {
     }
     yeni = *src;
     *src = NULL;
-    if (yeni && !_upp_mb(yeni)) {
-        yeni = _upp_m_bayttan(yeni, strlen(yeni));
-    }
     if (*dst == yeni) {
         upp_metin_release(yeni);
         return;
@@ -1914,7 +1919,7 @@ static int _upp_h_esit(int kk, const void* a, const void* b) {
     if (kk == _UPP_HK_METIN) {
         const char* x = *(const char* const*)a;
         const char* y = *(const char* const*)b;
-        return upp_metin_esit(x ? x : "", y ? y : "");
+        return upp_metin_esit(x ? x : UPP_LIT(""), y ? y : UPP_LIT(""));
     }
     return *(const long long*)a == *(const long long*)b;
 }
@@ -2708,6 +2713,8 @@ static void _upp_fb_ciz(int x, int y, uint32_t hucre, int imlec) {
     int g = _upp_yazi_bul(cp);
     int sx, sy;
     uint32_t bpp = _upp_fb_bpp / 8;
+    /* Yazı tipinde olmayan gölge blokları (░ ▒ ▓) CP437'deki desenleriyle çizilir. */
+    int golge = g < 0 && cp >= 0x2591 && cp <= 0x2593 ? (int)(cp - 0x2590) : 0;
     if (g < 0) {
         g = _upp_yazi_bul('?');
     }
@@ -2716,6 +2723,13 @@ static void _upp_fb_ciz(int x, int y, uint32_t hucre, int imlec) {
     }
     for (sy = 0; sy < 16; sy++) {
         uint8_t bit = _upp_yazi[g][sy];
+        if (golge == 1) {
+            bit = (sy & 1) ? 0x22 : 0x88;
+        } else if (golge == 2) {
+            bit = (sy & 1) ? 0x55 : 0xAA;
+        } else if (golge == 3) {
+            bit = (sy & 1) ? 0xDD : 0x77;
+        }
         volatile uint8_t* satir = _upp_fb + (size_t)(y * 16 + sy) * _upp_fb_adim + (size_t)x * 8u * bpp;
         if (imlec && sy >= 14) {
             bit = 0xFF;
@@ -2820,10 +2834,18 @@ static void _upp_ekr_karakter(long long cp, uint8_t renk) {
 }
 
 /* İmleç: VGA'da donanım imleci, çerçeve tamponunda alt çizgi. */
+/* \e[?25l / \e[?25h: imleç gizli mi (tam ekran programlar, ör. oyunlar). */
+static int _upp_ekr_imlec_gizli = 0;
+
 static void _upp_ekr_imlec(void) {
     if (_upp_fb_aktif) {
         if (_upp_fb_imlec_x >= 0 && _upp_fb_imlec_y >= 0 && _upp_fb_imlec_x < _upp_ekr_g && _upp_fb_imlec_y < _upp_ekr_y) {
             _upp_fb_ciz(_upp_fb_imlec_x, _upp_fb_imlec_y, _upp_fb_hucreler[_upp_fb_imlec_y * _upp_ekr_g + _upp_fb_imlec_x], 0);
+        }
+        if (_upp_ekr_imlec_gizli) {
+            _upp_fb_imlec_x = -1;
+            _upp_fb_imlec_y = -1;
+            return;
         }
         _upp_fb_imlec_x = _upp_ekr_x;
         _upp_fb_imlec_y = _upp_ekr_s;
@@ -2831,7 +2853,8 @@ static void _upp_ekr_imlec(void) {
         return;
     }
     {
-        uint16_t yer = (uint16_t)(_upp_ekr_s * _upp_ekr_g + _upp_ekr_x);
+        /* Ekran dışındaki bir konum VGA donanım imlecini gizler. */
+        uint16_t yer = _upp_ekr_imlec_gizli ? (uint16_t)0xFFFF : (uint16_t)(_upp_ekr_s * _upp_ekr_g + _upp_ekr_x);
         _upp_outb(0x3D4, 0x0F);
         _upp_outb(0x3D5, (uint8_t)(yer & 0xFF));
         _upp_outb(0x3D4, 0x0E);
@@ -2916,6 +2939,7 @@ static unsigned char _upp_cp437(long long cp) {
 static int _upp_ansi_durum = 0;
 static int _upp_ansi_p[4];
 static int _upp_ansi_n = 0;
+static int _upp_ansi_ozel = 0; /* '?' ile başlayan özel dizi (\e[?25l) */
 static int _upp_vga_renk = -1;
 static const uint8_t _upp_ansi_vga[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 
@@ -2942,11 +2966,19 @@ static void _upp_ansi_uygula(long long son) {
                 _upp_vga_renk = (r & 0xF0) | 0x08 | _upp_ansi_vga[v - 90];
             }
         }
+    } else if (_upp_ansi_ozel) {
+        /* \e[?25l / \e[?25h */
+        if ((son == 'l' || son == 'h') && _upp_ansi_n > 0 && _upp_ansi_p[0] == 25) {
+            _upp_ekr_imlec_gizli = son == 'l';
+        }
     } else if (son == 'J') {
         _upp_ekr_temizle();
-    } else if (son == 'H') {
-        _upp_ekr_x = 0;
-        _upp_ekr_s = 0;
+    } else if (son == 'H' || son == 'f') {
+        /* \e[satır;sütunH, 1 tabanlı; eksik parametre 1 sayılır. */
+        int s = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
+        int x = _upp_ansi_n > 1 && _upp_ansi_p[1] > 0 ? _upp_ansi_p[1] : 1;
+        _upp_ekr_s = s > _upp_ekr_y ? _upp_ekr_y - 1 : s - 1;
+        _upp_ekr_x = x > _upp_ekr_g ? _upp_ekr_g - 1 : x - 1;
     } else if (son == 'C' || son == 'D') {
         int n = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
         _upp_ekr_x += son == 'C' ? n : -n;
@@ -2973,9 +3005,14 @@ static int _upp_ansi_isle(long long cp) {
             _upp_ansi_durum = 2;
             _upp_ansi_n = 0;
             _upp_ansi_p[0] = 0;
+            _upp_ansi_ozel = 0;
             return 1;
         }
         _upp_ansi_durum = 0;
+        return 1;
+    }
+    if (cp == '?' && _upp_ansi_n == 0 && !_upp_ansi_ozel) {
+        _upp_ansi_ozel = 1;
         return 1;
     }
     if (cp >= '0' && cp <= '9') {
@@ -3894,7 +3931,7 @@ static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, 
     g->rsp = (uint64_t)(uintptr_t)sp;
     g->f = f;
     g->arg = arg;
-    g->ad = upp_metin_kopya(ad ? ad : "");
+    g->ad = ad ? upp_metin_kopya(ad) : _upp_m_c("");
     g->kimlik = _upp_gorev_sonraki++;
     g->baslama = _upp_tik;
     g->uyan = 0;

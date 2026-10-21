@@ -132,8 +132,26 @@ Aşağıdaki işlemler yalnızca açıkça `guvensiz { ... }` bloğu içinde yap
 - Harici süreç belleği erişimleri (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`),
 - Doğrudan donanım port ve MMIO erişimleri (`upp.cekirdek.port_*`, `bellek_*`, `dur`, `kesme_ac/kapat`, `yigin_kur`).
 
-> [!TIP]
-> `c_kod` bloğu içinden bir `metin` değişkenine ham C işaretçisi atanırsa, önünde `UPP_METIN_SIHIR` başlığı bulunmadığı için çalışma zamanı bu işaretçiyi asla `free` etmez. C içinden yönetilen bir metin atamak için `upp_metin_ata(&s, UPP_LIT("..."))` kullanabilirsiniz.
+#### `c_kod` ve `metin`
+`metin` her zaman **yönetilen** bir değerdir: verinin hemen önünde başlık (başvuru sayısı, uzunluk, sihirli sayı) durur ve içerik paylaşımlıdır. `c_kod` içinde bir metin değişkeni sıradan bir `const char*` gibi okunabilir (`strlen(s)`, `printf("%s", s)`), ama yalnızca şu çağrılarla değiştirilir:
+
+| C çağrısı | Ne yapar |
+| :--- | :--- |
+| `upp_metin_ata_c(&s, c)` | NUL ile biten ham C dizgisini (sabit, yığın tamponu, `getenv` sonucu…) **kopyalayarak** atar, eski değeri bırakır. `c` `NULL` ise `s` boş metin olur |
+| `upp_metin_ata(&s, t)` | Başka bir yönetilen metni (`t` bir u++ metni ya da `UPP_LIT("...")`) paylaşarak atar, eski değeri bırakır |
+
+```upp
+metin s = "eski";
+guvensiz {
+    c_kod {
+        char tampon[16];
+        snprintf(tampon, sizeof tampon, "%d", 42);
+        upp_metin_ata_c(&s, tampon);
+    }
+}
+```
+
+Derleyici, `c_kod` metninde kapsamdaki bir `metin` değişkenini yeniden yönlendiren (`s = ...`, `s += 1`, `s++`) ya da içeriğine yazan (`s[0] = ...`, `*s = ...`) işlemleri derleme hatasıyla reddeder. `c_kod`'un kendi tanımladığı aynı adlı C yereli (`char* s = ...`) ve üye erişimleri (`p->s`) etkilenmez. Denetim sözcükseldir; işaretçi üzerinden dolaylı atama (`char** p = &s; *p = "x";`) yakalanamaz. Bu durumda başlıksız metin ilk kullanımda `yönetilmeyen metin` paniğiyle durur, sessiz bellek bozulmasına yol açmaz.
 
 ---
 
@@ -485,7 +503,7 @@ Aşağıdaki çekirdek servisleri ise **güvenli koddan** doğrudan çağrılabi
 > [!NOTE]
 > **Çekirdek Ortamı Notları:**
 > - **Bellek:** Açılışta yığın ayırıcı (heap), bellek haritasındaki en büyük boş RAM bölgesine otomatik olarak kurulur (Multiboot'ta ilk 1 GiB, Limine'de 1 MiB–4 GiB arası; 128 MiB QEMU'da ~122 MiB).
-> - **Konsol:** Multiboot ile VGA metin ekranı (CP437 Türkçe eşleme), Limine ile çerçeve tamponuna çizilen metin konsolu (Terminus 8x16 yazı tipi, Türkçe karakterler dahil) kullanılır. İkisi de kutu çizim karakterlerini (`├ └ │ ─`) ve ANSI kaçış dizilerini (`\e[1;32m`, `\e[2J`, `\e[H`, `\e[K`) destekler.
+> - **Konsol:** Multiboot ile VGA metin ekranı (CP437 Türkçe eşleme), Limine ile çerçeve tamponuna çizilen metin konsolu (Terminus 8x16 yazı tipi, Türkçe karakterler dahil) kullanılır. İkisi de kutu çizim ve gölge karakterlerini (`├ └ │ ─ █ ░ ▒ ▓`) ve ANSI kaçış dizilerini destekler: renk (`\e[1;32m`), temizleme (`\e[2J`, `\e[K`), imleç konumu (`\e[H`, `\e[satır;sütunH`, `\e[nC`/`\e[nD`) ve imleci gizleme/gösterme (`\e[?25l` / `\e[?25h`).
 > - **Limine:** `--onyukleyici limine` ile çekirdek `0xffffffff80000000`'da duran bir ELF64 olur (`-mcmodel=kernel`). Açılışta Limine protokolü (taban revizyon 6) istekleriyle bellek haritası, çerçeve tamponu, HHDM ve çekirdek adresi alınır; çekirdek kendi GDT'sini ve sayfa tablolarını (ilk 4 GiB birebir + çekirdek) kurar, SSE'yi açar ve 8259 PIC kesmeleri için yerel APIC'i kapatır.
 > - **İstisnalar:** İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe istisna adı, `RIP` ve `CR2` adresiyle panik verir.
 

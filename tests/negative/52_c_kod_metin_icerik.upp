@@ -1,0 +1,17 @@
+// Negatif: c_kod içinde metnin içeriğine yazılamaz (paylaşımlı ve değişmez).
+// @icerir: [u++ HATA]
+// @icerir: c_kod içinde metin değişkeni 'm' içeriğine yazılamaz
+
+fonk buyut(metin m) -> metin {
+    guvensiz {
+        c_kod {
+            m[0] = 'U';
+        }
+    }
+    don m;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz(buyut("upp"));
+    don 0;
+}

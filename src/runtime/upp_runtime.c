@@ -186,9 +186,14 @@ static long long upp_dizi_idx(long long i, long long n) {
  *   - nbayt/kap: uzunluk O(1), += yerinde büyür (ref == 1 iken).
  *   - ncp/off: kod noktası sayısı ve cp→bayt tablosu tembel ve metne özel;
  *     küresel önbellek yok, metinler arasında gidip gelmek ucuz.
- *   - sihir: başlığın son alanı, verinin hemen önündeki 4 bayt. Bu yüzden
- *     yönetilmeyen bir işaretçinin (C sabiti, c_kod) yalnızca 4 baytı okunur
- *     ve böyle bir işaretçi asla serbest bırakılmaz.
+ *   - sihir: başlığın son alanı, verinin hemen önündeki 4 bayt.
+ *
+ * Sözleşme: bir metin değeri (değişken, alan, koleksiyon elemanı, parametre)
+ * HER ZAMAN yönetilir; başlığı sorgulamadan önce "yönetiliyor mu" diye
+ * tahmin edilmez. Ham C dizgileri (argv, getenv, C tamponları, c_kod) metne
+ * yalnızca kopyalanarak girer: _upp_m_c / upp_metin_ata_c. Derleyici, c_kod
+ * içinde metin değişkenine doğrudan atamayı reddeder. Sihir bir bütünlük
+ * denetimidir: tutmazsa (ham işaretçi, serbest bırakılmış metin) panik.
  * ===================================================================== */
 #define UPP_METIN_SIHIR 0xF5C3A71Du
 #define UPP_MB_ASCII 1u
@@ -207,16 +212,17 @@ typedef struct UppMetinBas {
 
 static void upp_panik(const char* mesaj);
 
+/* Yönetilen metnin başlığı; NULL (boş metin) için NULL. */
 static UppMetinBas* _upp_mb(const char* s) {
-    uint32_t sh;
+    UppMetinBas* b;
     if (!s) {
         return NULL;
     }
-    memcpy(&sh, s - sizeof(uint32_t), sizeof(uint32_t));
-    if (sh != UPP_METIN_SIHIR) {
-        return NULL;
+    b = (UppMetinBas*)(void*)(s - sizeof(UppMetinBas));
+    if (b->sihir != UPP_METIN_SIHIR) {
+        upp_panik("yönetilmeyen metin: başlık yok ya da metin serbest bırakılmış (c_kod içinde ham C dizgisi için upp_metin_ata_c kullanın)");
     }
-    return (UppMetinBas*)(void*)(s - sizeof(UppMetinBas));
+    return b;
 }
 
 /* Runtime içindeki C sabitleri için ölümsüz yönetilen metin. */
@@ -259,7 +265,7 @@ static char* _upp_m_yeni(size_t n) {
 static char* _upp_m_boy(char* s, size_t n) {
     UppMetinBas* b = _upp_mb(s);
     if (!b) {
-        return s;
+        return NULL;
     }
     if (n + 1u > b->kap) {
         upp_panik("metin boyu kapasiteyi aşıyor");
@@ -293,10 +299,7 @@ static char* _upp_m_c(const char* s) {
 
 static size_t upp_metin_nbayt(const char* s) {
     UppMetinBas* b = _upp_mb(s);
-    if (b) {
-        return b->nbayt;
-    }
-    return s ? strlen(s) : 0u;
+    return b ? b->nbayt : 0u;
 }
 
 /* malloc ile üretilmiş ham tamponu yönetilen metne çevirip ham tamponu bırakır. */
@@ -311,18 +314,14 @@ static char* _upp_m_sahiplen(char* ham) {
 }
 
 static char* upp_metin_kopya(const char* s) {
-    UppMetinBas* b;
-    if (!s) {
+    UppMetinBas* b = _upp_mb(s);
+    if (!b) {
         return NULL;
     }
-    b = _upp_mb(s);
-    if (b) {
-        if (!(b->bayrak & UPP_MB_SABIT)) {
-            __atomic_add_fetch(&b->ref, 1, __ATOMIC_RELAXED);
-        }
-        return (char*)s;
+    if (!(b->bayrak & UPP_MB_SABIT)) {
+        __atomic_add_fetch(&b->ref, 1, __ATOMIC_RELAXED);
     }
-    return _upp_m_bayttan(s, strlen(s));
+    return (char*)s;
 }
 
 /* Paylaşımsız, bağımsız kopya (iş parçacığına aktarım için). */
@@ -403,7 +402,7 @@ static long long _upp_m_ncp(const char* s) {
     UppMetinBas* b = _upp_mb(s);
     long long k;
     if (!b) {
-        return s ? _upp_utf8_say(s, strlen(s)) : 0;
+        return 0;
     }
     k = __atomic_load_n(&b->ncp, __ATOMIC_RELAXED);
     if (k >= 0) {
@@ -424,11 +423,8 @@ static size_t _upp_m_cpbayt(const char* s, long long cp) {
     UppMetinBas* b = _upp_mb(s);
     long long ncp;
     size_t* off;
-    if (cp <= 0 || !s) {
+    if (cp <= 0 || !b) {
         return 0;
-    }
-    if (!b) {
-        return _upp_utf8_bayt(s, strlen(s), cp);
     }
     ncp = _upp_m_ncp(s);
     if (cp >= ncp) {
@@ -622,6 +618,18 @@ static void upp_metin_ata(char** dst, const char* src) {
     *dst = yeni;
 }
 
+/* c_kod için: ham C dizgisini (NUL ile biten, başlıksız) metne kopyalayarak
+ * atar ve eski değeri bırakır. c, *dst'nin içini gösterebilir: önce kopya. */
+static void upp_metin_ata_c(char** dst, const char* c) {
+    char* yeni;
+    if (!dst) {
+        return;
+    }
+    yeni = _upp_m_c(c);
+    upp_metin_release(*dst);
+    *dst = yeni;
+}
+
 static void upp_metin_tasi(char** dst, char** src) {
     char* yeni;
     if (!dst) {
@@ -637,9 +645,6 @@ static void upp_metin_tasi(char** dst, char** src) {
     }
     yeni = *src;
     *src = NULL;
-    if (yeni && !_upp_mb(yeni)) {
-        yeni = _upp_m_bayttan(yeni, strlen(yeni));
-    }
     if (*dst == yeni) {
         upp_metin_release(yeni);
         return;
@@ -1705,7 +1710,7 @@ static int _upp_h_esit(int kk, const void* a, const void* b) {
     if (kk == _UPP_HK_METIN) {
         const char* x = *(const char* const*)a;
         const char* y = *(const char* const*)b;
-        return upp_metin_esit(x ? x : "", y ? y : "");
+        return upp_metin_esit(x ? x : UPP_LIT(""), y ? y : UPP_LIT(""));
     }
     return *(const long long*)a == *(const long long*)b;
 }
@@ -4964,7 +4969,7 @@ static char* upp_sistem_komut_bul(const char* ad) {
         if (!path) {
             return NULL;
         }
-        kopya = upp_metin_derin(path);
+        kopya = _upp_m_c(path);
         if (!kopya) {
             return NULL;
         }

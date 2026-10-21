@@ -133,8 +133,26 @@ The following operations are permitted only inside explicit `guvensiz { ... }` b
 - Foreign process memory access (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`),
 - Direct hardware port I/O, MMIO, and privileged instructions (`upp.cekirdek.port_*`, `bellek_*`, `dur`, `kesme_ac/kapat`, `yigin_kur`).
 
-> [!TIP]
-> If an inline `c_kod` block assigns a raw C pointer to a `metin` variable, the runtime will never attempt to `free` it because it lacks the `UPP_METIN_SIHIR` header magic. To assign a managed literal from C code, use `upp_metin_ata(&s, UPP_LIT("..."))`.
+#### `c_kod` and `metin`
+A `metin` is always a **managed** value: a header (reference count, length, magic) sits right before the data and the contents are shared. Inside `c_kod` a metin variable can be read like any `const char*` (`strlen(s)`, `printf("%s", s)`), but it may only be changed through these calls:
+
+| C call | Effect |
+| :--- | :--- |
+| `upp_metin_ata_c(&s, c)` | **Copies** a NUL-terminated raw C string (literal, stack buffer, `getenv` result…) into `s` and releases the old value. If `c` is `NULL`, `s` becomes empty |
+| `upp_metin_ata(&s, t)` | Shares another managed string (`t` is a u++ metin or `UPP_LIT("...")`) and releases the old value |
+
+```upp
+metin s = "old";
+guvensiz {
+    c_kod {
+        char buf[16];
+        snprintf(buf, sizeof buf, "%d", 42);
+        upp_metin_ata_c(&s, buf);
+    }
+}
+```
+
+The compiler rejects, with a compile error, any `c_kod` text that re-points a `metin` variable in scope (`s = ...`, `s += 1`, `s++`) or writes into its contents (`s[0] = ...`, `*s = ...`). A C local of the same name declared by the `c_kod` block itself (`char* s = ...`) and member accesses (`p->s`) are not affected. The check is lexical, so indirect assignment through a pointer (`char** p = &s; *p = "x";`) cannot be caught. In that case the header-less string stops with a `yönetilmeyen metin` panic on first use instead of silently corrupting memory.
 
 ---
 
@@ -486,7 +504,7 @@ The remaining kernel services can be called directly from **safe code**:
 > [!NOTE]
 > **Kernel Runtime Environment:**
 > - **Heap Placement:** At boot, the freestanding heap automatically relocates to the largest available RAM region in the memory map (within the first 1 GiB under Multiboot, between 1 MiB and 4 GiB under Limine; ~122 MiB on QEMU's default 128 MiB configuration), falling back to a 4 MiB `.bss` arena if no memory map is provided.
-> - **Console:** Under Multiboot the VGA text driver maps Turkish characters to CP437; under Limine a text console is drawn onto the framebuffer with the Terminus 8x16 font (Turkish characters included). Both render box-drawing characters (`├ └ │ ─`) and interpret ANSI escape sequences (`\e[1;32m`, `\e[2J`, `\e[H`, `\e[K`).
+> - **Console:** Under Multiboot the VGA text driver maps Turkish characters to CP437; under Limine a text console is drawn onto the framebuffer with the Terminus 8x16 font (Turkish characters included). Both render box-drawing and shade characters (`├ └ │ ─ █ ░ ▒ ▓`) and interpret ANSI escape sequences: color (`\e[1;32m`), clearing (`\e[2J`, `\e[K`), cursor positioning (`\e[H`, `\e[row;colH`, `\e[nC`/`\e[nD`), and hiding/showing the cursor (`\e[?25l` / `\e[?25h`).
 > - **Limine:** With `--onyukleyici limine` the kernel is an ELF64 linked at `0xffffffff80000000` (`-mcmodel=kernel`). At boot it uses Limine protocol (base revision 6) requests for the memory map, framebuffer, HHDM and kernel address, then installs its own GDT and page tables (first 4 GiB identity-mapped plus the kernel), enables SSE, and disables the local APIC so 8259 PIC interrupts are delivered.
 > - **Exceptions:** CPU exceptions (divide error, page fault, etc.) print a Turkish exception diagnostic with `RIP` and `CR2` and exit QEMU with code `3`.
 

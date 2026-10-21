@@ -482,6 +482,8 @@ static void _upp_fb_ciz(int x, int y, uint32_t hucre, int imlec) {
     int g = _upp_yazi_bul(cp);
     int sx, sy;
     uint32_t bpp = _upp_fb_bpp / 8;
+    /* Yazı tipinde olmayan gölge blokları (░ ▒ ▓) CP437'deki desenleriyle çizilir. */
+    int golge = g < 0 && cp >= 0x2591 && cp <= 0x2593 ? (int)(cp - 0x2590) : 0;
     if (g < 0) {
         g = _upp_yazi_bul('?');
     }
@@ -490,6 +492,13 @@ static void _upp_fb_ciz(int x, int y, uint32_t hucre, int imlec) {
     }
     for (sy = 0; sy < 16; sy++) {
         uint8_t bit = _upp_yazi[g][sy];
+        if (golge == 1) {
+            bit = (sy & 1) ? 0x22 : 0x88;
+        } else if (golge == 2) {
+            bit = (sy & 1) ? 0x55 : 0xAA;
+        } else if (golge == 3) {
+            bit = (sy & 1) ? 0xDD : 0x77;
+        }
         volatile uint8_t* satir = _upp_fb + (size_t)(y * 16 + sy) * _upp_fb_adim + (size_t)x * 8u * bpp;
         if (imlec && sy >= 14) {
             bit = 0xFF;
@@ -594,10 +603,18 @@ static void _upp_ekr_karakter(long long cp, uint8_t renk) {
 }
 
 /* İmleç: VGA'da donanım imleci, çerçeve tamponunda alt çizgi. */
+/* \e[?25l / \e[?25h: imleç gizli mi (tam ekran programlar, ör. oyunlar). */
+static int _upp_ekr_imlec_gizli = 0;
+
 static void _upp_ekr_imlec(void) {
     if (_upp_fb_aktif) {
         if (_upp_fb_imlec_x >= 0 && _upp_fb_imlec_y >= 0 && _upp_fb_imlec_x < _upp_ekr_g && _upp_fb_imlec_y < _upp_ekr_y) {
             _upp_fb_ciz(_upp_fb_imlec_x, _upp_fb_imlec_y, _upp_fb_hucreler[_upp_fb_imlec_y * _upp_ekr_g + _upp_fb_imlec_x], 0);
+        }
+        if (_upp_ekr_imlec_gizli) {
+            _upp_fb_imlec_x = -1;
+            _upp_fb_imlec_y = -1;
+            return;
         }
         _upp_fb_imlec_x = _upp_ekr_x;
         _upp_fb_imlec_y = _upp_ekr_s;
@@ -605,7 +622,8 @@ static void _upp_ekr_imlec(void) {
         return;
     }
     {
-        uint16_t yer = (uint16_t)(_upp_ekr_s * _upp_ekr_g + _upp_ekr_x);
+        /* Ekran dışındaki bir konum VGA donanım imlecini gizler. */
+        uint16_t yer = _upp_ekr_imlec_gizli ? (uint16_t)0xFFFF : (uint16_t)(_upp_ekr_s * _upp_ekr_g + _upp_ekr_x);
         _upp_outb(0x3D4, 0x0F);
         _upp_outb(0x3D5, (uint8_t)(yer & 0xFF));
         _upp_outb(0x3D4, 0x0E);
@@ -690,6 +708,7 @@ static unsigned char _upp_cp437(long long cp) {
 static int _upp_ansi_durum = 0;
 static int _upp_ansi_p[4];
 static int _upp_ansi_n = 0;
+static int _upp_ansi_ozel = 0; /* '?' ile başlayan özel dizi (\e[?25l) */
 static int _upp_vga_renk = -1;
 static const uint8_t _upp_ansi_vga[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 
@@ -716,11 +735,19 @@ static void _upp_ansi_uygula(long long son) {
                 _upp_vga_renk = (r & 0xF0) | 0x08 | _upp_ansi_vga[v - 90];
             }
         }
+    } else if (_upp_ansi_ozel) {
+        /* \e[?25l / \e[?25h */
+        if ((son == 'l' || son == 'h') && _upp_ansi_n > 0 && _upp_ansi_p[0] == 25) {
+            _upp_ekr_imlec_gizli = son == 'l';
+        }
     } else if (son == 'J') {
         _upp_ekr_temizle();
-    } else if (son == 'H') {
-        _upp_ekr_x = 0;
-        _upp_ekr_s = 0;
+    } else if (son == 'H' || son == 'f') {
+        /* \e[satır;sütunH, 1 tabanlı; eksik parametre 1 sayılır. */
+        int s = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
+        int x = _upp_ansi_n > 1 && _upp_ansi_p[1] > 0 ? _upp_ansi_p[1] : 1;
+        _upp_ekr_s = s > _upp_ekr_y ? _upp_ekr_y - 1 : s - 1;
+        _upp_ekr_x = x > _upp_ekr_g ? _upp_ekr_g - 1 : x - 1;
     } else if (son == 'C' || son == 'D') {
         int n = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
         _upp_ekr_x += son == 'C' ? n : -n;
@@ -747,9 +774,14 @@ static int _upp_ansi_isle(long long cp) {
             _upp_ansi_durum = 2;
             _upp_ansi_n = 0;
             _upp_ansi_p[0] = 0;
+            _upp_ansi_ozel = 0;
             return 1;
         }
         _upp_ansi_durum = 0;
+        return 1;
+    }
+    if (cp == '?' && _upp_ansi_n == 0 && !_upp_ansi_ozel) {
+        _upp_ansi_ozel = 1;
         return 1;
     }
     if (cp >= '0' && cp <= '9') {
@@ -1668,7 +1700,7 @@ static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, 
     g->rsp = (uint64_t)(uintptr_t)sp;
     g->f = f;
     g->arg = arg;
-    g->ad = upp_metin_kopya(ad ? ad : "");
+    g->ad = ad ? upp_metin_kopya(ad) : _upp_m_c("");
     g->kimlik = _upp_gorev_sonraki++;
     g->baslama = _upp_tik;
     g->uyan = 0;

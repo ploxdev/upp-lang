@@ -2022,6 +2022,162 @@ fonk kapsam_bagla_yeni(metin ad, sayi ty, sayi satir, sayi sutun) -> bos {
     kapsam_bagla(ad, ty);
 }
 
+// ---- c_kod metin sözleşmesi ----
+// metin her zaman yönetilen bir değerdir (başlık + başvuru sayısı, paylaşımlı
+// içerik). c_kod içindeki C metni sözcüklere ayrılır; kapsamdaki bir 'metin'
+// değişkeni yeniden yönlendirilirse (=, +=, -=, ++, --) ya da içeriğine
+// yazılırsa (s[i] = ..., *s = ...) derleme hatası verilir. Ham C dizgisi
+// upp_metin_ata_c(&s, ...), başka bir metin upp_metin_ata(&s, ...) ile atanır.
+// Dizgi/karakter sabitleri, yorumlar ve önişlemci satırları atlanır.
+fonk ckod_kume(metin s) -> harita[metin, mantik] {
+    harita[metin, mantik] K;
+    her (oto p in upp.metin.bol(s, " ")) { K.koy(p, dogru); }
+    don K;
+}
+
+fonk ckod_jetonlar(metin k) -> liste[metin] {
+    liste[metin] J;
+    sayi n = upp.uzunluk(k);
+    sayi i = 0;
+    oto iki = ckod_kume("== != <= >= += -= *= /= %= &= |= ^= ++ -- -> && || << >>");
+    iken (i < n) {
+        sayi c = k[i];
+        sayi s2 = -1;
+        eger (i + 1 < n) { s2 = k[i + 1]; }
+        eger (c == 32 || c == 9 || c == 10 || c == 13) { i = i + 1; devam; }
+        eger (c == 47 && s2 == 47) {
+            iken (i < n && k[i] != 10) { i = i + 1; }
+            devam;
+        }
+        eger (c == 47 && s2 == 42) {
+            i = i + 2;
+            iken (i + 1 < n && !(k[i] == 42 && k[i + 1] == 47)) { i = i + 1; }
+            i = i + 2;
+            devam;
+        }
+        eger (c == 35) {
+            iken (i < n && k[i] != 10) { i = i + 1; }
+            devam;
+        }
+        eger (c == 34 || c == 39) {
+            sayi kapat = c;
+            i = i + 1;
+            iken (i < n && k[i] != kapat) {
+                eger (k[i] == 92) { i = i + 1; }
+                i = i + 1;
+            }
+            i = i + 1;
+            J.ekle("\"");
+            devam;
+        }
+        eger (ident_bas(c)) {
+            sayi bas = i;
+            iken (i < n && ident_devam(k[i])) { i = i + 1; }
+            J.ekle(upp.metin.kes(k, bas, i - bas));
+            devam;
+        }
+        eger (c >= 48 && c <= 57) {
+            iken (i < n && (ident_devam(k[i]) || k[i] == 46)) { i = i + 1; }
+            J.ekle("0");
+            devam;
+        }
+        eger (s2 >= 0) {
+            metin op = upp.metin.kes(k, i, 2);
+            eger (iki.var_mi(op)) {
+                J.ekle(op);
+                i = i + 2;
+                devam;
+            }
+        }
+        J.ekle(upp.metin.kes(k, i, 1));
+        i = i + 1;
+    }
+    don J;
+}
+
+fonk ckod_kimlik_mi(metin j) -> mantik => upp.uzunluk(j) > 0 && ident_bas(j[0]);
+
+fonk ckod_metin_degisken_mi(metin ad) -> mantik {
+    sayi t = kapsam_bul(ad);
+    eger (t == 0) { t = tablo_bul(3, ad); }
+    don t != 0 && tip_metin_mi(t);
+}
+
+// j[i] bir tanımın adı mı (C'nin kendi yereli): "char *s", "int s", "T* s".
+fonk ckod_tanim_mi(liste[metin] J, sayi i) -> mantik {
+    sayi p = i - 1;
+    iken (p >= 0 && J[p] == "*") { p = p - 1; }
+    eger (p < 0 || !ckod_kimlik_mi(J[p])) { don yanlis; }
+    oto onceki = J[p];
+    don onceki != "return" && onceki != "else" && onceki != "do" && onceki != "case" && onceki != "sizeof";
+}
+
+fonk ckod_ihlal_ver(sayi node, metin ad, mantik icerik) -> bos {
+    hata_fmt_basla();
+    hata_fmt_yaz("c_kod içinde metin değişkeni '");
+    hata_fmt_yaz(ad);
+    eger (icerik) {
+        hata_fmt_yaz("' içeriğine yazılamaz: metin paylaşımlı ve değişmez bir değerdir. Yeni bir metin kurup upp_metin_ata_c(&");
+    } yoksa {
+        hata_fmt_yaz("' doğrudan değiştirilemez: metin yönetilen bir değerdir. Ham C dizgisi için upp_metin_ata_c(&");
+    }
+    hata_fmt_yaz(ad);
+    hata_fmt_yaz(", ...), başka bir metin için upp_metin_ata(&");
+    hata_fmt_yaz(ad);
+    hata_fmt_yaz(", ...) kullanın.");
+    hata_fmt_ver(dugum_satir(node), dugum_sutun(node));
+}
+
+fonk ckod_metin_denetle(sayi node) -> bos {
+    liste[metin] J = ckod_jetonlar(dugum_ad(node));
+    harita[metin, mantik] yerel;
+    oto yonlendir = ckod_kume("= += -= ++ --");
+    oto yaz_op = ckod_kume("= += -= *= /= %= &= |= ^= ++ --");
+    sayi n = J.uzunluk();
+    dongu (sayi i = 0; i < n; i += 1) {
+        oto ad = J[i];
+        eger (!ckod_kimlik_mi(ad) || yerel.var_mi(ad)) { devam; }
+        eger (i > 0 && (J[i - 1] == "." || J[i - 1] == "->")) { devam; }
+        eger (!ckod_metin_degisken_mi(ad)) { devam; }
+        eger (ckod_tanim_mi(J, i)) {
+            yerel.koy(ad, dogru);
+            devam;
+        }
+        oto sonraki = "";
+        eger (i + 1 < n) { sonraki = J[i + 1]; }
+        // Yeniden yönlendirme: s = ..., s += 1, s++, ++s
+        eger (yonlendir.var_mi(sonraki) || (i > 0 && (J[i - 1] == "++" || J[i - 1] == "--"))) {
+            ckod_ihlal_ver(node, ad, yanlis);
+            don;
+        }
+        // İçeriğe yazma: s[...] = ...
+        eger (sonraki == "[") {
+            sayi d = 0;
+            sayi j = i + 1;
+            iken (j < n) {
+                eger (J[j] == "[") { d = d + 1; }
+                eger (J[j] == "]") {
+                    d = d - 1;
+                    eger (d == 0) { dur; }
+                }
+                j = j + 1;
+            }
+            eger (j + 1 < n && yaz_op.var_mi(J[j + 1])) {
+                ckod_ihlal_ver(node, ad, dogru);
+                don;
+            }
+        }
+        // İçeriğe yazma: *s = ... (tekli *; öncesi değer değilse)
+        eger (i > 0 && J[i - 1] == "*" && yaz_op.var_mi(sonraki)) {
+            mantik tekli = i < 2 || !(ckod_kimlik_mi(J[i - 2]) || J[i - 2] == ")" || J[i - 2] == "]" || J[i - 2] == "0" || J[i - 2] == "\"");
+            eger (tekli) {
+                ckod_ihlal_ver(node, ad, dogru);
+                don;
+            }
+        }
+    }
+}
+
 fonk tip_yuru(sayi stmt) -> bos {
     hata_dosya_yaz(dugum_kaynak(stmt));
     eger (stmt == 0 || hata_var()) { don; }
@@ -2035,6 +2191,10 @@ fonk tip_yuru(sayi stmt) -> bos {
             i = i + 1;
         }
         kapsam_kapat();
+        don;
+    }
+    eger (t == DugumTur.D_C_GOMMU) {
+        ckod_metin_denetle(stmt);
         don;
     }
     eger (t == DugumTur.D_GUVENSIZ) {

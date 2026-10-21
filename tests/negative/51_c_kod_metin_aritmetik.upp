@@ -1,0 +1,14 @@
+// Negatif: c_kod içinde metin işaretçisi kaydırılamaz (iç işaretçi başlıksızdır).
+// @icerir: [u++ HATA]
+// @icerir: c_kod içinde metin değişkeni 'ad' doğrudan değiştirilemez
+
+metin ad = "uppix";
+
+fonk ana() -> sayi {
+    guvensiz {
+        c_kod {
+            if (ad) ad++;
+        }
+    }
+    don 0;
+}

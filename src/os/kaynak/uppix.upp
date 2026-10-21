@@ -15,6 +15,7 @@ kullan "komut_dosya.upp";
 kullan "komut_metin.upp";
 kullan "komut_sistem.upp";
 kullan "komut_disk.upp";
+kullan "komut_oyun.upp";
 
 sabit metin UPPIX_SURUM = "0.3.0";
 
@@ -78,6 +79,7 @@ fonk komutlari_kur() -> bos {
     komut_ekle("seq", k_seq, "sayı dizisi");
     komut_ekle("sh", k_sh, "betik çalıştır (sh dosya, sh -c)");
     komut_ekle("sleep", k_sleep, "bekle (1, 0.5, 300ms)");
+    komut_ekle("snake", k_snake, "yılan oyunu (-o: otopilot)");
     komut_ekle("sort", k_sort, "sırala (-r -n -u)");
     komut_ekle("source", k_source, "betiği bu kabukta çalıştır");
     komut_ekle(".", k_source, "betiği bu kabukta çalıştır");

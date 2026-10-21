@@ -1,0 +1,15 @@
+// Negatif: c_kod içinde metin değişkenine ham C işaretçisi doğrudan atanamaz.
+// @icerir: [u++ HATA]
+// @icerir: c_kod içinde metin değişkeni 's' doğrudan değiştirilemez
+// @icerir: upp_metin_ata_c(&s, ...)
+
+fonk ana() -> sayi {
+    metin s = "a";
+    guvensiz {
+        c_kod {
+            s = "c_sabiti";
+        }
+    }
+    upp.satir_yaz(s);
+    don 0;
+}

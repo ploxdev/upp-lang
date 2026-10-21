@@ -1,0 +1,25 @@
+// Çekirdek: Uppix'te 'snake' yılan oyunu. Otopilot (-o) 200 adımı beklemeden oynar (-n);
+// rekor /root/.yilan_rekor'a yazılır, ikinci oyun onu okur. Terminal yoksa oyun açılmaz.
+// @girdi: snake -h
+// @girdi: snake -o -n 200
+// @girdi: cat /root/.yilan_rekor | wc -l
+// @girdi: snake -o -n 3
+// @girdi: snake -o -n 5 > /tmp/yilan.txt; echo "kod=$?"
+// @girdi: snake -x; echo "kod=$?"
+// @girdi: poweroff
+// @icerir: kullanım: snake [-o] [-n ADIM]
+// @icerir: snake: skor
+// @icerir: 200 adım
+// @icerir: 3 adım (rekor
+// @icerir: snake: terminal gerekir
+// @icerir: kod=1
+// @icerir: snake: bilinmeyen seçenek '-x'
+// @icerir: kod=2
+// @icerir: Sistem kapatılıyor...
+
+kullan "../../src/os/kaynak/uppix.upp";
+
+fonk ana() -> sayi {
+    uppix_baslat();
+    don 0;
+}

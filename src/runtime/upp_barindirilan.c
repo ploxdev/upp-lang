@@ -2947,7 +2947,7 @@ static char* upp_sistem_komut_bul(const char* ad) {
         if (!path) {
             return NULL;
         }
-        kopya = upp_metin_derin(path);
+        kopya = _upp_m_c(path);
         if (!kopya) {
             return NULL;
         }

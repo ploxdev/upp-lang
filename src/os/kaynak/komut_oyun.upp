@@ -1,0 +1,351 @@
+// snake: terminalde yılan oyunu. Ekran ANSI dizileriyle (imleç konumu, renk)
+// yalnızca değişen hücreler çizilerek güncellenir; seri terminalde de çalışır.
+// Oklar/WASD yön, p duraklat, q/Ctrl-C çık. -o: yılan kendi oynar (otopilot).
+// -n ADIM: ADIM adım sonra bekleme olmadan bitir, tuş okumaz (test).
+// Rekor /root/.yilan_rekor dosyasında tutulur.
+
+sabit sayi YL_G = 30;          // tahta genişliği (hücre; her hücre 2 karakter)
+sabit sayi YL_Y = 18;          // tahta yüksekliği
+sabit sayi YL_UST = 3;         // tahtanın ilk satırı (1 tabanlı, çerçeve içi)
+sabit sayi YL_SOL = 2;         // tahtanın ilk sütunu
+sabit metin YL_REKOR = "/root/.yilan_rekor";
+
+liste[sayi] g_yl_govde;        // hücre indeksleri (y * YL_G + x); son eleman baş
+liste[sayi] g_yl_dolu;         // hücre başına 1/0
+sayi g_yl_yon = 1;             // 0 yukarı, 1 sağ, 2 aşağı, 3 sol
+liste[sayi] g_yl_sira;         // bekleyen yön değişiklikleri (en çok 2)
+sayi g_yl_yem = -1;
+sayi g_yl_skor = 0;
+sayi g_yl_rekor = 0;
+sayi g_yl_kacis = 0;           // tuş çözücü: 0 normal, 1 ESC, 2 ESC [
+metin g_yl_cizim = "";         // kare boyunca biriken çıktı; tek seferde yazılır
+
+fonk yl_git(sayi satir_no, sayi sutun) -> metin => "\e[{satir_no};{sutun}H";
+
+fonk yl_hucre_ciz(sayi h, metin renk, metin desen) -> bos {
+    sayi x = h % YL_G;
+    sayi y = h / YL_G;
+    g_yl_cizim += yl_git(YL_UST + y, YL_SOL + x * 2) + renk + desen + "\e[0m";
+}
+
+fonk yl_bas() -> sayi => g_yl_govde[g_yl_govde.uzunluk() - 1];
+
+fonk yl_baslik() -> bos {
+    g_yl_cizim += yl_git(1, 1) + "\e[1;92mUppix Yılan\e[0m   skor: \e[1;93m{g_yl_skor}\e[0m   rekor: {g_yl_rekor}   uzunluk: {g_yl_govde.uzunluk()}\e[K";
+}
+
+fonk yl_alt(metin s) -> bos {
+    g_yl_cizim += yl_git(YL_UST + YL_Y + 1, 1) + s + "\e[K";
+}
+
+fonk yl_cerceve() -> bos {
+    metin cizgi = upp.metin.tekrar("─", YL_G * 2);
+    g_yl_cizim += yl_git(YL_UST - 1, YL_SOL - 1) + "\e[90m┌" + cizgi + "┐";
+    dongu (sayi y = 0; y < YL_Y; y += 1) {
+        g_yl_cizim += yl_git(YL_UST + y, YL_SOL - 1) + "│" + upp.metin.tekrar(" ", YL_G * 2) + "│";
+    }
+    g_yl_cizim += yl_git(YL_UST + YL_Y, YL_SOL - 1) + "└" + cizgi + "┘\e[0m";
+}
+
+fonk yl_bosalt() -> bos {
+    eger (g_yl_cizim == "") { don; }
+    upp.yaz(g_yl_cizim);
+    g_yl_cizim = "";
+}
+
+fonk yl_yem_koy() -> bos {
+    sayi bos_hucre = YL_G * YL_Y - g_yl_govde.uzunluk();
+    eger (bos_hucre <= 0) {
+        g_yl_yem = -1;
+        don;
+    }
+    // k. boş hücreyi seç: tahta dolmaya yaklaşsa da sonlu sürer.
+    sayi k = rastgele() % bos_hucre;
+    dongu (sayi h = 0; h < YL_G * YL_Y; h += 1) {
+        eger (g_yl_dolu[h] == 1) { devam; }
+        eger (k == 0) {
+            g_yl_yem = h;
+            yl_hucre_ciz(h, "\e[91m", "██");
+            don;
+        }
+        k = k - 1;
+    }
+}
+
+fonk yl_kur() -> bos {
+    g_yl_govde.temizle();
+    g_yl_dolu.temizle();
+    g_yl_sira.temizle();
+    dongu (sayi i = 0; i < YL_G * YL_Y; i += 1) { g_yl_dolu.ekle(0); }
+    sayi y = YL_Y / 2;
+    dongu (sayi x = 3; x < 7; x += 1) {
+        sayi h = y * YL_G + x;
+        g_yl_govde.ekle(h);
+        g_yl_dolu.yaz(h, 1);
+    }
+    g_yl_yon = 1;
+    g_yl_skor = 0;
+    g_yl_kacis = 0;
+    g_yl_cizim = "\e[?25l\e[2J";
+    yl_cerceve();
+    dongu (sayi i = 0; i < g_yl_govde.uzunluk() - 1; i += 1) {
+        yl_hucre_ciz(g_yl_govde[i], "\e[32m", "▓▓");
+    }
+    yl_hucre_ciz(yl_bas(), "\e[92m", "██");
+    yl_yem_koy();
+    yl_baslik();
+    yl_alt("\e[90moklar/WASD: yön   p: duraklat   q: çık\e[0m");
+    yl_bosalt();
+}
+
+// Sıradaki yön: ters yöne dönüş yok sayılır (yılan kendi üstüne dönemez).
+fonk yl_yon_iste(sayi yeni) -> bos {
+    sayi son = g_yl_yon;
+    eger (g_yl_sira.uzunluk() > 0) { son = g_yl_sira[g_yl_sira.uzunluk() - 1]; }
+    eger (yeni == son || (yeni + 2) % 4 == son) { don; }
+    eger (g_yl_sira.uzunluk() < 2) { g_yl_sira.ekle(yeni); }
+}
+
+// Tuş çözücü. Dönüş: 0 sürüyor, 1 çık, 2 duraklat.
+fonk yl_tus(sayi c) -> sayi {
+    eger (g_yl_kacis == 1) {
+        g_yl_kacis = 0;
+        eger (c == 91 || c == 79) { g_yl_kacis = 2; }
+        don 0;
+    }
+    eger (g_yl_kacis == 2) {
+        g_yl_kacis = 0;
+        eger (c == 65) { yl_yon_iste(0); }
+        yoksa eger (c == 67) { yl_yon_iste(1); }
+        yoksa eger (c == 66) { yl_yon_iste(2); }
+        yoksa eger (c == 68) { yl_yon_iste(3); }
+        don 0;
+    }
+    eger (c == 27) {
+        g_yl_kacis = 1;
+        don 0;
+    }
+    eger (c == 3 || c == 113 || c == 81) { don 1; }
+    eger (c == 112 || c == 80) { don 2; }
+    eger (c == 119 || c == 87) { yl_yon_iste(0); }
+    yoksa eger (c == 100 || c == 68) { yl_yon_iste(1); }
+    yoksa eger (c == 115 || c == 83) { yl_yon_iste(2); }
+    yoksa eger (c == 97 || c == 65) { yl_yon_iste(3); }
+    don 0;
+}
+
+// h hücresinden yon yönüne bir adım; duvar ise -1.
+fonk yl_komsu(sayi h, sayi yon) -> sayi {
+    sayi x = h % YL_G;
+    sayi y = h / YL_G;
+    eger (yon == 0) { y = y - 1; }
+    yoksa eger (yon == 1) { x = x + 1; }
+    yoksa eger (yon == 2) { y = y + 1; }
+    yoksa { x = x - 1; }
+    eger (x < 0 || y < 0 || x >= YL_G || y >= YL_Y) { don -1; }
+    don y * YL_G + x;
+}
+
+// Bir sonraki adımda h güvenli mi (kuyruk bu adımda boşalacaksa güvenli sayılır).
+fonk yl_guvenli(sayi h) -> mantik {
+    eger (h < 0) { don yanlis; }
+    eger (g_yl_dolu[h] == 0) { don dogru; }
+    don h == g_yl_govde[0] && h != g_yl_yem;
+}
+
+// h'den ulaşılabilen boş hücre sayısı (en çok sinir kadar; taşkın doldurma).
+fonk yl_alan(sayi h, sayi sinir) -> sayi {
+    eger (!yl_guvenli(h)) { don 0; }
+    liste[sayi] gor;
+    dongu (sayi i = 0; i < YL_G * YL_Y; i += 1) { gor.ekle(0); }
+    liste[sayi] kuyruk;
+    kuyruk.ekle(h);
+    gor.yaz(h, 1);
+    sayi bas = 0;
+    iken (bas < kuyruk.uzunluk() && kuyruk.uzunluk() < sinir) {
+        sayi u = kuyruk[bas];
+        bas = bas + 1;
+        dongu (sayi d = 0; d < 4; d += 1) {
+            sayi v = yl_komsu(u, d);
+            eger (v >= 0 && gor[v] == 0 && g_yl_dolu[v] == 0) {
+                gor.yaz(v, 1);
+                kuyruk.ekle(v);
+            }
+        }
+    }
+    // Sınır tam uygulanır: yeterince geniş her alan eşit sayılsın ki seçimi
+    // yeme uzaklık belirlesin (yoksa yılan açık alanda döngüye girer).
+    eger (kuyruk.uzunluk() > sinir) { don sinir; }
+    don kuyruk.uzunluk();
+}
+
+// Otopilot: yeme yaklaştıran, sıkışmayan yönü seçer.
+fonk yl_otopilot() -> bos {
+    sayi bas_h = yl_bas();
+    sayi yx = g_yl_yem % YL_G;
+    sayi yy = g_yl_yem / YL_G;
+    sayi en_iyi = -1;
+    sayi en_puan = -1000000;
+    dongu (sayi d = 0; d < 4; d += 1) {
+        eger ((d + 2) % 4 == g_yl_yon) { devam; }
+        sayi v = yl_komsu(bas_h, d);
+        eger (!yl_guvenli(v)) { devam; }
+        sayi alan = yl_alan(v, g_yl_govde.uzunluk() + 2);
+        sayi puan = alan * 100;
+        eger (g_yl_yem >= 0) {
+            sayi dx = v % YL_G - yx;
+            sayi dy = v / YL_G - yy;
+            eger (dx < 0) { dx = -dx; }
+            eger (dy < 0) { dy = -dy; }
+            puan = puan - (dx + dy);
+        }
+        eger (puan > en_puan) {
+            en_puan = puan;
+            en_iyi = d;
+        }
+    }
+    eger (en_iyi >= 0) { g_yl_yon = en_iyi; }
+}
+
+// Bir adım ilerle. Dönüş: yanlış = çarptı.
+fonk yl_adim() -> mantik {
+    eger (g_yl_sira.uzunluk() > 0) {
+        g_yl_yon = g_yl_sira[0];
+        g_yl_sira.sil(0);
+    }
+    sayi eski_bas = yl_bas();
+    sayi yeni = yl_komsu(eski_bas, g_yl_yon);
+    eger (!yl_guvenli(yeni)) { don yanlis; }
+    mantik yedi = yeni == g_yl_yem;
+    eger (!yedi) {
+        sayi kuyruk = g_yl_govde[0];
+        g_yl_govde.sil(0);
+        g_yl_dolu.yaz(kuyruk, 0);
+        eger (kuyruk != yeni) { yl_hucre_ciz(kuyruk, "", "  "); }
+    }
+    yl_hucre_ciz(eski_bas, "\e[32m", "▓▓");
+    g_yl_govde.ekle(yeni);
+    g_yl_dolu.yaz(yeni, 1);
+    yl_hucre_ciz(yeni, "\e[92m", "██");
+    eger (yedi) {
+        g_yl_skor = g_yl_skor + 10;
+        eger (g_yl_skor > g_yl_rekor) { g_yl_rekor = g_yl_skor; }
+        yl_yem_koy();
+        yl_baslik();
+    }
+    don dogru;
+}
+
+fonk yl_rekor_oku() -> sayi {
+    sayi no = fs_coz(YL_REKOR);
+    eger (no < 0) { don 0; }
+    metin s = upp.metin.kirp(fs_oku(no));
+    eger (!sayi_mi(s)) { don 0; }
+    don sayiya(s);
+}
+
+fonk yl_rekor_yaz(sayi r) -> bos {
+    sayi no = fs_dosya_ac(YL_REKOR);
+    eger (no >= 0) { fs_yaz(no, "{r}\n", yanlis); }
+}
+
+// Adım aralığı: skor arttıkça hızlanır (150 ms → 60 ms).
+fonk yl_aralik() -> sayi {
+    sayi a = 150 - g_yl_skor / 5;
+    eger (a < 60) { a = 60; }
+    don a;
+}
+
+fonk yl_kullanim() -> bos {
+    satir("kullanım: snake [-o] [-n ADIM]");
+    satir("  oklar/WASD yön, p duraklat, q ya da Ctrl-C çık; çarpınca r yeniden başlatır");
+    satir("  -o       otopilot: yılan kendi oynar (bir tuşla çıkılır)");
+    satir("  -n ADIM  ADIM adım sonra bitir; beklemez, tuş okumaz (test için)");
+}
+
+fonk k_snake(liste[metin] a, metin girdi) -> sayi {
+    mantik oto_oyun = yanlis;
+    sayi adim_siniri = -1;
+    sayi i = 1;
+    iken (i < a.uzunluk()) {
+        eger (a[i] == "-o") {
+            oto_oyun = dogru;
+        } yoksa eger (a[i] == "-n" && i + 1 < a.uzunluk() && sayi_mi(a[i + 1])) {
+            adim_siniri = sayiya(a[i + 1]);
+            i = i + 1;
+        } yoksa eger (a[i] == "-h" || a[i] == "--help") {
+            yl_kullanim();
+            don 0;
+        } yoksa {
+            hata_bildir("snake: bilinmeyen seçenek '{a[i]}'");
+            yl_kullanim();
+            don 2;
+        }
+        i = i + 1;
+    }
+    eger (!terminal_mi()) {
+        hata_bildir("snake: terminal gerekir (boru ya da yönlendirme ile çalışmaz)");
+        don 1;
+    }
+    g_yl_rekor = yl_rekor_oku();
+    sayi ilk_rekor = g_yl_rekor;
+    sayi adim = 0;
+    mantik cik = yanlis;
+    yl_kur();
+    iken (!cik) {
+        sayi sonraki = upp.zaman() + yl_aralik();
+        // Tuşlar: kare süresince gelenler sırayla işlenir. -n kipinde okunmaz,
+        // böylece sonraki girdi kabuğa kalır.
+        sayi c = 0;
+        eger (adim_siniri < 0) { c = upp.cekirdek.tus_oku(); }
+        iken (c != 0 && !cik) {
+            sayi sonuc = yl_tus(c);
+            eger (oto_oyun && g_yl_kacis == 0 && c != 27) { sonuc = 1; }
+            eger (sonuc == 1) { cik = dogru; }
+            eger (sonuc == 2) {
+                yl_alt("\e[1;93mDURAKLATILDI\e[0m — devam için bir tuş");
+                yl_bosalt();
+                upp.cekirdek.tus_bekle();
+                yl_alt("\e[90moklar/WASD: yön   p: duraklat   q: çık\e[0m");
+            }
+            c = upp.cekirdek.tus_oku();
+        }
+        eger (cik) { dur; }
+        eger (oto_oyun) { yl_otopilot(); }
+        mantik yasiyor = yl_adim();
+        adim = adim + 1;
+        yl_bosalt();
+        eger (!yasiyor || g_yl_yem < 0) {
+            metin baslik_m = "\e[1;91mOYUN BİTTİ\e[0m";
+            eger (g_yl_yem < 0) { baslik_m = "\e[1;92mTAHTA DOLDU!\e[0m"; }
+            yl_alt(baslik_m + " — skor {g_yl_skor}   r: yeniden   q: çık");
+            yl_bosalt();
+            eger (adim_siniri >= 0) { dur; }
+            mantik karar = yanlis;
+            iken (!karar) {
+                sayi t = upp.cekirdek.tus_bekle();
+                eger (t == 114 || t == 82) {
+                    karar = dogru;
+                    yl_kur();
+                } yoksa eger (t == 113 || t == 81 || t == 3) {
+                    karar = dogru;
+                    cik = dogru;
+                }
+            }
+            devam;
+        }
+        eger (adim_siniri >= 0) {
+            eger (adim >= adim_siniri) { dur; }
+            devam;
+        }
+        iken (upp.zaman() < sonraki) {
+            sayi kalan = sonraki - upp.zaman();
+            eger (kalan > 10) { kalan = 10; }
+            upp.uyut(kalan);
+        }
+    }
+    upp.yaz(yl_git(YL_UST + YL_Y + 2, 1) + "\e[0m\e[?25h");
+    upp.satir_yaz("snake: skor {g_yl_skor}, uzunluk {g_yl_govde.uzunluk()}, {adim} adım (rekor {g_yl_rekor})");
+    eger (g_yl_rekor > ilk_rekor) { yl_rekor_yaz(g_yl_rekor); }
+    don 0;
+}

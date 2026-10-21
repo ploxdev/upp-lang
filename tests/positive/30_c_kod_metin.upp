@@ -1,16 +1,63 @@
-// Pozitif: c_kod ile metne yazılan ham C sabiti serbest bırakılmaz (çökme yok)
+// Pozitif: c_kod metin sözleşmesi. metin her zaman yönetilir; ham C dizgisi
+// upp_metin_ata_c ile kopyalanarak girer, eski değer bırakılır (ASan/LSan temiz).
+// c_kod'un kendi yereli aynı adı taşıyabilir; metin okunabilir.
 // @stdout
 // c_sabiti
+// yığından: 42
+// u++ metni
+// uzunluk: 0
+// 8 bayt
+// gölge: yerel C
 // son
 
 fonk ana() -> sayi {
-    metin s = "a";
+    metin s = "merhaba " + "dünya";
+    metin t = "u++ metni";
+    metin bos_m = "dolu";
+    sayi n = 0;
     guvensiz {
         c_kod {
-            s = "c_sabiti";
+            upp_metin_ata_c(&s, "c_sabiti");
         }
+        upp.satir_yaz(s);
+        c_kod {
+            char tampon[32];
+            int k = 0;
+            const char* on = "yığından: ";
+            while (on[k]) { tampon[k] = on[k]; k++; }
+            tampon[k++] = '4';
+            tampon[k++] = '2';
+            tampon[k] = '\0';
+            upp_metin_ata_c(&s, tampon);
+        }
+        upp.satir_yaz(s);
+        c_kod {
+            upp_metin_ata(&s, t);
+            upp_metin_ata_c(&bos_m, NULL);
+        }
+        upp.satir_yaz(s);
+        upp.satir_yaz("uzunluk: {upp.uzunluk(bos_m)}");
+        c_kod {
+            n = (long long)strlen(s) - 1;
+        }
+        upp.satir_yaz("{n} bayt");
+        c_kod {
+            {
+                const char* s = "yerel C";
+                upp_metin_ata_c(&t, "gölge: ");
+                (void)s;
+            }
+        }
+        upp.yaz(t);
+        c_kod {
+            {
+                char* s = "yerel C";
+                s = s + 0;
+                upp_metin_ata_c(&t, s);
+            }
+        }
+        upp.satir_yaz(t);
     }
-    upp.satir_yaz(s);
     upp.satir_yaz("son");
     don 0;
 }

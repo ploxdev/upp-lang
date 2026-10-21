@@ -50,7 +50,7 @@ Yüksek seviyeli dillerin okunabilirliğini C'nin çıplak metal (bare-metal) pe
   - Birinci sınıf fonksiyon türleri (`fonk(sayi) -> sayi`): fonksiyonlar değişkende, sınıf alanında ve koleksiyonda saklanabilir; yakalamasız anonim fonksiyonlar (`fonk(sayi x) -> sayi => x * 2`) tanımlanabilir.
   - C tarzı `(T)x` açık tür dönüşümü ve derleme zamanı `boyut(T)` (`sizeof`) desteği.
 - **🖥️ Çıplak Metal Çekirdek Hedefi (`--hedef cekirdek`):** Tek komutla `u++` programını x86_64 işletim sistemi çekirdeğine derler: Multiboot ile QEMU `-kernel`, ya da `--onyukleyici limine` ile diskten 64-bit higher-half ELF64 (BIOS ve UEFI). `libc` kullanılmaz; derleyiciye gömülü önyükleyici (Long Mode, sayfalama, SSE), 48 vektörlük IDT, 1000 Hz PIT zamanlayıcı, Türkçe Q PS/2 klavye, COM1 seri port, VGA metin ya da çerçeve tamponu konsolu, ATA PIO disk sürücüsü ve işbirlikçi görev zamanlayıcı ile gelir.
-- **🐧 Uppix İşletim Sistemi:** Tamamen `u++` ile yazılmış Unix benzeri işletim sistemi ([`src/os/`](src/os/README.md)). Depoya gömülü **Limine** ile diskten 64-bit açılır. Kalıcı **ext4** kök dosya sistemi, **FAT32** ve **exFAT** okuma/yazma sürücüleri, MBR/GPT bölüm desteği, sanal dosya sistemi (VFS), borulu ve yönlendirmeli `uppsh` kabuğu, `/proc` ve `/dev` ağaçları ve **73 Unix komutu** içerir.
+- **🐧 Uppix İşletim Sistemi:** Tamamen `u++` ile yazılmış Unix benzeri işletim sistemi ([`src/os/`](src/os/README.md)). Depoya gömülü **Limine** ile diskten 64-bit açılır. Kalıcı **ext4** kök dosya sistemi, **FAT32** ve **exFAT** okuma/yazma sürücüleri, MBR/GPT bölüm desteği, sanal dosya sistemi (VFS), borulu ve yönlendirmeli `uppsh` kabuğu, `/proc` ve `/dev` ağaçları ve **74 komut** (yılan oyunu `snake` dahil) içerir.
 - **🔄 Python'sız Self-Hosting Derleyici:** Derleyicinin tamamı (`src/uppc/*.upp`) güvenli `u++` ile yazılmıştır. `uppc kendini-derle` komutu yaklaşık 30 saniyede 3 aşamalı derleme yaparak sabit noktayı (`aşama2 == aşama3`) doğrular ve Windows ile Linux'ta bayt bayt aynı [`bootstrap/uppc.c`](bootstrap/uppc.c) dosyasını üretir.
 - **🧰 Proje Yöneticisi, Asistan ve IDE Eklentisi:** `uppc yeni`, `uppc derle`, `uppc calistir`, etkileşimli `uppc asistan` menüsü ve VS Code / Cursor için canlı tanı (`--analiz`) ile otomatik tamamlama sunan resmi eklenti.
 
@@ -334,7 +334,7 @@ Dilin tamamı çekirdek hedefinde de eksiksiz çalışır: sınıflar, `liste`/`
   - **ext4 Kök (`/`):** Extent ağaçları ve `metadata_csum` (CRC32C) sağlamalarıyla tam okuma/yazma. Yazılan disk imajları Linux `e2fsck -fn` denetiminden hatasız geçer.
   - **FAT32 ve exFAT:** UTF-16 uzun Türkçe dosya adlarıyla (VFAT LFN) okuma/yazma, MBR ve GPT bölüm tablosu tanıma, `/mnt` altına otomatik veya `mount`/`umount` ile elle bağlama.
   - **Sanal Dosya Sistemleri:** `/proc`, `/dev`, `/tmp` (`tmpfs`) ve `/bin`.
-- **`uppsh` Kabuğu ve 73 Unix Komutu:** Boru (`|`), yönlendirme (`>`, `>>`, `<`, `2>`), `&&`/`||`, arka plan işleri (`&`, `jobs`, `kill %1`), ortam değişkenleri, joker (`*`, `?`), takma adlar (`alias`), `#!/bin/sh` betikleri, Tab tamamlama ve komut geçmişi.
+- **`uppsh` Kabuğu ve 74 Komut:** Boru (`|`), yönlendirme (`>`, `>>`, `<`, `2>`), `&&`/`||`, arka plan işleri (`&`, `jobs`, `kill %1`), ortam değişkenleri, joker (`*`, `?`), takma adlar (`alias`), `#!/bin/sh` betikleri, Tab tamamlama ve komut geçmişi.
 
 ```text
 root@uppix:~# lsblk
@@ -452,7 +452,7 @@ Bu proje **[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)** k
 - **Value-Based Error Handling & Defer:** `beklenen[T, H]` (flagged union, zero hidden allocation), `?` error propagation, unused-result compile errors, `ertele` (`defer`), and `hata_ertele` (`errdefer`).
 - **First-Class Function Values:** `fonk(P...) -> R` types, captureless lambdas (`fonk(sayi x) -> sayi => x * 2`), `(T)x` casts, and compile-time `boyut(T)` (`sizeof`).
 - **Freestanding & Kernel Target (`--hedef cekirdek`):** Compiles `u++` programs directly into bootable x86_64 kernels (Multiboot for QEMU `-kernel`, or higher-half ELF64 booted from disk by Limine with `--onyukleyici limine`) with an embedded bootloader, IDT/exceptions, 1000 Hz PIT, PS/2 Turkish-Q keyboard, VGA text or framebuffer console plus COM1, ATA PIO driver, and cooperative multitasking.
-- **Uppix Operating System ([`src/os/`](src/os/README.md)):** A Unix-like OS written in pure `u++` that boots from disk in 64-bit mode via the vendored **Limine** bootloader (BIOS and UEFI), featuring read/write **ext4** (with `metadata_csum` CRC32C, verified by `e2fsck`), **FAT32** (VFAT UTF-16 LFN), and **exFAT** filesystems, MBR/GPT partitioning, VFS, the `uppsh` shell with pipes/redirection/jobs, and 73 Unix utilities.
+- **Uppix Operating System ([`src/os/`](src/os/README.md)):** A Unix-like OS written in pure `u++` that boots from disk in 64-bit mode via the vendored **Limine** bootloader (BIOS and UEFI), featuring read/write **ext4** (with `metadata_csum` CRC32C, verified by `e2fsck`), **FAT32** (VFAT UTF-16 LFN), and **exFAT** filesystems, MBR/GPT partitioning, VFS, the `uppsh` shell with pipes/redirection/jobs, and 74 commands (including a `snake` game).
 - **Python-Free Self-Hosting:** `uppc kendini-derle` rebuilds the compiler in ~30 seconds, verifies the 3-stage fixed point (`stage2 == stage3`), and emits a deterministic `bootstrap/uppc.c` across Windows and Linux.
 
 ### Quick Start
