@@ -1,0 +1,6 @@
+# /etc/profile — her oturumda çalışır
+export PATH=/bin:/usr/bin
+alias ll='ls -l'
+alias la='ls -a'
+alias l='ls -1'
+alias ..='cd ..'

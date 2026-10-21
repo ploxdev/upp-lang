@@ -1,0 +1,658 @@
+// Uppix — FAT32 sürücüsü (okuma + yazma).
+// Uzun dosya adları (VFAT LFN, UTF-16) okunur ve yazılır; kısa 8.3 ad "AD~1.UZN" biçiminde
+// üretilir. Tüm FAT kopyaları birlikte güncellenir; FSInfo boş küme sayacı "bilinmiyor"
+// (0xFFFFFFFF) yapılır, böylece Windows/Linux onu yeniden hesaplar.
+
+sinif Fat {
+    sayi blok;
+    sayi bps;
+    sayi spc;
+    sayi resv;
+    sayi nfat;
+    sayi fatsz;
+    sayi kok;
+    sayi veri;
+    sayi kume_say;
+    sayi kb;
+    sayi fsinfo;
+    sayi ft;
+    sayi ft_sektor;
+    mantik ft_kirli;
+    sayi ipucu;
+}
+
+liste[Fat] g_fat;
+
+sabit sayi FAT_SON = 268435448;
+sabit sayi FAT_EOC = 268435455;
+sabit sayi FAT_MASKE = 268435456;
+
+fonk fat_s(sayi no) -> sayi => g_bag[g_fs[no].bag].dno;
+
+fonk fat_lba(sayi s, sayi c) -> sayi => g_fat[s].veri + (c - 2) * g_fat[s].spc;
+
+fonk fat_bosalt(sayi s) -> bos {
+    eger (!g_fat[s].ft_kirli) { don; }
+    dongu (sayi k = 0; k < g_fat[s].nfat; k += 1) {
+        blok_yaz(g_fat[s].blok, g_fat[s].ft_sektor + k * g_fat[s].fatsz, 1, g_fat[s].ft, 0);
+    }
+    g_fat[s].ft_kirli = yanlis;
+}
+
+fonk fat_sektor_al(sayi s, sayi sektor) -> bos {
+    eger (g_fat[s].ft_sektor == sektor) { don; }
+    fat_bosalt(s);
+    blok_oku(g_fat[s].blok, sektor, 1, g_fat[s].ft, 0);
+    g_fat[s].ft_sektor = sektor;
+}
+
+fonk fat_giris(sayi s, sayi c) -> sayi {
+    sayi fo = c * 4;
+    fat_sektor_al(s, g_fat[s].resv + fo / g_fat[s].bps);
+    don upp.tampon.oku32(g_fat[s].ft, fo % g_fat[s].bps) % FAT_MASKE;
+}
+
+fonk fat_giris_yaz(sayi s, sayi c, sayi v) -> bos {
+    sayi fo = c * 4;
+    fat_sektor_al(s, g_fat[s].resv + fo / g_fat[s].bps);
+    sayi o = fo % g_fat[s].bps;
+    sayi eski = upp.tampon.oku32(g_fat[s].ft, o);
+    upp.tampon.yaz32(g_fat[s].ft, o, (eski / FAT_MASKE) * FAT_MASKE + v);
+    g_fat[s].ft_kirli = dogru;
+}
+
+fonk fat_zincir(sayi s, sayi ilk) -> liste[sayi] {
+    liste[sayi] R;
+    sayi c = ilk;
+    iken (c >= 2 && c < FAT_SON && R.uzunluk() <= g_fat[s].kume_say) {
+        R.ekle(c);
+        c = fat_giris(s, c);
+    }
+    don R;
+}
+
+// Zincirin verisini tampona okur; g_fat_boy toplam bayt.
+sayi g_fat_boy = 0;
+
+fonk fat_zincir_tampon(sayi s, liste[sayi] Z) -> sayi {
+    sayi kb = g_fat[s].kb;
+    sayi n = Z.uzunluk();
+    g_fat_boy = n * kb;
+    sayi t = upp.tampon.yeni(n * kb + 1);
+    sayi i = 0;
+    iken (i < n) {
+        sayi j = i;
+        iken (j + 1 < n && Z[j + 1] == Z[j] + 1 && j - i < 120) { j += 1; }
+        blok_oku(g_fat[s].blok, fat_lba(s, Z[i]), (j - i + 1) * g_fat[s].spc, t, i * kb);
+        i = j + 1;
+    }
+    don t;
+}
+
+fonk fat_zincir_yaz(sayi s, liste[sayi] Z, sayi t) -> bos {
+    sayi kb = g_fat[s].kb;
+    dongu (sayi i = 0; i < Z.uzunluk(); i += 1) {
+        blok_yaz(g_fat[s].blok, fat_lba(s, Z[i]), g_fat[s].spc, t, i * kb);
+    }
+}
+
+fonk fat_kisa_toplam(sayi t, sayi o) -> sayi {
+    sayi top = 0;
+    dongu (sayi i = 0; i < 11; i += 1) {
+        top = ((top % 2) * 128 + top / 2 + upp.tampon.oku8(t, o + i)) % 256;
+    }
+    don top;
+}
+
+fonk fat_lfn_parca(sayi t, sayi o) -> metin {
+    metin r = "";
+    liste[sayi] yer = liste_sayilar("1,3,5,7,9,14,16,18,20,22,24,28,30");
+    her (oto p in yer) {
+        sayi v = upp.tampon.oku16(t, o + p);
+        eger (v == 0 || v == 65535) { dur; }
+        r += upp.metin.karakter(v);
+    }
+    don r;
+}
+
+fonk fat_kisa_ad(sayi t, sayi o) -> metin {
+    metin taban = upp.metin.kirp(upp.tampon.metin(t, o, 8));
+    metin uzanti = upp.metin.kirp(upp.tampon.metin(t, o + 8, 3));
+    eger (upp.tampon.oku8(t, o) == 5) { taban = "?" + kes_son(taban, 1); }
+    sayi nt = upp.tampon.oku8(t, o + 12);
+    eger ((nt / 8) % 2 == 1) { taban = upp.metin.kucuk(taban); }
+    eger ((nt / 16) % 2 == 1) { uzanti = upp.metin.kucuk(uzanti); }
+    eger (uzanti == "") { don taban; }
+    don taban + "." + uzanti;
+}
+
+fonk fat_ilk_kume(sayi t, sayi o) -> sayi => upp.tampon.oku16(t, o + 20) * 65536 + upp.tampon.oku16(t, o + 26);
+
+fonk fat_kume_yaz(sayi t, sayi o, sayi c) -> bos {
+    upp.tampon.yaz16(t, o + 20, c / 65536);
+    upp.tampon.yaz16(t, o + 26, c % 65536);
+}
+
+// Dizinin küme numarası (FAT32 kökü için kök kümesi).
+fonk fat_dizin_kume(sayi s, sayi no) -> sayi {
+    eger (g_fs[no].ino < 2) { don g_fat[s].kok; }
+    don g_fs[no].ino;
+}
+
+fonk fat_bagla(sayi bag) -> mantik {
+    sayi blok = g_bag[bag].blok;
+    sayi t = upp.tampon.yeni(512);
+    eger (!blok_oku(blok, 0, 1, t, 0) || upp.tampon.oku16(t, 510) != 43605) {
+        upp.tampon.birak(t);
+        g_fs_hata = "FAT önyükleme sektörü okunamadı";
+        don yanlis;
+    }
+    Fat f;
+    f.blok = blok;
+    f.bps = upp.tampon.oku16(t, 11);
+    f.spc = upp.tampon.oku8(t, 13);
+    f.resv = upp.tampon.oku16(t, 14);
+    f.nfat = upp.tampon.oku8(t, 16);
+    f.fatsz = upp.tampon.oku32(t, 36);
+    f.kok = upp.tampon.oku32(t, 44);
+    f.fsinfo = upp.tampon.oku16(t, 48);
+    sayi toplam = upp.tampon.oku16(t, 19);
+    eger (toplam == 0) { toplam = upp.tampon.oku32(t, 32); }
+    sayi fatsz16 = upp.tampon.oku16(t, 22);
+    upp.tampon.birak(t);
+    eger (f.bps != 512 || f.spc == 0 || f.fatsz == 0 || fatsz16 != 0) {
+        g_fs_hata = "yalnızca 512 bayt sektörlü FAT32 desteklenir";
+        don yanlis;
+    }
+    f.veri = f.resv + f.nfat * f.fatsz;
+    f.kume_say = (toplam - f.veri) / f.spc;
+    f.kb = f.spc * f.bps;
+    f.ft = upp.tampon.yeni(512);
+    f.ft_sektor = -1;
+    f.ft_kirli = yanlis;
+    f.ipucu = 2;
+    g_fat.ekle(f);
+    sayi s = g_fat.uzunluk() - 1;
+    g_bag[bag].dno = s;
+    g_fs[g_bag[bag].nokta].ino = f.kok;
+    // FSInfo: boş küme sayısını "bilinmiyor" yap (yazdığımız için artık güncel değil).
+    eger (!g_bag[bag].salt_okunur && f.fsinfo > 0 && f.fsinfo < f.resv) {
+        sayi fi = upp.tampon.yeni(512);
+        eger (blok_oku(blok, f.fsinfo, 1, fi, 0) && upp.tampon.oku32(fi, 0) == 1096897106 && upp.tampon.oku32(fi, 484) == 1631679090) {
+            upp.tampon.yaz32(fi, 488, 4294967295);
+            upp.tampon.yaz32(fi, 492, 4294967295);
+            blok_yaz(blok, f.fsinfo, 1, fi, 0);
+        }
+        upp.tampon.birak(fi);
+    }
+    don dogru;
+}
+
+fonk fat_ayir(sayi bag) -> bos {
+    sayi s = g_bag[bag].dno;
+    eger (s >= 0) { fat_bosalt(s); }
+}
+
+fonk fat_yukle(sayi no) -> bos {
+    sayi s = fat_s(no);
+    liste[sayi] Z = fat_zincir(s, fat_dizin_kume(s, no));
+    sayi t = fat_zincir_tampon(s, Z);
+    sayi n = g_fat_boy;
+    metin lfn = "";
+    sayi lfn_bas = -1;
+    sayi lfn_toplam = -1;
+    sayi o = 0;
+    iken (o + 32 <= n) {
+        sayi b0 = upp.tampon.oku8(t, o);
+        eger (b0 == 0) { dur; }
+        sayi attr = upp.tampon.oku8(t, o + 11);
+        eger (b0 == 229) {
+            lfn = "";
+            lfn_bas = -1;
+            o += 32;
+            devam;
+        }
+        eger (attr == 15) {
+            eger ((b0 / 64) % 2 == 1) {
+                lfn = fat_lfn_parca(t, o);
+                lfn_bas = o;
+                lfn_toplam = upp.tampon.oku8(t, o + 13);
+            } yoksa {
+                lfn = fat_lfn_parca(t, o) + lfn;
+            }
+            o += 32;
+            devam;
+        }
+        eger ((attr / 8) % 2 == 1) {
+            lfn = "";
+            lfn_bas = -1;
+            o += 32;
+            devam;
+        }
+        metin ad = fat_kisa_ad(t, o);
+        sayi bas = o;
+        eger (lfn != "" && lfn_bas >= 0 && lfn_toplam == fat_kisa_toplam(t, o)) {
+            ad = lfn;
+            bas = lfn_bas;
+        }
+        lfn = "";
+        lfn_bas = -1;
+        eger (ad != "." && ad != "..") {
+            mantik dizin = (attr / 16) % 2 == 1;
+            sayi tur = D_DOSYA;
+            sayi kip = 420;
+            eger (dizin) {
+                tur = D_DIZIN;
+                kip = 493;
+            }
+            eger (attr % 2 == 1) { kip -= 128; }
+            sayi zaman = dos_zaman_epoch(upp.tampon.oku16(t, o + 24), upp.tampon.oku16(t, o + 22));
+            sayi boy = upp.tampon.oku32(t, o + 28);
+            eger (dizin) { boy = 0; }
+            fs_disk_dugum(no, ad, tur, kip, fat_ilk_kume(t, o), o, bas, boy, zaman);
+        }
+        o += 32;
+    }
+    upp.tampon.birak(t);
+}
+
+fonk fat_oku(sayi no) -> metin {
+    sayi s = fat_s(no);
+    sayi boy = g_fs[no].boyut;
+    eger (boy == 0 || g_fs[no].ino < 2) { don ""; }
+    liste[sayi] Z = fat_zincir(s, g_fs[no].ino);
+    sayi t = fat_zincir_tampon(s, Z);
+    eger (boy > g_fat_boy) { boy = g_fat_boy; }
+    metin m = upp.tampon.metin(t, 0, boy);
+    upp.tampon.birak(t);
+    don m;
+}
+
+// n boş küme bulup zincir olarak bağlar; yer yoksa boş liste.
+fonk fat_kumeler_ayir(sayi s, sayi n) -> liste[sayi] {
+    liste[sayi] R;
+    eger (n <= 0) { don R; }
+    sayi son = g_fat[s].kume_say + 2;
+    sayi c = g_fat[s].ipucu;
+    sayi taranan = 0;
+    iken (R.uzunluk() < n && taranan < g_fat[s].kume_say) {
+        eger (c >= son) { c = 2; }
+        eger (fat_giris(s, c) == 0) { R.ekle(c); }
+        c += 1;
+        taranan += 1;
+    }
+    eger (R.uzunluk() < n) {
+        R.temizle();
+        don R;
+    }
+    dongu (sayi i = 0; i < n; i += 1) {
+        eger (i + 1 < n) { fat_giris_yaz(s, R[i], R[i + 1]); } yoksa { fat_giris_yaz(s, R[i], FAT_EOC); }
+    }
+    fat_bosalt(s);
+    g_fat[s].ipucu = c;
+    don R;
+}
+
+fonk fat_zincir_birak(sayi s, sayi ilk) -> bos {
+    eger (ilk < 2) { don; }
+    her (oto c in fat_zincir(s, ilk)) { fat_giris_yaz(s, c, 0); }
+    fat_bosalt(s);
+}
+
+// Dizin akışını yükler ve yazar.
+sayi g_fat_dizin_t = 0;
+liste[sayi] g_fat_dizin_z;
+
+fonk fat_dizin_ac(sayi s, sayi dk) -> bos {
+    g_fat_dizin_z = fat_zincir(s, dk);
+    g_fat_dizin_t = fat_zincir_tampon(s, g_fat_dizin_z);
+}
+
+fonk fat_dizin_kapat(sayi s, mantik yaz) -> bos {
+    eger (yaz) { fat_zincir_yaz(s, g_fat_dizin_z, g_fat_dizin_t); }
+    upp.tampon.birak(g_fat_dizin_t);
+}
+
+fonk fat_ad_gecerli(metin ad) -> mantik {
+    eger (ad == "" || ad == "." || ad == ".." || bayt_say(ad) > 255) { don yanlis; }
+    dongu (sayi i = 0; i < uz(ad); i += 1) {
+        sayi c = ad[i];
+        eger (c < 32 || upp.metin.bul("\\/:*?\"<>|", kes(ad, i, 1)) >= 0) { don yanlis; }
+    }
+    don dogru;
+}
+
+fonk fat_kisa_karakter(sayi c) -> metin {
+    eger (c >= 97 && c <= 122) { don upp.metin.karakter(c - 32); }
+    eger ((c >= 65 && c <= 90) || (c >= 48 && c <= 57)) { don upp.metin.karakter(c); }
+    eger (upp.metin.bul("!#$%&'()-@^_`{}~", upp.metin.karakter(c)) >= 0) { don upp.metin.karakter(c); }
+    eger (c == 32 || c == 46) { don ""; }
+    don "_";
+}
+
+// 11 baytlık kısa ad; g_fat_lfn_gerek: uzun ad girdileri gerekli mi.
+mantik g_fat_lfn_gerek = yanlis;
+
+fonk fat_kisa_uret(sayi s, metin ad) -> metin {
+    sayi nokta = -1;
+    dongu (sayi i = 0; i < uz(ad); i += 1) {
+        eger (ad[i] == 46) { nokta = i; }
+    }
+    metin taban_h = ad;
+    metin uzanti_h = "";
+    eger (nokta > 0) {
+        taban_h = kes(ad, 0, nokta);
+        uzanti_h = kes_son(ad, nokta + 1);
+    }
+    metin taban = "";
+    dongu (sayi i = 0; i < uz(taban_h); i += 1) { taban += fat_kisa_karakter(taban_h[i]); }
+    metin uzanti = "";
+    dongu (sayi i = 0; i < uz(uzanti_h); i += 1) { uzanti += fat_kisa_karakter(uzanti_h[i]); }
+    metin tam = taban;
+    eger (uzanti != "") { tam = taban + "." + uzanti; }
+    g_fat_lfn_gerek = tam != ad || uz(taban) > 8 || uz(uzanti) > 3 || taban == "";
+    eger (taban == "") { taban = "DOSYA"; }
+    eger (uz(uzanti) > 3) { uzanti = kes(uzanti, 0, 3); }
+    eger (!g_fat_lfn_gerek) {
+        don sol_hizala(taban, 8) + sol_hizala(uzanti, 3);
+    }
+    // benzersiz "TABAN~N"
+    liste[metin] mevcut;
+    sayi o = 0;
+    iken (o + 32 <= g_fat_boy) {
+        sayi b0 = upp.tampon.oku8(g_fat_dizin_t, o);
+        eger (b0 == 0) { dur; }
+        eger (b0 != 229 && upp.tampon.oku8(g_fat_dizin_t, o + 11) != 15) { mevcut.ekle(upp.tampon.metin(g_fat_dizin_t, o, 11)); }
+        o += 32;
+    }
+    dongu (sayi n = 1; n < 1000000; n += 1) {
+        metin kuyruk = "~{n}";
+        sayi kalan = 8 - uz(kuyruk);
+        metin aday = sol_hizala(kes(taban, 0, kalan) + kuyruk, 8) + sol_hizala(uzanti, 3);
+        mantik var_mi = yanlis;
+        her (oto m in mevcut) {
+            eger (m == aday) { var_mi = dogru; }
+        }
+        eger (!var_mi) { don aday; }
+    }
+    don sol_hizala(taban, 8) + sol_hizala(uzanti, 3);
+}
+
+// Dizinde k ardışık boş girdi bulur; yoksa dizini bir küme büyütür. Dönüş: bayt konumu.
+fonk fat_bos_yer(sayi s, sayi k) -> sayi {
+    sayi o = 0;
+    sayi bas = -1;
+    sayi say = 0;
+    iken (o + 32 <= g_fat_boy) {
+        sayi b0 = upp.tampon.oku8(g_fat_dizin_t, o);
+        eger (b0 == 0) {
+            // buradan sonrası boş
+            eger (bas < 0) { bas = o; }
+            eger ((g_fat_boy - bas) / 32 >= k) { don bas; }
+            dur;
+        }
+        eger (b0 == 229) {
+            eger (bas < 0) { bas = o; }
+            say = (o - bas) / 32 + 1;
+            eger (say >= k) { don bas; }
+        } yoksa {
+            bas = -1;
+        }
+        o += 32;
+    }
+    // dizini büyüt
+    liste[sayi] yeni = fat_kumeler_ayir(s, 1);
+    eger (yeni.uzunluk() == 0) { don -1; }
+    sayi son_kume = g_fat_dizin_z[g_fat_dizin_z.uzunluk() - 1];
+    fat_giris_yaz(s, son_kume, yeni[0]);
+    fat_bosalt(s);
+    sayi kb = g_fat[s].kb;
+    sayi eski_boy = g_fat_boy;
+    sayi t2 = upp.tampon.yeni(eski_boy + kb + 1);
+    upp.tampon.kopyala(t2, 0, g_fat_dizin_t, 0, eski_boy);
+    upp.tampon.birak(g_fat_dizin_t);
+    g_fat_dizin_t = t2;
+    g_fat_dizin_z.ekle(yeni[0]);
+    g_fat_boy = eski_boy + kb;
+    eger (bas < 0) { bas = eski_boy; }
+    don bas;
+}
+
+// Girdi kümesini yazar (uzun ad + kısa ad); g_fat_kisa_ofs ve dönüş = ilk girdinin konumu.
+sayi g_fat_kisa_ofs = 0;
+
+fonk fat_girdi_ekle(sayi s, metin ad, sayi attr, sayi kume, sayi boy, sayi zaman) -> sayi {
+    metin kisa = fat_kisa_uret(s, ad);
+    sayi birim_t = upp.tampon.yeni(1024);
+    sayi birim = upp.tampon.utf16_yaz(birim_t, 0, ad, 255);
+    sayi lfn_say = 0;
+    eger (g_fat_lfn_gerek) { lfn_say = (birim + 12) / 13; }
+    sayi bas = fat_bos_yer(s, lfn_say + 1);
+    eger (bas < 0) {
+        upp.tampon.birak(birim_t);
+        g_fs_hata = "aygıtta yer kalmadı";
+        don -1;
+    }
+    sayi t = g_fat_dizin_t;
+    sayi ko = bas + lfn_say * 32;
+    upp.tampon.doldur(t, ko, 32, 0);
+    upp.tampon.metin_yaz(t, ko, kisa);
+    sayi toplam = fat_kisa_toplam(t, ko);
+    liste[sayi] yer = liste_sayilar("1,3,5,7,9,14,16,18,20,22,24,28,30");
+    dongu (sayi j = 1; j <= lfn_say; j += 1) {
+        sayi o = bas + (lfn_say - j) * 32;
+        upp.tampon.doldur(t, o, 32, 0);
+        sayi sira = j;
+        eger (j == lfn_say) { sira += 64; }
+        upp.tampon.yaz8(t, o, sira);
+        upp.tampon.yaz8(t, o + 11, 15);
+        upp.tampon.yaz8(t, o + 13, toplam);
+        dongu (sayi k = 0; k < 13; k += 1) {
+            sayi idx = (j - 1) * 13 + k;
+            sayi v = 65535;
+            eger (idx < birim) { v = upp.tampon.oku16(birim_t, idx * 2); }
+            eger (idx == birim) { v = 0; }
+            upp.tampon.yaz16(t, o + yer[k], v);
+        }
+    }
+    upp.tampon.birak(birim_t);
+    upp.tampon.yaz8(t, ko + 11, attr);
+    sayi tarih = epoch_dos_tarih(zaman);
+    sayi saat = epoch_dos_saat(zaman);
+    upp.tampon.yaz16(t, ko + 14, saat);
+    upp.tampon.yaz16(t, ko + 16, tarih);
+    upp.tampon.yaz16(t, ko + 18, tarih);
+    upp.tampon.yaz16(t, ko + 22, saat);
+    upp.tampon.yaz16(t, ko + 24, tarih);
+    fat_kume_yaz(t, ko, kume);
+    upp.tampon.yaz32(t, ko + 28, boy);
+    g_fat_kisa_ofs = ko;
+    don bas;
+}
+
+fonk fat_girdi_sil(sayi bas, sayi kisa) -> bos {
+    sayi o = bas;
+    iken (o <= kisa) {
+        upp.tampon.yaz8(g_fat_dizin_t, o, 229);
+        o += 32;
+    }
+}
+
+fonk fat_yazilabilir(sayi no) -> mantik => !g_bag[g_fs[no].bag].salt_okunur;
+
+fonk fat_yaz(sayi no, metin veri) -> mantik {
+    sayi s = fat_s(no);
+    sayi kb = g_fat[s].kb;
+    sayi boy = bayt_say(veri);
+    sayi n = (boy + kb - 1) / kb;
+    liste[sayi] Z = fat_kumeler_ayir(s, n);
+    eger (n > 0 && Z.uzunluk() == 0) {
+        g_fs_hata = "aygıtta yer kalmadı";
+        don yanlis;
+    }
+    eger (n > 0) {
+        sayi t = upp.tampon.yeni(n * kb);
+        upp.tampon.metin_yaz(t, 0, veri);
+        fat_zincir_yaz(s, Z, t);
+        upp.tampon.birak(t);
+    }
+    sayi yeni_ilk = 0;
+    eger (n > 0) { yeni_ilk = Z[0]; }
+    fat_dizin_ac(s, fat_dizin_kume(s, g_fs[no].ust));
+    sayi o = g_fs[no].ek;
+    fat_kume_yaz(g_fat_dizin_t, o, yeni_ilk);
+    upp.tampon.yaz32(g_fat_dizin_t, o + 28, boy);
+    upp.tampon.yaz16(g_fat_dizin_t, o + 22, epoch_dos_saat(g_fs[no].zaman));
+    upp.tampon.yaz16(g_fat_dizin_t, o + 24, epoch_dos_tarih(g_fs[no].zaman));
+    fat_dizin_kapat(s, dogru);
+    fat_zincir_birak(s, g_fs[no].ino);
+    g_fs[no].ino = yeni_ilk;
+    don dogru;
+}
+
+fonk fat_olustur(sayi ust, metin ad, mantik dizin) -> sayi {
+    sayi s = fat_s(ust);
+    eger (!fat_ad_gecerli(ad)) {
+        g_fs_hata = "FAT: geçersiz dosya adı";
+        don -1;
+    }
+    sayi z = simdi();
+    sayi kume = 0;
+    sayi dk = fat_dizin_kume(s, ust);
+    eger (dizin) {
+        liste[sayi] Z = fat_kumeler_ayir(s, 1);
+        eger (Z.uzunluk() == 0) {
+            g_fs_hata = "aygıtta yer kalmadı";
+            don -1;
+        }
+        kume = Z[0];
+        sayi kb = g_fat[s].kb;
+        sayi t = upp.tampon.yeni(kb);
+        upp.tampon.metin_yaz(t, 0, ".          ");
+        upp.tampon.yaz8(t, 11, 16);
+        fat_kume_yaz(t, 0, kume);
+        upp.tampon.metin_yaz(t, 32, "..         ");
+        upp.tampon.yaz8(t, 43, 16);
+        sayi ust_k = dk;
+        eger (dk == g_fat[s].kok) { ust_k = 0; }
+        fat_kume_yaz(t, 32, ust_k);
+        dongu (sayi e = 0; e < 2; e += 1) {
+            upp.tampon.yaz16(t, e * 32 + 22, epoch_dos_saat(z));
+            upp.tampon.yaz16(t, e * 32 + 24, epoch_dos_tarih(z));
+        }
+        liste[sayi] tek;
+        tek.ekle(kume);
+        fat_zincir_yaz(s, tek, t);
+        upp.tampon.birak(t);
+    }
+    fat_dizin_ac(s, dk);
+    sayi attr = 32;
+    eger (dizin) { attr = 16; }
+    sayi bas = fat_girdi_ekle(s, ad, attr, kume, 0, z);
+    eger (bas < 0) {
+        fat_dizin_kapat(s, yanlis);
+        fat_zincir_birak(s, kume);
+        don -1;
+    }
+    sayi kisa = g_fat_kisa_ofs;
+    fat_dizin_kapat(s, dogru);
+    sayi tur = D_DOSYA;
+    sayi kip = 420;
+    eger (dizin) {
+        tur = D_DIZIN;
+        kip = 493;
+    }
+    don fs_disk_dugum(ust, ad, tur, kip, kume, kisa, bas, 0, z);
+}
+
+fonk fat_sil(sayi no) -> mantik {
+    sayi s = fat_s(no);
+    fat_dizin_ac(s, fat_dizin_kume(s, g_fs[no].ust));
+    fat_girdi_sil(g_fs[no].ek2, g_fs[no].ek);
+    fat_dizin_kapat(s, dogru);
+    fat_zincir_birak(s, g_fs[no].ino);
+    don dogru;
+}
+
+fonk fat_tasi(sayi no, sayi yeni_ust, metin yeni_ad) -> mantik {
+    sayi s = fat_s(no);
+    eger (!fat_ad_gecerli(yeni_ad)) {
+        g_fs_hata = "FAT: geçersiz dosya adı";
+        don yanlis;
+    }
+    sayi eski_dk = fat_dizin_kume(s, g_fs[no].ust);
+    sayi yeni_dk = fat_dizin_kume(s, yeni_ust);
+    // eski girdinin özniteliklerini al
+    fat_dizin_ac(s, eski_dk);
+    sayi attr = upp.tampon.oku8(g_fat_dizin_t, g_fs[no].ek + 11);
+    fat_dizin_kapat(s, yanlis);
+    fat_dizin_ac(s, yeni_dk);
+    sayi bas = fat_girdi_ekle(s, yeni_ad, attr, g_fs[no].ino, g_fs[no].boyut, g_fs[no].zaman);
+    eger (bas < 0) {
+        fat_dizin_kapat(s, yanlis);
+        don yanlis;
+    }
+    sayi kisa = g_fat_kisa_ofs;
+    fat_dizin_kapat(s, dogru);
+    fat_dizin_ac(s, eski_dk);
+    fat_girdi_sil(g_fs[no].ek2, g_fs[no].ek);
+    fat_dizin_kapat(s, dogru);
+    // aynı dizinde yeni girdi eskisinden önce yazılmış olabilir: konumlar değişmez
+    g_fs[no].ek = kisa;
+    g_fs[no].ek2 = bas;
+    eger (g_fs[no].tur == D_DIZIN && eski_dk != yeni_dk && g_fs[no].ino >= 2) {
+        liste[sayi] tek;
+        tek.ekle(g_fs[no].ino);
+        sayi t = fat_zincir_tampon(s, tek);
+        sayi ust_k = yeni_dk;
+        eger (yeni_dk == g_fat[s].kok) { ust_k = 0; }
+        fat_kume_yaz(t, 32, ust_k);
+        fat_zincir_yaz(s, tek, t);
+        upp.tampon.birak(t);
+    }
+    don dogru;
+}
+
+fonk fat_oznitelik(sayi no) -> mantik {
+    sayi s = fat_s(no);
+    eger (g_fs[no].ek < 0) { don dogru; }
+    fat_dizin_ac(s, fat_dizin_kume(s, g_fs[no].ust));
+    sayi o = g_fs[no].ek;
+    sayi attr = upp.tampon.oku8(g_fat_dizin_t, o + 11);
+    mantik salt = (g_fs[no].kip / 128) % 2 == 0;
+    eger (salt && attr % 2 == 0) { attr += 1; }
+    eger (!salt && attr % 2 == 1) { attr -= 1; }
+    upp.tampon.yaz8(g_fat_dizin_t, o + 11, attr);
+    upp.tampon.yaz16(g_fat_dizin_t, o + 22, epoch_dos_saat(g_fs[no].zaman));
+    upp.tampon.yaz16(g_fat_dizin_t, o + 24, epoch_dos_tarih(g_fs[no].zaman));
+    fat_dizin_kapat(s, dogru);
+    don dogru;
+}
+
+fonk fat_alan(sayi bag) -> liste[sayi] {
+    sayi s = g_bag[bag].dno;
+    sayi bos_k = 0;
+    dongu (sayi c = 2; c < g_fat[s].kume_say + 2; c += 1) {
+        eger (fat_giris(s, c) == 0) { bos_k += 1; }
+    }
+    liste[sayi] R;
+    R.ekle(g_fat[s].kume_say * g_fat[s].kb);
+    R.ekle(bos_k * g_fat[s].kb);
+    don R;
+}
+
+fonk fat_kaydet() -> bos {
+    Surucu s;
+    s.ad = "vfat";
+    s.bagla = fat_bagla;
+    s.ayir = fat_ayir;
+    s.yukle = fat_yukle;
+    s.oku = fat_oku;
+    s.yaz = fat_yaz;
+    s.olustur = fat_olustur;
+    s.sil = fat_sil;
+    s.tasi = fat_tasi;
+    s.oznitelik = fat_oznitelik;
+    s.alan = fat_alan;
+    g_surucu.koy("vfat", s);
+}

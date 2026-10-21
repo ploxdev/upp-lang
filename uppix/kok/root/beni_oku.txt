@@ -1,0 +1,11 @@
+Uppix'in kökü ext4 bir diskte duruyor; buraya yazdıklarınız kapatınca kaybolmaz.
+Bir şeyler deneyin:
+  ls -l /
+  lsblk
+  df -h
+  echo merhaba > ~/not.txt && cat ~/not.txt
+  ls /mnt/sdb1                      # FAT32 USB bölümü
+  cp ~/not.txt /mnt/sdc/            # exFAT disk
+  seq 10 | grep 1 | wc -l
+  sleep 3 && echo bitti &
+  sh /usr/share/ornekler/selam.sh Dünya

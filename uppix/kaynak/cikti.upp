@@ -1,0 +1,72 @@
+// Uppix — görev başına çıktı yakalama.
+// Boru ve yönlendirmede komutun çıktısı tampona toplanır; her görevin kendi
+// yığını vardır, böylece arka plan işleri ön plandaki kabukla karışmaz.
+
+liste[metin] g_yakala;
+liste[sayi] g_yakala_gorev;
+mantik g_hata_sustur = yanlis;
+
+fonk yakala_yer() -> sayi {
+    sayi g = upp.cekirdek.gorev_kimlik();
+    sayi i = g_yakala.uzunluk() - 1;
+    iken (i >= 0) {
+        eger (g_yakala_gorev[i] == g) { don i; }
+        i -= 1;
+    }
+    don -1;
+}
+
+fonk yakala_basla() -> bos {
+    g_yakala.ekle("");
+    g_yakala_gorev.ekle(upp.cekirdek.gorev_kimlik());
+}
+
+fonk yakala_bitir() -> metin {
+    sayi i = yakala_yer();
+    eger (i < 0) { don ""; }
+    metin s = g_yakala[i];
+    g_yakala.sil(i);
+    g_yakala_gorev.sil(i);
+    don s;
+}
+
+fonk terminal_mi() -> mantik => yakala_yer() < 0;
+
+// Terminale yazarken her satır sonu CR+LF olur (seri terminal ham kipte).
+fonk terminale_yaz(metin s) -> bos {
+    eger (upp.metin.bul(s, "\n") < 0) {
+        upp.yaz(s);
+        don;
+    }
+    liste[metin] P = upp.metin.bol(s, "\n");
+    sayi n = P.uzunluk();
+    dongu (sayi i = 0; i < n; i += 1) {
+        eger (i < n - 1) { upp.satir_yaz(P[i]); } yoksa eger (P[i] != "") { upp.yaz(P[i]); }
+    }
+}
+
+fonk yaz(metin s) -> bos {
+    sayi i = yakala_yer();
+    eger (i < 0) { terminale_yaz(s); } yoksa { g_yakala[i] += s; }
+}
+
+fonk satir(metin s) -> bos {
+    sayi i = yakala_yer();
+    eger (i < 0) {
+        terminale_yaz(s);
+        upp.satir_yaz("");
+    } yoksa {
+        g_yakala[i] += s + "\n";
+    }
+}
+
+fonk hata_bildir(metin s) -> bos {
+    eger (g_hata_sustur) { don; }
+    upp.hata_satir_yaz(s);
+}
+
+// Renk yalnızca terminale yazılırken kullanılır.
+fonk renkli(metin kod, metin s) -> metin {
+    eger (!terminal_mi()) { don s; }
+    don "\e[" + kod + "m" + s + "\e[0m";
+}

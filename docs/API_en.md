@@ -129,7 +129,7 @@ Same syntax as C: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.9;
 
 - `"... {expr} ..."`: a full expression starts when `{` is immediately followed by a letter, `_`, or `(`, for example `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`. An expression that fails to parse is a compile error.
 - `{{` and `}}` mean `{` and `}` in every string. A `{` followed by a space or a digit stays literal.
-- String escapes: `\n \t \r \\ \" \e` (ESC) and `\xHH`.
+- String escapes: `\n \t \r \\ \" \e` (ESC), `\xHH` (a byte), and `\uHHHH` (a Unicode code point, e.g. `\u00e7` = ç). An unknown escape (e.g. `\q`) is a compile error.
 - `upp.yaz(x)` / `upp.satir_yaz(x)` (stdout; serial + VGA on freestanding targets) and `upp.hata_yaz(x)` / `upp.hata_satir_yaz(x)` (stderr) accept any printable type: integers, `ondalik`, `mantik`, `metin`, `&metin`, and enums. They take at most one argument. There are no printf format strings.
 - `upp.giris() -> metin` reads one line from stdin.
 
@@ -155,6 +155,7 @@ Same syntax as C: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.9;
 - `bol(s, sep) -> liste[metin]`, `birlestir(list, sep)`
 - `kod(s, i)`, `ileri(s, i)`
 - `hex_coz`, `hex_kodla`
+- `karakter(code) -> metin` (a one-character string from a code point; empty if invalid), `tekrar(s, n) -> metin` (repeat)
 
 ## 6–8. `upp.dosya`, `upp.yol`, `upp.sistem`, `upp.stdio` (hosted)
 
@@ -186,17 +187,48 @@ Same syntax as C: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.9;
 - **`upp.json`** (hosted): `ayristir`, `olustur`, `tur`, `anahtar_al`, `indeks_al`, `anahtarlar`, `metin_al` / `sayi_al` / `ondalik_al` / `mantik_al`, `uzunluk`, `var_mi`, `nesne`, `dizi`, `*_yap`, `koy`, `ekle`, `bosalt`.
 - **`arkaplan { }` / `.bekle()` and `Kilit`** (hosted). Strings are deep-copied into the thread.
 
-## 14. `upp.cekirdek` — hardware (`--hedef serbest|cekirdek` only, `guvensiz`)
+## 14. `upp.cekirdek` — hardware (`--hedef serbest|cekirdek` only)
+
+These touch hardware directly and require `guvensiz`:
 
 - `port_yaz8/16/32`, `port_oku8/16/32`: x86 I/O ports
 - `bellek_yaz8..64`, `bellek_oku8..64`: volatile MMIO
 - `dur` (`hlt`), `kesme_kapat` (`cli`), `kesme_ac` (`sti`)
-- `yigin_kur(adres, boyut)`: hands a memory region to the string/collection allocator (the default is a 4 MiB `.bss` arena)
+- `yigin_kur(adres, boyut)`: hands a memory region to the string/collection allocator
+
+The rest are callable from safe code:
+
 - `kesmeler_kur()`: sets up the IDT, PIC, and a 1000 Hz PIT (called automatically at boot)
 - `tik()`: timer ticks since boot (1 ms)
-- `tus_oku()` / `tus_bekle()`: read a code point from the PS/2 keyboard (Turkish Q layout) or the serial port
+- `tus_oku()` / `tus_bekle()`: read a code point from the PS/2 keyboard (Turkish Q layout) or the serial port. Arrow/Home/End/Delete keys arrive as `ESC [ A`-style sequences, and Ctrl+letter gives the control code. On serial, CR and CR LF are both one line end. `tus_bekle` lets ready tasks run while it waits.
+- `bellek_toplam()`: usable RAM from the Multiboot memory map (bytes); `yigin_boyut()`, `yigin_kullanilan()`: allocator region size and bytes in use
+- `gorev_baslat(f, arg, ad) -> sayi`: runs `f(arg)` (`f: fonk(sayi) -> bos`) in a new task and returns its id (PID), or -1 if the table is full
+- `sira_ver()`: yield to another ready task; `gorev_kimlik()`: current task id (the main flow is 1)
+- `gorev_listesi() -> liste[sayi]`, `gorev_ad(id)`, `gorev_durum(id)` (`"çalışıyor"` / `"hazır"` / `"uyuyor"`, or `""`), `gorev_baslama(id)` (ms), `gorev_oldur(id) -> mantik` (task 1 cannot be killed)
+- `tarih() -> metin`: CMOS clock as `"YYYY-MM-DD HH:MM:SS"`
+- `kapat()`: ACPI power-off (QEMU, Bochs, VirtualBox; falls back to isa-debug-exit); `yeniden_baslat()`: 8042 reset
+- `ekran_temizle()`: clears the VGA screen and the serial terminal; `islemci() -> metin`: CPUID brand string
+- `disk_var(d)`, `disk_sektor(d)`, `disk_model(d)`: ATA disk `d` (0–3: primary/secondary channel, master/slave; QEMU `-drive if=ide,index=d`), its sector count (512 bytes), and its model name
+- `disk_oku(d, lba, adet, tampon, ofs) -> mantik` / `disk_yaz(...)`: read/write `adet` sectors into/from a buffer (PIO, LBA28/LBA48, cache flush after writes)
 
-On the kernel target, `upp.giris()` (line input from keyboard/serial with echo and backspace), `upp.zaman()`, and `upp.uyut(ms)` also work. CPU exceptions panic with the exception name and RIP, and a panic exits QEMU with code 3.
+**Memory:** at boot, the heap moves to the largest free region in the Multiboot memory map (within the first 1 GiB; about 122 MiB on QEMU's default 128 MiB). Without boot information, a 4 MiB `.bss` arena is used.
+
+**Tasks** are cooperative. Switches happen only in `upp.uyut`, `sira_ver`, and while waiting for input (`tus_bekle`, `upp.giris`), so the runtime's shared state is safe without locks, but a task doing long computations should call `sira_ver()` now and then. Each task has a 64 KiB stack, and there can be at most 32 tasks.
+
+On the kernel target, `upp.giris()` (line input from keyboard/serial with echo and backspace), `upp.zaman()`, and `upp.uyut(ms)` also work. The VGA screen understands ANSI colors (`\e[1;32m`), `\e[2J`, `\e[H`, `\e[K`, `\e[nC`, and `\e[nD`, and it renders box-drawing characters. CPU exceptions panic with the exception name and RIP, and a panic exits QEMU with code 3.
+
+A complete example built on these builtins: [Uppix](../uppix/README.md), a Unix-like operating system written in u++ (ext4 root, FAT32/exFAT).
+
+### `upp.tampon` — byte buffers (all targets)
+
+For handling binary data (disk sectors, filesystem structures, network packets) from safe code. A buffer is referred to by a `sayi` handle, and every access is bounds-checked: an invalid handle or an overflow panics. Multi-byte values are little-endian. Buffers are released by hand (`birak`).
+
+- `yeni(boyut) -> sayi` (zero-filled), `birak(t)`, `boyut(t)`
+- `oku8/16/32/64(t, ofs)`, `yaz8/16/32/64(t, ofs, deger)` (32-bit reads are unsigned; 64-bit values are the raw bit pattern)
+- `metin(t, ofs, n) -> metin`, `metin_yaz(t, ofs, s) -> sayi`: raw bytes ↔ string (UTF-8 bytes; returns the byte count)
+- `utf16_metin(t, ofs, n)`, `utf16_yaz(t, ofs, s, sinir) -> sayi`: UTF-16LE ↔ string (surrogate pairs included; stops at 0x0000; returns code units written)
+- `kopyala(hedef, hofs, kaynak, kofs, n)` (overlap-safe), `doldur(t, ofs, n, deger)`
+- `crc32c(t, ofs, n, baslangic) -> sayi`: CRC32C (Castagnoli) without the final XOR (the ext4 convention); `^ 4294967295` gives the standard value
 
 ## 15. Targets
 
@@ -212,11 +244,13 @@ On freestanding targets, hosted builtins, `arkaplan`, and `Kilit` are compile er
 ## 16. Command Line
 
 ```text
-uppc <file.upp> [-o name] [--sadece-derle | -c] [--hedef t] [--analiz] [--json-hata] [--bicim | --bicim-kontrol] [--ast] [--runtime path]
+uppc <file.upp> [-o name] [--sadece-derle | -c] [--hedef t] [--analiz] [--json-hata] [--bicim | --bicim-kontrol] [--ast] [--runtime path] [--disk image]...
 uppc yeni <name> [--hedef cekirdek]
 uppc derle [dir] | uppc calistir [dir]
 uppc asistan [dir]
 uppc kendini-derle [--hizli]
 ```
 
-`upp.proje` holds one `key = value` per line, with the keys `ad`, `giris`, `hedef` (`yerel|windows|linux|serbest|cekirdek`), `cikti`, and `bayraklar`.
+`upp.proje` holds one `key = value` per line, with the keys `ad`, `giris`, `hedef` (`yerel|windows|linux|serbest|cekirdek`), `cikti`, `bayraklar`, `diskler` (comma-separated disk images for the kernel target, attached as sda, sdb, ...), and `disk_hazirla` (a script run with `sh` in the project directory when a disk image is missing).
+
+`--disk image` (up to 4) attaches a raw disk image to QEMU as `-drive if=ide,format=raw` on the kernel target.

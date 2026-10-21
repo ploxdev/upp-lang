@@ -1,0 +1,31 @@
+// Pozitif: upp.tampon — sınır denetimli bayt tamponları, LE okuma/yazma, UTF-16, CRC32C
+// @stdout
+// boyut 64, 16: 0xbeef 32: 3735928559 64: -2
+// metin: [merhaba] 7 bayt
+// utf16: [Iğdır ✓] 7 birim
+// crc32c(123456789): 3808858755
+// kopya: aaaa-merh
+
+fonk ana() -> sayi {
+    sayi t = upp.tampon.yeni(64);
+    upp.tampon.yaz16(t, 0, 48879);
+    upp.tampon.yaz32(t, 4, 3735928559);
+    upp.tampon.yaz64(t, 8, -2);
+    upp.satir_yaz("boyut {upp.tampon.boyut(t)}, 16: 0xbeef 32: {upp.tampon.oku32(t, 4)} 64: {upp.tampon.oku64(t, 8)}");
+    eger (upp.tampon.oku16(t, 0) != 48879) { upp.satir_yaz("HATA oku16"); }
+    sayi n = upp.tampon.metin_yaz(t, 20, "merhaba");
+    upp.satir_yaz("metin: [{upp.tampon.metin(t, 20, n)}] {n} bayt");
+    sayi u = upp.tampon.utf16_yaz(t, 30, "Iğdır ✓", 10);
+    upp.satir_yaz("utf16: [{upp.tampon.utf16_metin(t, 30, u)}] {u} birim");
+    sayi c = upp.tampon.yeni(9);
+    upp.tampon.metin_yaz(c, 0, "123456789");
+    sayi crc = upp.tampon.crc32c(c, 0, 9, 4294967295) ^ 4294967295;
+    upp.satir_yaz("crc32c(123456789): {crc}");
+    upp.tampon.doldur(t, 0, 4, 97);
+    upp.tampon.yaz8(t, 4, 45);
+    upp.tampon.kopyala(t, 5, t, 20, 4);
+    upp.satir_yaz("kopya: {upp.tampon.metin(t, 0, 9)}");
+    upp.tampon.birak(t);
+    upp.tampon.birak(c);
+    don 0;
+}

@@ -1,0 +1,695 @@
+// Uppix — dosya ve dizin komutları.
+// Her komut fonk(liste[metin] a, metin girdi) -> sayi imzasındadır: a[0] komut adı,
+// girdi bir önceki boru aşamasının çıktısı (yok = terminal). Dönüş çıkış kodudur.
+
+metin g_bayrak = "";
+liste[metin] g_isl;
+
+// "-la" gibi tek harfli seçenekleri ve işlenenleri ayırır ("--" sonrası işlenendir).
+fonk secenek_ayir(liste[metin] a) -> bos {
+    g_bayrak = "";
+    g_isl.temizle();
+    mantik bitti = yanlis;
+    dongu (sayi i = 1; i < a.uzunluk(); i += 1) {
+        metin x = a[i];
+        eger (!bitti && x == "--") {
+            bitti = dogru;
+            devam;
+        }
+        eger (!bitti && uz(x) > 1 && x[0] == 45) {
+            g_bayrak += kes_son(x, 1);
+            devam;
+        }
+        g_isl.ekle(x);
+    }
+}
+
+fonk bayrak_var(metin b, metin h) -> mantik => upp.metin.bul(b, h) >= 0;
+
+fonk dosya_icerik(metin kmt, metin yol) -> metin {
+    sayi no = fs_coz(yol);
+    eger (no < 0) {
+        hata_bildir("{kmt}: {yol}: böyle bir dosya ya da dizin yok");
+        don yok;
+    }
+    eger (g_fs[no].tur == D_DIZIN) {
+        hata_bildir("{kmt}: {yol}: bir dizin");
+        don yok;
+    }
+    don fs_oku(no);
+}
+
+// Dosyalar verilmişse onları, yoksa girdiyi okur; hata olursa g_okuma_hata dogru olur.
+mantik g_okuma_hata = yanlis;
+
+fonk kaynak_oku(metin kmt, liste[metin] dosyalar, metin girdi) -> metin {
+    g_okuma_hata = yanlis;
+    eger (dosyalar.uzunluk() == 0) { don girdi_oku(girdi); }
+    metin tum = "";
+    her (oto y in dosyalar) {
+        eger (y == "-") {
+            tum += girdi_oku(girdi);
+            devam;
+        }
+        metin m = dosya_icerik(kmt, y);
+        eger (m == yok) { g_okuma_hata = dogru; } yoksa { tum += m; }
+    }
+    don tum;
+}
+
+fonk ad_renkli(sayi no) -> metin {
+    metin ad = g_fs[no].ad;
+    eger (no == 0) { ad = "/"; }
+    sayi t = g_fs[no].tur;
+    eger (t == D_DIZIN) { don renkli("1;34", ad); }
+    eger (t == D_AYGIT) { don renkli("1;33", ad); }
+    eger (t == D_SANAL) { don renkli("36", ad); }
+    eger (calistirilabilir_mi(no)) { don renkli("1;32", ad); }
+    don ad;
+}
+
+fonk ls_uzun(sayi no, metin goster, mantik insan) -> metin {
+    sayi bag_say = 1;
+    eger (g_fs[no].tur == D_DIZIN) {
+        bag_say = 2;
+        her (oto c in fs_cocuklar(no)) {
+            eger (g_fs[c].tur == D_DIZIN) { bag_say += 1; }
+        }
+    }
+    sayi b = fs_boyut(no);
+    metin bs = "{b}";
+    eger (insan) { bs = boyut_insan(b); }
+    don kip_metin(no) + " " + sag_hizala("{bag_say}", 2) + " root root " + sag_hizala(bs, 6) + " " + dosya_zamani(g_fs[no].zaman) + " " + goster;
+}
+
+fonk ls_sutunlu(liste[metin] adlar, liste[metin] gosterim) -> bos {
+    eger (adlar.uzunluk() == 0) { don; }
+    eger (!terminal_mi()) {
+        her (oto a in adlar) { satir(a); }
+        don;
+    }
+    sayi gen = 1;
+    her (oto a in adlar) {
+        eger (uz(a) > gen) { gen = uz(a); }
+    }
+    gen += 2;
+    sayi sutun = 80 / gen;
+    eger (sutun < 1) { sutun = 1; }
+    sayi n = adlar.uzunluk();
+    sayi satir_say = (n + sutun - 1) / sutun;
+    dongu (sayi r = 0; r < satir_say; r += 1) {
+        metin sat = "";
+        dongu (sayi c = 0; c < sutun; c += 1) {
+            sayi i = c * satir_say + r;
+            eger (i >= n) { devam; }
+            sat += gosterim[i];
+            eger (c < sutun - 1 && (c + 1) * satir_say + r < n) {
+                sat += upp.metin.tekrar(" ", gen - uz(adlar[i]));
+            }
+        }
+        satir(sat);
+    }
+}
+
+fonk ls_listele(sayi no, metin b) -> bos {
+    mantik hepsi = bayrak_var(b, "a");
+    mantik uzun = bayrak_var(b, "l");
+    mantik insan = bayrak_var(b, "h");
+    mantik tek = bayrak_var(b, "1");
+    liste[metin] adlar;
+    harita[metin, sayi] numara;
+    her (oto c in fs_cocuklar(no)) {
+        metin ad = g_fs[c].ad;
+        eger (!hepsi && upp.metin.baslar(ad, ".")) { devam; }
+        adlar.ekle(ad);
+        numara.koy(ad, c);
+    }
+    adlar = adlari_sirala(adlar);
+    eger (uzun) {
+        sayi toplam = 0;
+        her (oto ad in adlar) { toplam += (fs_boyut(numara.al(ad)) + 1023) / 1024; }
+        satir("toplam {toplam}");
+        eger (hepsi) {
+            satir(ls_uzun(no, renkli("1;34", "."), insan));
+            satir(ls_uzun(g_fs[no].ust, renkli("1;34", ".."), insan));
+        }
+        her (oto ad in adlar) {
+            sayi c = numara.al(ad);
+            satir(ls_uzun(c, ad_renkli(c), insan));
+        }
+        don;
+    }
+    liste[metin] tum;
+    liste[metin] gos;
+    eger (hepsi) {
+        tum.ekle(".");
+        gos.ekle(renkli("1;34", "."));
+        tum.ekle("..");
+        gos.ekle(renkli("1;34", ".."));
+    }
+    her (oto ad in adlar) {
+        tum.ekle(ad);
+        gos.ekle(ad_renkli(numara.al(ad)));
+    }
+    eger (tek) {
+        her (oto g in gos) { satir(g); }
+        don;
+    }
+    ls_sutunlu(tum, gos);
+}
+
+fonk k_ls(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] yollar = g_isl;
+    eger (yollar.uzunluk() == 0) { yollar.ekle("."); }
+    sayi kod = 0;
+    liste[metin] dosyalar;
+    liste[metin] dizinler;
+    her (oto y in yollar) {
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            hata_bildir("ls: '{y}' erişilemiyor: böyle bir dosya ya da dizin yok");
+            kod = 2;
+            devam;
+        }
+        eger (g_fs[no].tur == D_DIZIN) { dizinler.ekle(y); } yoksa { dosyalar.ekle(y); }
+    }
+    eger (dosyalar.uzunluk() > 0) {
+        eger (bayrak_var(b, "l")) {
+            her (oto y in dosyalar) { satir(ls_uzun(fs_coz(y), y, bayrak_var(b, "h"))); }
+        } yoksa {
+            ls_sutunlu(dosyalar, dosyalar);
+        }
+    }
+    sayi say = 0;
+    her (oto y in dizinler) {
+        eger (yollar.uzunluk() > 1) {
+            eger (say > 0 || dosyalar.uzunluk() > 0) { satir(""); }
+            satir(y + ":");
+        }
+        ls_listele(fs_coz(y), b);
+        say += 1;
+    }
+    don kod;
+}
+
+fonk k_cd(liste[metin] a, metin girdi) -> sayi {
+    metin hedef = ortam("HOME");
+    eger (a.uzunluk() > 1) { hedef = a[1]; }
+    eger (hedef == "-") {
+        hedef = ortam("OLDPWD");
+        satir(hedef);
+    }
+    sayi no = fs_coz(hedef);
+    eger (no < 0) {
+        hata_bildir("cd: {hedef}: böyle bir dosya ya da dizin yok");
+        don 1;
+    }
+    eger (g_fs[no].tur != D_DIZIN) {
+        hata_bildir("cd: {hedef}: bir dizin değil");
+        don 1;
+    }
+    g_ortam.koy("OLDPWD", fs_yol(g_cwd));
+    g_cwd = no;
+    g_ortam.koy("PWD", fs_yol(no));
+    don 0;
+}
+
+fonk k_pwd(liste[metin] a, metin girdi) -> sayi {
+    satir(fs_yol(g_cwd));
+    don 0;
+}
+
+fonk k_cat(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] dosyalar = g_isl;
+    metin tum = kaynak_oku("cat", dosyalar, girdi);
+    eger (bayrak_var(b, "n")) {
+        sayi i = 1;
+        her (oto l in satirlar(tum)) {
+            satir(sag_hizala("{i}", 6) + "\t" + l);
+            i += 1;
+        }
+    } yoksa {
+        yaz(tum);
+    }
+    eger (g_okuma_hata) { don 1; }
+    don 0;
+}
+
+fonk mkdir_p(metin yol) -> sayi {
+    sayi cur = g_cwd;
+    eger (upp.metin.baslar(yol, "/")) { cur = 0; }
+    her (oto p in upp.metin.bol(yol, "/")) {
+        eger (p == "" || p == ".") { devam; }
+        eger (p == "..") {
+            cur = g_fs[cur].ust;
+            devam;
+        }
+        sayi c = fs_cocuk(cur, p);
+        eger (c < 0) {
+            c = fs_yeni(cur, p, D_DIZIN, 493);
+            eger (c < 0) { don -1; }
+        } yoksa eger (g_fs[c].tur != D_DIZIN) {
+            don -1;
+        }
+        cur = c;
+    }
+    don cur;
+}
+
+fonk k_mkdir(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] yollar = g_isl;
+    eger (yollar.uzunluk() == 0) {
+        hata_bildir("mkdir: işlenen eksik");
+        don 1;
+    }
+    sayi kod = 0;
+    her (oto y in yollar) {
+        eger (bayrak_var(b, "p")) {
+            g_fs_hata = "";
+            eger (mkdir_p(y) < 0) {
+                metin neden = "bir dizin değil";
+                eger (g_fs_hata != "") { neden = g_fs_hata; }
+                hata_bildir("mkdir: '{y}' oluşturulamıyor: " + neden);
+                kod = 1;
+            }
+            devam;
+        }
+        eger (fs_coz(y) >= 0) {
+            hata_bildir("mkdir: '{y}' dizini oluşturulamıyor: dosya var");
+            kod = 1;
+            devam;
+        }
+        sayi u = fs_coz(yol_dizin(y));
+        eger (!fs_dizin_mi(u)) {
+            hata_bildir("mkdir: '{y}' dizini oluşturulamıyor: böyle bir dosya ya da dizin yok");
+            kod = 1;
+            devam;
+        }
+        eger (fs_yeni(u, yol_ad(y), D_DIZIN, 493) < 0) {
+            hata_bildir("mkdir: '{y}' dizini oluşturulamıyor: " + g_fs_hata);
+            kod = 1;
+        }
+    }
+    don kod;
+}
+
+fonk k_rmdir(liste[metin] a, metin girdi) -> sayi {
+    sayi kod = 0;
+    dongu (sayi i = 1; i < a.uzunluk(); i += 1) {
+        metin y = a[i];
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            hata_bildir("rmdir: '{y}' kaldırılamadı: böyle bir dosya ya da dizin yok");
+            kod = 1;
+        } yoksa eger (g_fs[no].tur != D_DIZIN) {
+            hata_bildir("rmdir: '{y}' kaldırılamadı: bir dizin değil");
+            kod = 1;
+        } yoksa eger (fs_cocuklar(no).uzunluk() > 0) {
+            hata_bildir("rmdir: '{y}' kaldırılamadı: dizin boş değil");
+            kod = 1;
+        } yoksa eger (no == 0 || fs_ata_mi(no, g_cwd)) {
+            hata_bildir("rmdir: '{y}' kaldırılamadı: aygıt ya da kaynak meşgul");
+            kod = 1;
+        } yoksa eger (!fs_sil(no)) {
+            hata_bildir("rmdir: '{y}' kaldırılamadı: " + g_fs_hata);
+            kod = 1;
+        }
+    }
+    don kod;
+}
+
+fonk k_touch(liste[metin] a, metin girdi) -> sayi {
+    sayi kod = 0;
+    dongu (sayi i = 1; i < a.uzunluk(); i += 1) {
+        metin y = a[i];
+        sayi no = fs_coz(y);
+        eger (no >= 0) {
+            g_fs[no].zaman = simdi();
+            fs_oznitelik(no);
+            devam;
+        }
+        eger (fs_dosya_ac(y) < 0) {
+            metin neden = "böyle bir dosya ya da dizin yok";
+            eger (g_fs_hata != "") { neden = g_fs_hata; }
+            hata_bildir("touch: '{y}' açılamıyor: " + neden);
+            kod = 1;
+        }
+    }
+    don kod;
+}
+
+fonk k_rm(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] yollar = g_isl;
+    mantik ozyinele = bayrak_var(b, "r") || bayrak_var(b, "R");
+    mantik zorla = bayrak_var(b, "f");
+    sayi kod = 0;
+    her (oto y in yollar) {
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            eger (!zorla) {
+                hata_bildir("rm: '{y}' silinemiyor: böyle bir dosya ya da dizin yok");
+                kod = 1;
+            }
+            devam;
+        }
+        eger (no == 0) {
+            hata_bildir("rm: '/' üzerinde özyinelemeli işlem tehlikeli; reddedildi");
+            kod = 1;
+            devam;
+        }
+        eger (g_fs[no].tur == D_DIZIN && !ozyinele) {
+            hata_bildir("rm: '{y}' silinemiyor: bir dizin");
+            kod = 1;
+            devam;
+        }
+        eger (g_fs[no].tur == D_SANAL || g_fs[no].tur == D_AYGIT || (g_fs[no].ust > 0 && g_fs[g_fs[no].ust].ad == "proc" && g_fs[g_fs[no].ust].ust == 0)) {
+            hata_bildir("rm: '{y}' silinemiyor: işleme izin verilmiyor");
+            kod = 1;
+            devam;
+        }
+        mantik cwd_icinde = fs_ata_mi(no, g_cwd);
+        sayi ust_no = g_fs[no].ust;
+        eger (!fs_sil(no)) {
+            hata_bildir("rm: '{y}' silinemiyor: " + g_fs_hata);
+            kod = 1;
+            devam;
+        }
+        eger (cwd_icinde) { g_cwd = ust_no; }
+    }
+    don kod;
+}
+
+fonk kopya_tasi(liste[metin] a, mantik tasi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] yollar = g_isl;
+    metin kmt = "cp";
+    eger (tasi) { kmt = "mv"; }
+    eger (yollar.uzunluk() < 2) {
+        hata_bildir("{kmt}: işlenen eksik");
+        don 1;
+    }
+    metin hedef = yollar[yollar.uzunluk() - 1];
+    sayi hno = fs_coz(hedef);
+    mantik hedef_dizin = fs_dizin_mi(hno);
+    eger (yollar.uzunluk() > 2 && !hedef_dizin) {
+        hata_bildir("{kmt}: hedef '{hedef}' bir dizin değil");
+        don 1;
+    }
+    sayi kod = 0;
+    dongu (sayi i = 0; i < yollar.uzunluk() - 1; i += 1) {
+        metin y = yollar[i];
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            hata_bildir("{kmt}: '{y}' durumlanamıyor: böyle bir dosya ya da dizin yok");
+            kod = 1;
+            devam;
+        }
+        sayi ust = 0;
+        metin ad = "";
+        eger (hedef_dizin) {
+            ust = hno;
+            ad = g_fs[no].ad;
+        } yoksa {
+            ust = fs_coz(yol_dizin(hedef));
+            ad = yol_ad(hedef);
+            eger (!fs_dizin_mi(ust)) {
+                hata_bildir("{kmt}: '{hedef}' oluşturulamıyor: böyle bir dosya ya da dizin yok");
+                kod = 1;
+                devam;
+            }
+        }
+        eger (g_fs[no].tur == D_DIZIN && fs_ata_mi(no, ust)) {
+            hata_bildir("{kmt}: '{y}' kendi alt dizinine taşınamaz/kopyalanamaz");
+            kod = 1;
+            devam;
+        }
+        sayi var_olan = fs_cocuk(ust, ad);
+        eger (var_olan == no) { devam; }
+        eger (var_olan >= 0) {
+            eger (g_fs[var_olan].tur == D_DIZIN) {
+                hata_bildir("{kmt}: '{ad}' dizininin üzerine yazılamıyor");
+                kod = 1;
+                devam;
+            }
+            eger (!fs_sil(var_olan)) {
+                hata_bildir("{kmt}: '{ad}' üzerine yazılamıyor: " + g_fs_hata);
+                kod = 1;
+                devam;
+            }
+        }
+        eger (tasi) {
+            eger (g_fs[no].tur == D_SANAL || g_fs[no].tur == D_AYGIT) {
+                hata_bildir("mv: '{y}' taşınamıyor: işleme izin verilmiyor");
+                kod = 1;
+                devam;
+            }
+            eger (!fs_tasi(no, ust, ad)) {
+                hata_bildir("mv: '{y}' taşınamıyor: " + g_fs_hata);
+                kod = 1;
+            }
+        } yoksa {
+            eger (g_fs[no].tur == D_DIZIN && !bayrak_var(b, "r") && !bayrak_var(b, "R")) {
+                hata_bildir("cp: -r belirtilmedi; '{y}' dizini atlanıyor");
+                kod = 1;
+                devam;
+            }
+            eger (fs_kopyala(no, ust, ad) < 0) {
+                hata_bildir("cp: '{y}' kopyalanamıyor: " + g_fs_hata);
+                kod = 1;
+            }
+        }
+    }
+    don kod;
+}
+
+fonk k_cp(liste[metin] a, metin girdi) -> sayi => kopya_tasi(a, yanlis);
+
+fonk k_mv(liste[metin] a, metin girdi) -> sayi => kopya_tasi(a, dogru);
+
+fonk find_yuru(sayi no, metin yol, metin desen, metin tur) -> bos {
+    mantik uygun = dogru;
+    eger (desen != "" && !eslesir(desen, g_fs[no].ad)) { uygun = yanlis; }
+    eger (tur == "f" && g_fs[no].tur == D_DIZIN) { uygun = yanlis; }
+    eger (tur == "d" && g_fs[no].tur != D_DIZIN) { uygun = yanlis; }
+    eger (uygun) { satir(yol); }
+    eger (g_fs[no].tur == D_DIZIN) {
+        liste[metin] adlar;
+        her (oto c in fs_cocuklar(no)) { adlar.ekle(g_fs[c].ad); }
+        her (oto ad in adlari_sirala(adlar)) {
+            find_yuru(fs_cocuk(no, ad), yol_birlestir(yol, ad), desen, tur);
+        }
+    }
+}
+
+fonk k_find(liste[metin] a, metin girdi) -> sayi {
+    liste[metin] yollar;
+    metin desen = "";
+    metin tur = "";
+    sayi i = 1;
+    iken (i < a.uzunluk()) {
+        metin x = a[i];
+        eger (x == "-name" && i + 1 < a.uzunluk()) {
+            desen = a[i + 1];
+            i += 2;
+            devam;
+        }
+        eger (x == "-type" && i + 1 < a.uzunluk()) {
+            tur = a[i + 1];
+            i += 2;
+            devam;
+        }
+        yollar.ekle(x);
+        i += 1;
+    }
+    eger (yollar.uzunluk() == 0) { yollar.ekle("."); }
+    sayi kod = 0;
+    her (oto y in yollar) {
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            hata_bildir("find: '{y}': böyle bir dosya ya da dizin yok");
+            kod = 1;
+            devam;
+        }
+        find_yuru(no, y, desen, tur);
+    }
+    don kod;
+}
+
+sayi g_tree_dizin = 0;
+sayi g_tree_dosya = 0;
+
+fonk tree_yuru(sayi no, metin onek) -> bos {
+    liste[metin] adlar;
+    her (oto c in fs_cocuklar(no)) {
+        eger (!upp.metin.baslar(g_fs[c].ad, ".")) { adlar.ekle(g_fs[c].ad); }
+    }
+    adlar = adlari_sirala(adlar);
+    sayi n = adlar.uzunluk();
+    dongu (sayi i = 0; i < n; i += 1) {
+        sayi c = fs_cocuk(no, adlar[i]);
+        mantik son = i == n - 1;
+        metin dal = "├── ";
+        metin alt = "│   ";
+        eger (son) {
+            dal = "└── ";
+            alt = "    ";
+        }
+        satir(onek + dal + ad_renkli(c));
+        eger (g_fs[c].tur == D_DIZIN) {
+            g_tree_dizin += 1;
+            tree_yuru(c, onek + alt);
+        } yoksa {
+            g_tree_dosya += 1;
+        }
+    }
+}
+
+fonk k_tree(liste[metin] a, metin girdi) -> sayi {
+    metin y = ".";
+    eger (a.uzunluk() > 1) { y = a[1]; }
+    sayi no = fs_coz(y);
+    eger (!fs_dizin_mi(no)) {
+        hata_bildir("tree: {y}: bir dizin değil");
+        don 1;
+    }
+    g_tree_dizin = 0;
+    g_tree_dosya = 0;
+    satir(renkli("1;34", y));
+    tree_yuru(no, "");
+    satir("");
+    satir("{g_tree_dizin} dizin, {g_tree_dosya} dosya");
+    don 0;
+}
+
+fonk tur_adi(sayi no) -> metin {
+    sayi t = g_fs[no].tur;
+    eger (t == D_DIZIN) { don "dizin"; }
+    eger (t == D_SANAL) { don "sanal dosya (procfs)"; }
+    eger (t == D_AYGIT) { don "karakter aygıtı"; }
+    eger (fs_boyut(no) == 0) { don "boş normal dosya"; }
+    don "normal dosya";
+}
+
+fonk sekizli(sayi k) -> metin => "{(k / 512) % 8}{(k / 64) % 8}{(k / 8) % 8}{k % 8}";
+
+fonk k_stat(liste[metin] a, metin girdi) -> sayi {
+    sayi kod = 0;
+    dongu (sayi i = 1; i < a.uzunluk(); i += 1) {
+        metin y = a[i];
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            hata_bildir("stat: '{y}' durumlanamıyor: böyle bir dosya ya da dizin yok");
+            kod = 1;
+            devam;
+        }
+        satir("  Dosya: {y}");
+        satir("  Boyut: " + sol_hizala("{fs_boyut(no)}", 12) + "Tür: " + tur_adi(no));
+        satir("  Düğüm: " + sol_hizala("{no}", 12) + "Bağlantı: 1");
+        satir(" Erişim: (" + sekizli(g_fs[no].kip) + "/" + kip_metin(no) + ")  Uid: (0/root)  Gid: (0/root)");
+        satir("Değişme: " + tam_zaman(g_fs[no].zaman) + " UTC");
+        sayi bag = g_fs[no].bag;
+        satir(" Bağlı: " + fs_yol(g_bag[bag].nokta) + " (" + g_bag[bag].tur + ", " + g_bag[bag].aygit + ")");
+    }
+    don kod;
+}
+
+fonk k_du(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] yollar = g_isl;
+    eger (yollar.uzunluk() == 0) { yollar.ekle("."); }
+    sayi kod = 0;
+    her (oto y in yollar) {
+        sayi no = fs_coz(y);
+        eger (no < 0) {
+            hata_bildir("du: '{y}' erişilemiyor");
+            kod = 1;
+            devam;
+        }
+        eger (!bayrak_var(b, "s") && g_fs[no].tur == D_DIZIN) {
+            liste[metin] adlar;
+            her (oto c in fs_cocuklar(no)) {
+                eger (g_fs[c].tur == D_DIZIN) { adlar.ekle(g_fs[c].ad); }
+            }
+            her (oto ad in adlari_sirala(adlar)) {
+                sayi alt = kullanilan_bayt(fs_cocuk(no, ad));
+                metin gs = "{(alt + 1023) / 1024}";
+                eger (bayrak_var(b, "h")) { gs = boyut_insan(alt); }
+                satir(gs + "\t" + yol_birlestir(y, ad));
+            }
+        }
+        sayi top = kullanilan_bayt(no);
+        metin ts = "{(top + 1023) / 1024}";
+        eger (bayrak_var(b, "h")) { ts = boyut_insan(top); }
+        satir(ts + "\t" + y);
+    }
+    don kod;
+}
+
+fonk k_chmod(liste[metin] a, metin girdi) -> sayi {
+    eger (a.uzunluk() < 3) {
+        hata_bildir("chmod: işlenen eksik");
+        don 1;
+    }
+    metin kip = a[1];
+    sayi kod = 0;
+    dongu (sayi i = 2; i < a.uzunluk(); i += 1) {
+        sayi no = fs_coz(a[i]);
+        eger (no < 0) {
+            hata_bildir("chmod: '{a[i]}' erişilemiyor");
+            kod = 1;
+            devam;
+        }
+        sayi k = g_fs[no].kip;
+        eger (kip == "+x") {
+            eger ((k / 64) % 2 == 0) { k += 64; }
+            eger ((k / 8) % 2 == 0) { k += 8; }
+            eger (k % 2 == 0) { k += 1; }
+        } yoksa eger (kip == "-x") {
+            eger ((k / 64) % 2 == 1) { k -= 64; }
+            eger ((k / 8) % 2 == 1) { k -= 8; }
+            eger (k % 2 == 1) { k -= 1; }
+        } yoksa eger (sayi_mi(kip)) {
+            k = 0;
+            dongu (sayi j = 0; j < uz(kip); j += 1) { k = k * 8 + (kip[j] - 48); }
+        } yoksa {
+            hata_bildir("chmod: geçersiz kip: '{kip}'");
+            don 1;
+        }
+        g_fs[no].kip = k;
+        eger (!fs_oznitelik(no)) {
+            hata_bildir("chmod: '{a[i]}': " + g_fs_hata);
+            kod = 1;
+        }
+    }
+    don kod;
+}
+
+fonk k_basename(liste[metin] a, metin girdi) -> sayi {
+    eger (a.uzunluk() < 2) {
+        hata_bildir("basename: işlenen eksik");
+        don 1;
+    }
+    metin ad = yol_ad(a[1]);
+    eger (a.uzunluk() > 2 && upp.metin.biter(ad, a[2]) && ad != a[2]) { ad = kes(ad, 0, uz(ad) - uz(a[2])); }
+    satir(ad);
+    don 0;
+}
+
+fonk k_dirname(liste[metin] a, metin girdi) -> sayi {
+    eger (a.uzunluk() < 2) {
+        hata_bildir("dirname: işlenen eksik");
+        don 1;
+    }
+    satir(yol_dizin(a[1]));
+    don 0;
+}

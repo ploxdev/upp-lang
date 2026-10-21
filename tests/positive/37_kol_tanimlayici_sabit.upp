@@ -1,0 +1,49 @@
+// Pozitif: düz türlü koleksiyonlar başka fonksiyonda kurulup sonra kullanılabilir
+// (tanımlayıcı statik ömürlü); üst düzey 'sabit metin' değerini taşır.
+// @stdout
+// bayt: 3 -7 12
+// u32: 3 4000000000
+// komut: iki=4 kare=9 yok=0
+// sabit: [sürüm 1.2] [ab] uzunluk 9
+
+sabit metin SURUM = "sürüm 1.2";
+sabit metin BIRLESIK = "a" + "b";
+
+harita[metin, fonk(sayi) -> sayi] g_islem;
+
+fonk baytlar() -> liste[bayt] {
+    liste[bayt] L;
+    L.ekle(3);
+    L.ekle(-7);
+    L.ekle(12);
+    don L;
+}
+
+fonk sayilar() -> liste[u32] {
+    liste[u32] L;
+    L.ekle(3u32);
+    L.ekle(4000000000u32);
+    don L;
+}
+
+fonk ikiye(sayi x) -> sayi => x * 2;
+fonk kare(sayi x) -> sayi => x * x;
+
+fonk kaydet(metin ad, fonk(sayi) -> sayi f) -> bos {
+    g_islem.koy(ad, f);
+}
+
+fonk ana() -> sayi {
+    liste[bayt] b = baytlar();
+    b.ekle(1);
+    upp.satir_yaz("bayt: {b[0]} {b[1]} {b[2]}");
+    liste[u32] u = sayilar();
+    upp.satir_yaz("u32: {u[0]} {u[1]}");
+    kaydet("iki", ikiye);
+    kaydet("kare", kare);
+    sayi y = 0;
+    eger (g_islem.var_mi("yok")) { y = 1; }
+    upp.satir_yaz("komut: iki={g_islem.al(\"iki\")(2)} kare={g_islem.al(\"kare\")(3)} yok={y}");
+    upp.satir_yaz("sabit: [{SURUM}] [{BIRLESIK}] uzunluk {upp.uzunluk(SURUM)}");
+    don 0;
+}

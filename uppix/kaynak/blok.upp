@@ -1,0 +1,138 @@
+// Uppix — blok aygıtları: ATA diskleri, MBR/GPT bölümleri ve dosya sistemi tanıma.
+// Diskler sda, sdb... ; bölümler sda1, sda2... adını alır. Bölüm tablosu olmayan
+// disklerde dosya sistemi doğrudan diskin başındadır.
+
+sinif BlokAygit {
+    metin ad;
+    sayi disk;
+    sayi bolum;
+    sayi bas;
+    sayi sektor;
+    metin fs;
+    metin etiket;
+}
+
+liste[BlokAygit] g_blok;
+
+fonk blok_oku(sayi b, sayi lba, sayi adet, sayi t, sayi ofs) -> mantik {
+    eger (lba < 0 || lba + adet > g_blok[b].sektor) { don yanlis; }
+    don upp.cekirdek.disk_oku(g_blok[b].disk, g_blok[b].bas + lba, adet, t, ofs);
+}
+
+fonk blok_yaz(sayi b, sayi lba, sayi adet, sayi t, sayi ofs) -> mantik {
+    eger (lba < 0 || lba + adet > g_blok[b].sektor) { don yanlis; }
+    don upp.cekirdek.disk_yaz(g_blok[b].disk, g_blok[b].bas + lba, adet, t, ofs);
+}
+
+// Tampondaki baytlar verilen ASCII metinle başlıyor mu?
+fonk tampon_esit(sayi t, sayi ofs, metin s) -> mantik {
+    don upp.tampon.metin(t, ofs, bayt_say(s)) == s;
+}
+
+// Sondaki boşluk ve NUL'ları atar.
+fonk etiket_temiz(metin s) -> metin {
+    sayi n = uz(s);
+    iken (n > 0 && (s[n - 1] == 32 || s[n - 1] == 0)) { n -= 1; }
+    sayi i = 0;
+    iken (i < n && s[i] != 0) { i += 1; }
+    don kes(s, 0, i);
+}
+
+// Dosya sistemi türü: "ext4", "vfat", "exfat" ya da "".
+fonk fs_tani(sayi b) -> metin {
+    eger (g_blok[b].sektor < 8) { don ""; }
+    sayi t = upp.tampon.yeni(4096);
+    metin tur = "";
+    eger (blok_oku(b, 0, 8, t, 0)) {
+        eger (tampon_esit(t, 3, "EXFAT   ")) {
+            tur = "exfat";
+            g_blok[b].etiket = "";
+        } yoksa eger (upp.tampon.oku16(t, 510) == 43605 && tampon_esit(t, 82, "FAT32   ")) {
+            tur = "vfat";
+            g_blok[b].etiket = etiket_temiz(upp.tampon.metin(t, 71, 11));
+        } yoksa eger (upp.tampon.oku16(t, 1024 + 56) == 61267) {
+            tur = "ext4";
+            g_blok[b].etiket = etiket_temiz(upp.tampon.metin(t, 1024 + 120, 16));
+        }
+    }
+    upp.tampon.birak(t);
+    don tur;
+}
+
+fonk blok_ekle(metin ad, sayi disk, sayi bolum, sayi bas, sayi sektor) -> sayi {
+    BlokAygit a;
+    a.ad = ad;
+    a.disk = disk;
+    a.bolum = bolum;
+    a.bas = bas;
+    a.sektor = sektor;
+    a.fs = "";
+    a.etiket = "";
+    sayi no = g_blok.uzunluk();
+    g_blok.ekle(a);
+    g_blok[no].fs = fs_tani(no);
+    don no;
+}
+
+fonk bolumleri_tara(sayi disk, metin ad, sayi toplam) -> bos {
+    sayi t = upp.tampon.yeni(1024);
+    eger (!upp.cekirdek.disk_oku(disk, 0, 2, t, 0) || upp.tampon.oku16(t, 510) != 43605) {
+        upp.tampon.birak(t);
+        don;
+    }
+    eger (upp.tampon.oku8(t, 446 + 4) == 238) {
+        // Korumalı MBR → GPT
+        eger (tampon_esit(t, 512, "EFI PART")) {
+            sayi tablo = upp.tampon.oku64(t, 512 + 72);
+            sayi adet = upp.tampon.oku32(t, 512 + 80);
+            sayi boy = upp.tampon.oku32(t, 512 + 84);
+            eger (adet > 128) { adet = 128; }
+            sayi gt = upp.tampon.yeni(adet * boy + 512);
+            sayi sektor_say = (adet * boy + 511) / 512;
+            eger (upp.cekirdek.disk_oku(disk, tablo, sektor_say, gt, 0)) {
+                sayi no = 1;
+                dongu (sayi i = 0; i < adet; i += 1) {
+                    sayi e = i * boy;
+                    sayi ilk = upp.tampon.oku64(gt, e + 32);
+                    sayi son = upp.tampon.oku64(gt, e + 40);
+                    eger (upp.tampon.oku64(gt, e) == 0 && upp.tampon.oku64(gt, e + 8) == 0) { devam; }
+                    eger (son >= ilk && ilk > 0) { blok_ekle(ad + "{no}", disk, no, ilk, son - ilk + 1); }
+                    no += 1;
+                }
+            }
+            upp.tampon.birak(gt);
+        }
+        upp.tampon.birak(t);
+        don;
+    }
+    dongu (sayi i = 0; i < 4; i += 1) {
+        sayi e = 446 + i * 16;
+        sayi tur = upp.tampon.oku8(t, e + 4);
+        sayi bas = upp.tampon.oku32(t, e + 8);
+        sayi say = upp.tampon.oku32(t, e + 12);
+        eger (tur == 0 || say == 0 || bas + say > toplam) { devam; }
+        blok_ekle(ad + "{i + 1}", disk, i + 1, bas, say);
+    }
+    upp.tampon.birak(t);
+}
+
+fonk blok_tara() -> bos {
+    g_blok.temizle();
+    metin harfler = "abcd";
+    dongu (sayi d = 0; d < 4; d += 1) {
+        eger (!upp.cekirdek.disk_var(d)) { devam; }
+        metin ad = "sd" + kes(harfler, d, 1);
+        sayi toplam = upp.cekirdek.disk_sektor(d);
+        sayi no = blok_ekle(ad, d, 0, 0, toplam);
+        eger (g_blok[no].fs == "") { bolumleri_tara(d, ad, toplam); }
+    }
+}
+
+fonk blok_bul(metin ad) -> sayi {
+    metin a = ad;
+    eger (upp.metin.baslar(a, "/dev/")) { a = kes_son(a, 5); }
+    dongu (sayi i = 0; i < g_blok.uzunluk(); i += 1) {
+        eger (g_blok[i].ad == a) { don i; }
+    }
+    don -1;
+}

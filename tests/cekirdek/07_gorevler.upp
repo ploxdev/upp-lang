@@ -1,0 +1,33 @@
+// Çekirdek: işbirlikçi görevler, bellek haritası, saat ve kapatma
+// @icerir: görev 2 adım 3
+// @icerir: görev 3 adım 3
+// @icerir: ana bitti, kalan görev: 1
+// @icerir: RAM >= 64 MiB: dogru
+// @icerir: tarih biçimi: dogru
+
+sayi g_adim = 0;
+
+fonk isci(sayi n) -> bos {
+    dongu (sayi i = 1; i <= 3; i += 1) {
+        upp.satir_yaz("görev {upp.cekirdek.gorev_kimlik()} adım {i}");
+        g_adim += 1;
+        upp.uyut(5 * n);
+    }
+}
+
+fonk ana() -> sayi {
+    upp.cekirdek.gorev_baslat(isci, 1, "işçi-a");
+    upp.cekirdek.gorev_baslat(isci, 2, "işçi-b");
+    iken (g_adim < 6) {
+        upp.uyut(2);
+    }
+    upp.uyut(20);
+    upp.satir_yaz("ana bitti, kalan görev: {upp.cekirdek.gorev_listesi().uzunluk()}");
+    upp.satir_yaz("RAM >= 64 MiB: {upp.cekirdek.bellek_toplam() >= 64 * 1024 * 1024}");
+    upp.satir_yaz("yığın: {upp.cekirdek.yigin_boyut() / 1048576} MiB, kullanılan: {upp.cekirdek.yigin_kullanilan()} bayt");
+    upp.satir_yaz("işlemci: {upp.cekirdek.islemci()}");
+    oto t = upp.cekirdek.tarih();
+    upp.satir_yaz("tarih biçimi: {upp.uzunluk(t) == 19}");
+    upp.cekirdek.kapat();
+    don 0;
+}

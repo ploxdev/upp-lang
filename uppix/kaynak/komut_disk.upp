@@ -1,0 +1,169 @@
+// Uppix — disk ve bağlama komutları: mount, umount, lsblk, blkid, df, sync.
+
+fonk boyut_metni(sayi b) -> metin => boyut_insan(b);
+
+fonk k_lsblk(liste[metin] a, metin girdi) -> sayi {
+    satir("AD      BOYUT TÜR   FSTÜR  ETİKET           BAĞLAMA");
+    her (oto b in g_blok) {
+        metin tur = "disk";
+        metin ad = b.ad;
+        eger (b.bolum > 0) {
+            tur = "part";
+            ad = "└─" + b.ad;
+        }
+        metin nokta = "";
+        dongu (sayi i = 0; i < g_bag.uzunluk(); i += 1) {
+            eger (g_bag[i].etkin && g_bag[i].aygit == "/dev/" + b.ad) { nokta = fs_yol(g_bag[i].nokta); }
+        }
+        satir(sol_hizala(ad, 7) + sag_hizala(boyut_metni(b.sektor * 512), 6) + " " + sol_hizala(tur, 5) + " " + sol_hizala(b.fs, 6) + " " + sol_hizala(b.etiket, 16) + " " + nokta);
+    }
+    eger (g_blok.uzunluk() == 0) { satir("(disk yok — QEMU'ya --disk ile imaj ekleyin)"); }
+    don 0;
+}
+
+fonk k_blkid(liste[metin] a, metin girdi) -> sayi {
+    sayi kod = 2;
+    her (oto b in g_blok) {
+        eger (b.fs == "") { devam; }
+        metin s = "/dev/" + b.ad + ":";
+        eger (b.etiket != "") { s += " LABEL=\"" + b.etiket + "\""; }
+        s += " TYPE=\"" + b.fs + "\"";
+        satir(s);
+        kod = 0;
+    }
+    don kod;
+}
+
+fonk baglama_listele() -> bos {
+    dongu (sayi i = 0; i < g_bag.uzunluk(); i += 1) {
+        eger (!bag_gorunur(i)) { devam; }
+        Baglama b = g_bag[i];
+        metin kip = "rw";
+        eger (b.salt_okunur || b.tur == "procfs") { kip = "ro"; }
+        satir(b.aygit + " on " + fs_yol(b.nokta) + " type " + b.tur + " (" + kip + ")");
+    }
+}
+
+// mount [-t TÜR] [-o ro] AYGIT NOKTA
+fonk k_mount(liste[metin] a, metin girdi) -> sayi {
+    metin tur = "";
+    mantik salt = yanlis;
+    liste[metin] isl;
+    sayi i = 1;
+    iken (i < a.uzunluk()) {
+        eger (a[i] == "-t" && i + 1 < a.uzunluk()) {
+            tur = a[i + 1];
+            i += 2;
+            devam;
+        }
+        eger (a[i] == "-o" && i + 1 < a.uzunluk()) {
+            eger (upp.metin.bul(a[i + 1], "ro") >= 0) { salt = dogru; }
+            i += 2;
+            devam;
+        }
+        isl.ekle(a[i]);
+        i += 1;
+    }
+    eger (isl.uzunluk() == 0) {
+        baglama_listele();
+        don 0;
+    }
+    eger (isl.uzunluk() != 2) {
+        hata_bildir("kullanım: mount [-t TÜR] [-o ro] AYGIT NOKTA");
+        don 1;
+    }
+    metin aygit = isl[0];
+    sayi nokta = fs_coz(isl[1]);
+    eger (!fs_dizin_mi(nokta)) {
+        hata_bildir("mount: {isl[1]}: bağlama noktası yok");
+        don 32;
+    }
+    eger (tur == "tmpfs") {
+        eger (fs_bagla("tmpfs", "tmpfs", -1, nokta, yanlis) < 0) {
+            hata_bildir("mount: " + g_fs_hata);
+            don 32;
+        }
+        don 0;
+    }
+    sayi b = blok_bul(aygit);
+    eger (b < 0) {
+        hata_bildir("mount: {aygit}: böyle bir blok aygıtı yok");
+        don 32;
+    }
+    eger (tur == "" || tur == "auto") { tur = g_blok[b].fs; }
+    eger (tur == "fat32" || tur == "msdos") { tur = "vfat"; }
+    eger (tur == "") {
+        hata_bildir("mount: /dev/{g_blok[b].ad}: dosya sistemi türü tanınamadı");
+        don 32;
+    }
+    her (oto x in g_bag) {
+        eger (x.etkin && x.aygit == "/dev/" + g_blok[b].ad) {
+            hata_bildir("mount: /dev/{g_blok[b].ad} zaten bağlı");
+            don 32;
+        }
+    }
+    eger (fs_bagla(tur, "/dev/" + g_blok[b].ad, b, nokta, salt) < 0) {
+        hata_bildir("mount: /dev/{g_blok[b].ad}: " + g_fs_hata);
+        don 32;
+    }
+    don 0;
+}
+
+fonk k_umount(liste[metin] a, metin girdi) -> sayi {
+    eger (a.uzunluk() < 2) {
+        hata_bildir("kullanım: umount NOKTA|AYGIT");
+        don 1;
+    }
+    sayi b = fs_bag_bul(a[1]);
+    eger (b < 0) {
+        hata_bildir("umount: {a[1]}: bağlı değil");
+        don 32;
+    }
+    eger (g_bag[b].nokta == 0) {
+        hata_bildir("umount: /: kök dosya sistemi ayrılamaz");
+        don 32;
+    }
+    eger (!fs_ayir_bag(b)) {
+        hata_bildir("umount: {a[1]}: " + g_fs_hata);
+        don 32;
+    }
+    don 0;
+}
+
+fonk k_df(liste[metin] a, metin girdi) -> sayi {
+    mantik insan = a.uzunluk() > 1 && a[1] == "-h";
+    satir("Dosya sistemi        Boyut  Kullanılan        Boş Kul%  Bağlama noktası");
+    dongu (sayi i = 0; i < g_bag.uzunluk(); i += 1) {
+        eger (!bag_gorunur(i)) { devam; }
+        Baglama b = g_bag[i];
+        sayi top = 0;
+        sayi bos_b = 0;
+        eger (b.tur == "rootfs" || b.tur == "tmpfs") {
+            top = upp.cekirdek.yigin_boyut();
+            bos_b = top - upp.cekirdek.yigin_kullanilan();
+        } yoksa eger (g_surucu.var_mi(b.tur)) {
+            Surucu s = g_surucu.al(b.tur);
+            liste[sayi] alan = s.alan(i);
+            top = alan[0];
+            bos_b = alan[1];
+        }
+        sayi kul = top - bos_b;
+        metin oran = "-";
+        eger (top > 0) { oran = "{kul * 100 / top}%"; }
+        metin s1 = "{top / 1024}";
+        metin s2 = "{kul / 1024}";
+        metin s3 = "{bos_b / 1024}";
+        eger (insan) {
+            s1 = boyut_insan(top);
+            s2 = boyut_insan(kul);
+            s3 = boyut_insan(bos_b);
+        }
+        satir(sol_hizala(b.aygit, 16) + sag_hizala(s1, 10) + sag_hizala(s2, 12) + sag_hizala(s3, 11) + sag_hizala(oran, 5) + "  " + fs_yol(b.nokta));
+    }
+    don 0;
+}
+
+fonk k_sync(liste[metin] a, metin girdi) -> sayi {
+    fs_tum_ayir();
+    don 0;
+}

@@ -1,0 +1,409 @@
+// Uppix — metin işleme komutları.
+
+fonk k_echo(liste[metin] a, metin girdi) -> sayi {
+    mantik satir_sonu = dogru;
+    mantik kacis = yanlis;
+    sayi i = 1;
+    iken (i < a.uzunluk() && (a[i] == "-n" || a[i] == "-e" || a[i] == "-ne" || a[i] == "-en")) {
+        eger (upp.metin.bul(a[i], "n") >= 0) { satir_sonu = yanlis; }
+        eger (upp.metin.bul(a[i], "e") >= 0) { kacis = dogru; }
+        i += 1;
+    }
+    liste[metin] L;
+    iken (i < a.uzunluk()) {
+        L.ekle(a[i]);
+        i += 1;
+    }
+    metin s = upp.metin.birlestir(L, " ");
+    eger (kacis) { s = kacis_coz(s); }
+    eger (satir_sonu) { satir(s); } yoksa { yaz(s); }
+    don 0;
+}
+
+fonk sayac_say(metin s, sayi hangi) -> sayi {
+    eger (hangi == 0) {
+        sayi n = 0;
+        sayi L = uz(s);
+        dongu (sayi i = 0; i < L; i += 1) {
+            eger (s[i] == 10) { n += 1; }
+        }
+        don n;
+    }
+    eger (hangi == 1) { don kelimeler(s).uzunluk(); }
+    don bayt_say(s);
+}
+
+fonk wc_satir(metin s, metin b, metin ad) -> metin {
+    mantik hepsi = !bayrak_var(b, "l") && !bayrak_var(b, "w") && !bayrak_var(b, "c");
+    metin r = "";
+    eger (hepsi || bayrak_var(b, "l")) { r += sag_hizala("{sayac_say(s, 0)}", 7) + " "; }
+    eger (hepsi || bayrak_var(b, "w")) { r += sag_hizala("{sayac_say(s, 1)}", 7) + " "; }
+    eger (hepsi || bayrak_var(b, "c")) { r += sag_hizala("{sayac_say(s, 2)}", 7) + " "; }
+    eger (ad == "") { don kes(r, 0, uz(r) - 1); }
+    don r + ad;
+}
+
+fonk k_wc(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] dosyalar = g_isl;
+    eger (dosyalar.uzunluk() == 0) {
+        satir(wc_satir(girdi_oku(girdi), b, ""));
+        don 0;
+    }
+    sayi kod = 0;
+    metin tum = "";
+    her (oto y in dosyalar) {
+        metin m = dosya_icerik("wc", y);
+        eger (m == yok) {
+            kod = 1;
+            devam;
+        }
+        tum += m;
+        satir(wc_satir(m, b, y));
+    }
+    eger (dosyalar.uzunluk() > 1) { satir(wc_satir(tum, b, "toplam")); }
+    don kod;
+}
+
+// head/tail ortak: "-n N" ya da "-N"
+sayi g_n_deger = 10;
+liste[metin] g_n_dosya;
+
+fonk n_ayir(liste[metin] a) -> bos {
+    g_n_deger = 10;
+    g_n_dosya.temizle();
+    sayi i = 1;
+    iken (i < a.uzunluk()) {
+        metin x = a[i];
+        eger (x == "-n" && i + 1 < a.uzunluk()) {
+            g_n_deger = sayiya(a[i + 1]);
+            i += 2;
+            devam;
+        }
+        eger (uz(x) > 1 && x[0] == 45 && sayi_mi(kes_son(x, 1))) {
+            g_n_deger = sayiya(kes_son(x, 1));
+            i += 1;
+            devam;
+        }
+        g_n_dosya.ekle(x);
+        i += 1;
+    }
+}
+
+fonk bas_son(liste[metin] a, metin girdi, mantik son) -> sayi {
+    n_ayir(a);
+    sayi n = g_n_deger;
+    liste[metin] dosyalar = g_n_dosya;
+    metin kmt = "head";
+    eger (son) { kmt = "tail"; }
+    liste[metin] kaynaklar = dosyalar;
+    eger (kaynaklar.uzunluk() == 0) { kaynaklar.ekle("-"); }
+    sayi kod = 0;
+    sayi k = 0;
+    her (oto y in kaynaklar) {
+        metin m = "";
+        eger (y == "-") { m = girdi_oku(girdi); } yoksa { m = dosya_icerik(kmt, y); }
+        eger (m == yok) {
+            kod = 1;
+            devam;
+        }
+        eger (kaynaklar.uzunluk() > 1) {
+            eger (k > 0) { satir(""); }
+            satir("==> {y} <==");
+        }
+        liste[metin] L = satirlar(m);
+        sayi bas = 0;
+        sayi bitis = L.uzunluk();
+        eger (son) {
+            bas = L.uzunluk() - n;
+            eger (bas < 0) { bas = 0; }
+        } yoksa eger (n < bitis) {
+            bitis = n;
+        }
+        dongu (sayi i = bas; i < bitis; i += 1) { satir(L[i]); }
+        k += 1;
+    }
+    don kod;
+}
+
+fonk k_head(liste[metin] a, metin girdi) -> sayi => bas_son(a, girdi, yanlis);
+
+fonk k_tail(liste[metin] a, metin girdi) -> sayi => bas_son(a, girdi, dogru);
+
+fonk grep_uyar(metin satir_m, metin desen, mantik buyuk_kucuk) -> mantik {
+    metin s = satir_m;
+    metin d = desen;
+    eger (buyuk_kucuk) {
+        s = upp.metin.kucuk(s);
+        d = upp.metin.kucuk(d);
+    }
+    mantik bas = upp.metin.baslar(d, "^");
+    mantik son = uz(d) > 0 && upp.metin.biter(d, "$");
+    eger (bas) { d = kes_son(d, 1); }
+    eger (son) { d = kes(d, 0, uz(d) - 1); }
+    eger (bas && son) { don s == d; }
+    eger (bas) { don upp.metin.baslar(s, d); }
+    eger (son) { don upp.metin.biter(s, d); }
+    don upp.metin.bul(s, d) >= 0;
+}
+
+fonk k_grep(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] isl = g_isl;
+    eger (isl.uzunluk() == 0) {
+        hata_bildir("kullanım: grep [-ivnc] DESEN [DOSYA...]");
+        don 2;
+    }
+    metin desen = isl[0];
+    liste[metin] dosyalar;
+    dongu (sayi i = 1; i < isl.uzunluk(); i += 1) { dosyalar.ekle(isl[i]); }
+    eger (dosyalar.uzunluk() == 0) { dosyalar.ekle("-"); }
+    mantik ters = bayrak_var(b, "v");
+    mantik numara = bayrak_var(b, "n");
+    mantik sadece_say = bayrak_var(b, "c");
+    mantik onek = dosyalar.uzunluk() > 1;
+    sayi bulunan = 0;
+    sayi kod = 0;
+    her (oto y in dosyalar) {
+        metin m = "";
+        eger (y == "-") { m = girdi_oku(girdi); } yoksa { m = dosya_icerik("grep", y); }
+        eger (m == yok) {
+            kod = 2;
+            devam;
+        }
+        sayi say = 0;
+        sayi no = 0;
+        her (oto l in satirlar(m)) {
+            no += 1;
+            mantik uy = grep_uyar(l, desen, bayrak_var(b, "i"));
+            eger (uy == ters) { devam; }
+            say += 1;
+            eger (sadece_say) { devam; }
+            metin cik = l;
+            eger (numara) { cik = renkli("32", "{no}") + ":" + cik; }
+            eger (onek) { cik = renkli("35", y) + ":" + cik; }
+            satir(cik);
+        }
+        eger (sadece_say) {
+            eger (onek) { satir(y + ":{say}"); } yoksa { satir("{say}"); }
+        }
+        bulunan += say;
+    }
+    eger (kod != 0) { don kod; }
+    eger (bulunan == 0) { don 1; }
+    don 0;
+}
+
+fonk k_sort(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] dosyalar = g_isl;
+    metin m = kaynak_oku("sort", dosyalar, girdi);
+    liste[metin] L = satirlar(m);
+    mantik ters = bayrak_var(b, "r");
+    eger (bayrak_var(b, "n")) {
+        eger (ters) { L = sirala(L, sayi_buyuk_mu); } yoksa { L = sirala(L, sayi_kucuk_mu); }
+    } yoksa {
+        eger (ters) { L = sirala(L, metin_buyuk_mu); } yoksa { L = sirala(L, metin_kucuk_mu); }
+    }
+    metin onceki = yok;
+    her (oto l in L) {
+        eger (bayrak_var(b, "u") && onceki != yok && l == onceki) { devam; }
+        satir(l);
+        onceki = l;
+    }
+    eger (g_okuma_hata) { don 1; }
+    don 0;
+}
+
+fonk k_uniq(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] dosyalar = g_isl;
+    liste[metin] L = satirlar(kaynak_oku("uniq", dosyalar, girdi));
+    sayi i = 0;
+    iken (i < L.uzunluk()) {
+        sayi j = i;
+        iken (j < L.uzunluk() && L[j] == L[i]) { j += 1; }
+        sayi say = j - i;
+        mantik goster = dogru;
+        eger (bayrak_var(b, "d") && say < 2) { goster = yanlis; }
+        eger (bayrak_var(b, "u") && say > 1) { goster = yanlis; }
+        eger (goster) {
+            eger (bayrak_var(b, "c")) { satir(sag_hizala("{say}", 7) + " " + L[i]); } yoksa { satir(L[i]); }
+        }
+        i = j;
+    }
+    don 0;
+}
+
+fonk k_rev(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    liste[metin] dosyalar = g_isl;
+    her (oto l in satirlar(kaynak_oku("rev", dosyalar, girdi))) {
+        metin r = "";
+        sayi i = uz(l) - 1;
+        iken (i >= 0) {
+            r += kes(l, i, 1);
+            i -= 1;
+        }
+        satir(r);
+    }
+    don 0;
+}
+
+// "1,3" ya da "2-4" ya da "3-"
+fonk alan_secili(metin liste_m, sayi alan) -> mantik {
+    her (oto p in upp.metin.bol(liste_m, ",")) {
+        sayi tire = upp.metin.bul(p, "-");
+        eger (tire < 0) {
+            eger (sayiya(p) == alan) { don dogru; }
+            devam;
+        }
+        sayi alt = 1;
+        sayi ust = 1000000;
+        eger (tire > 0) { alt = sayiya(kes(p, 0, tire)); }
+        eger (tire < uz(p) - 1) { ust = sayiya(kes_son(p, tire + 1)); }
+        eger (alan >= alt && alan <= ust) { don dogru; }
+    }
+    don yanlis;
+}
+
+fonk k_cut(liste[metin] a, metin girdi) -> sayi {
+    metin ayirac = "\t";
+    metin alanlar = "";
+    metin karakterler = "";
+    liste[metin] dosyalar;
+    sayi i = 1;
+    iken (i < a.uzunluk()) {
+        metin x = a[i];
+        eger ((x == "-d" || x == "-f" || x == "-c") && i + 1 < a.uzunluk()) {
+            eger (x == "-d") { ayirac = a[i + 1]; }
+            eger (x == "-f") { alanlar = a[i + 1]; }
+            eger (x == "-c") { karakterler = a[i + 1]; }
+            i += 2;
+            devam;
+        }
+        eger (upp.metin.baslar(x, "-d") && uz(x) > 2) { ayirac = kes_son(x, 2); }
+        yoksa eger (upp.metin.baslar(x, "-f") && uz(x) > 2) { alanlar = kes_son(x, 2); }
+        yoksa eger (upp.metin.baslar(x, "-c") && uz(x) > 2) { karakterler = kes_son(x, 2); }
+        yoksa { dosyalar.ekle(x); }
+        i += 1;
+    }
+    eger (alanlar == "" && karakterler == "") {
+        hata_bildir("cut: bir alan listesi (-f) ya da karakter listesi (-c) gerekli");
+        don 1;
+    }
+    her (oto l in satirlar(kaynak_oku("cut", dosyalar, girdi))) {
+        metin r = "";
+        eger (karakterler != "") {
+            dongu (sayi k = 0; k < uz(l); k += 1) {
+                eger (alan_secili(karakterler, k + 1)) { r += kes(l, k, 1); }
+            }
+        } yoksa {
+            liste[metin] P = upp.metin.bol(l, ayirac);
+            liste[metin] S;
+            dongu (sayi k = 0; k < P.uzunluk(); k += 1) {
+                eger (alan_secili(alanlar, k + 1)) { S.ekle(P[k]); }
+            }
+            r = upp.metin.birlestir(S, ayirac);
+        }
+        satir(r);
+    }
+    don 0;
+}
+
+// "a-z" aralıklarını açar
+fonk kume_ac(metin s) -> metin {
+    metin c = kacis_coz(s);
+    metin r = "";
+    sayi i = 0;
+    iken (i < uz(c)) {
+        eger (i + 2 < uz(c) && c[i + 1] == 45) {
+            dongu (sayi k = c[i]; k <= c[i + 2]; k += 1) { r += upp.metin.karakter(k); }
+            i += 3;
+            devam;
+        }
+        r += kes(c, i, 1);
+        i += 1;
+    }
+    don r;
+}
+
+fonk k_tr(liste[metin] a, metin girdi) -> sayi {
+    mantik sil = a.uzunluk() > 1 && a[1] == "-d";
+    sayi bas = 1;
+    eger (sil) { bas = 2; }
+    eger (a.uzunluk() <= bas || (!sil && a.uzunluk() <= bas + 1)) {
+        hata_bildir("kullanım: tr [-d] KÜME1 [KÜME2]");
+        don 1;
+    }
+    metin k1 = kume_ac(a[bas]);
+    metin k2 = "";
+    eger (!sil) { k2 = kume_ac(a[bas + 1]); }
+    metin m = girdi_oku(girdi);
+    metin r = "";
+    dongu (sayi i = 0; i < uz(m); i += 1) {
+        sayi c = m[i];
+        sayi yer = -1;
+        dongu (sayi k = 0; k < uz(k1); k += 1) {
+            eger (k1[k] == c) {
+                yer = k;
+                dur;
+            }
+        }
+        eger (yer < 0) {
+            r += kes(m, i, 1);
+        } yoksa eger (!sil) {
+            sayi y2 = yer;
+            eger (y2 >= uz(k2)) { y2 = uz(k2) - 1; }
+            eger (y2 >= 0) { r += kes(k2, y2, 1); }
+        }
+    }
+    yaz(r);
+    don 0;
+}
+
+fonk k_seq(liste[metin] a, metin girdi) -> sayi {
+    sayi ilk = 1;
+    sayi adim = 1;
+    sayi son = 1;
+    eger (a.uzunluk() == 2) {
+        son = sayiya(a[1]);
+    } yoksa eger (a.uzunluk() == 3) {
+        ilk = sayiya(a[1]);
+        son = sayiya(a[2]);
+    } yoksa eger (a.uzunluk() == 4) {
+        ilk = sayiya(a[1]);
+        adim = sayiya(a[2]);
+        son = sayiya(a[3]);
+    } yoksa {
+        hata_bildir("kullanım: seq [İLK [ADIM]] SON");
+        don 1;
+    }
+    eger (adim == 0) {
+        hata_bildir("seq: adım sıfır olamaz");
+        don 1;
+    }
+    sayi x = ilk;
+    iken ((adim > 0 && x <= son) || (adim < 0 && x >= son)) {
+        satir("{x}");
+        x += adim;
+    }
+    don 0;
+}
+
+fonk k_tee(liste[metin] a, metin girdi) -> sayi {
+    secenek_ayir(a);
+    metin b = g_bayrak;
+    liste[metin] dosyalar = g_isl;
+    metin m = girdi_oku(girdi);
+    sayi kod = 0;
+    her (oto y in dosyalar) {
+        eger (!dosyaya_yaz(y, m, bayrak_var(b, "a"))) { kod = 1; }
+    }
+    yaz(m);
+    don kod;
+}

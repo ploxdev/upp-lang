@@ -1,0 +1,273 @@
+// Uppix — satır düzenleyici (klavye ve seri terminal).
+// Ok tuşları, Home/End, Delete, geçmiş, Tab ile tamamlama ve
+// Ctrl-A/E/U/K/W/L/C/D kısayolları.
+
+liste[sayi] g_bekleyen;
+liste[metin] g_gecmis;
+mantik g_satir_eof = yanlis;
+mantik g_satir_kesildi = yanlis;
+metin g_tam_satir = "";
+sayi g_tam_imlec = 0;
+
+fonk tus_al() -> sayi {
+    eger (g_bekleyen.uzunluk() > 0) {
+        sayi c = g_bekleyen[0];
+        g_bekleyen.sil(0);
+        don c;
+    }
+    don upp.cekirdek.tus_bekle();
+}
+
+// Ön plandaki komut çalışırken Ctrl-C'yi yakalar; diğer tuşlar sonraya saklanır.
+fonk kesme_istendi_mi() -> mantik {
+    eger (upp.cekirdek.gorev_kimlik() != 1) { don yanlis; }
+    mantik kes_var = yanlis;
+    sayi c = upp.cekirdek.tus_oku();
+    iken (c != 0) {
+        eger (c == 3) { kes_var = dogru; } yoksa { g_bekleyen.ekle(c); }
+        c = upp.cekirdek.tus_oku();
+    }
+    don kes_var;
+}
+
+fonk gecmis_ekle(metin s) -> bos {
+    eger (s == "") { don; }
+    sayi n = g_gecmis.uzunluk();
+    eger (n > 0 && g_gecmis[n - 1] == s) { don; }
+    g_gecmis.ekle(s);
+    eger (g_gecmis.uzunluk() > 200) { g_gecmis.sil(0); }
+}
+
+fonk satir_ciz(metin istem, metin s, sayi imlec) -> bos {
+    upp.yaz("\r" + istem + s + "\e[K");
+    sayi geri = uz(s) - imlec;
+    eger (geri > 0) { upp.yaz("\e[{geri}D"); }
+}
+
+fonk ortak_onek(liste[metin] L) -> metin {
+    eger (L.uzunluk() == 0) { don ""; }
+    metin p = L[0];
+    her (oto x in L) {
+        sayi i = 0;
+        iken (i < uz(p) && i < uz(x) && p[i] == x[i]) { i += 1; }
+        p = kes(p, 0, i);
+    }
+    don p;
+}
+
+// Tab: ilk kelimede komut, sonrakilerde dosya yolu tamamlar.
+fonk tamamla(metin istem, metin s, sayi imlec) -> bos {
+    g_tam_satir = s;
+    g_tam_imlec = imlec;
+    sayi bas = imlec;
+    iken (bas > 0 && !bosluk_mu(s[bas - 1])) { bas -= 1; }
+    metin kelime = kes(s, bas, imlec - bas);
+    mantik ilk = upp.metin.kirp(kes(s, 0, bas)) == "";
+    liste[metin] adaylar;
+    metin dizin_kismi = "";
+    eger (ilk && upp.metin.bul(kelime, "/") < 0) {
+        her (oto ad in g_komut) {
+            eger (upp.metin.baslar(ad, kelime)) { adaylar.ekle(ad); }
+        }
+        her (oto ad in g_takma) {
+            eger (upp.metin.baslar(ad, kelime)) { adaylar.ekle(ad); }
+        }
+    } yoksa {
+        sayi son_bolu = -1;
+        dongu (sayi i = 0; i < uz(kelime); i += 1) {
+            eger (kelime[i] == 47) { son_bolu = i; }
+        }
+        dizin_kismi = kes(kelime, 0, son_bolu + 1);
+        metin onek = kes_son(kelime, son_bolu + 1);
+        metin dz = dizin_kismi;
+        eger (dz == "") { dz = "."; }
+        sayi d = fs_coz(dz);
+        eger (fs_dizin_mi(d)) {
+            her (oto c in fs_cocuklar(d)) {
+                metin ad = g_fs[c].ad;
+                eger (upp.metin.baslar(ad, onek) && (onek != "" || !upp.metin.baslar(ad, "."))) {
+                    eger (g_fs[c].tur == D_DIZIN) { adaylar.ekle(ad + "/"); } yoksa { adaylar.ekle(ad); }
+                }
+            }
+        }
+    }
+    adaylar = adlari_sirala(adaylar);
+    eger (adaylar.uzunluk() == 0) { don; }
+    metin yeni = "";
+    eger (adaylar.uzunluk() == 1) {
+        yeni = dizin_kismi + adaylar[0];
+        eger (!upp.metin.biter(yeni, "/")) { yeni += " "; }
+    } yoksa {
+        metin ortak = dizin_kismi + ortak_onek(adaylar);
+        eger (uz(ortak) > uz(kelime)) {
+            yeni = ortak;
+        } yoksa {
+            upp.satir_yaz("");
+            metin sat = "";
+            her (oto a in adaylar) { sat += a + "  "; }
+            upp.satir_yaz(sat);
+            satir_ciz(istem, s, imlec);
+            don;
+        }
+    }
+    g_tam_satir = kes(s, 0, bas) + yeni + kes_son(s, imlec);
+    g_tam_imlec = bas + uz(yeni);
+}
+
+fonk satir_oku(metin istem) -> metin {
+    g_satir_eof = yanlis;
+    g_satir_kesildi = yanlis;
+    upp.yaz(istem);
+    metin s = "";
+    sayi imlec = 0;
+    sayi gi = g_gecmis.uzunluk();
+    metin taslak = "";
+    iken (dogru) {
+        sayi c = tus_al();
+        eger (c == 10 || c == 13) {
+            upp.satir_yaz("");
+            don s;
+        }
+        eger (c == 3) {
+            upp.satir_yaz("^C");
+            g_satir_kesildi = dogru;
+            don "";
+        }
+        eger (c == 4) {
+            eger (s == "") {
+                upp.satir_yaz("");
+                g_satir_eof = dogru;
+                don "";
+            }
+            devam;
+        }
+        eger (c == 8 || c == 127) {
+            eger (imlec > 0) {
+                s = kes(s, 0, imlec - 1) + kes_son(s, imlec);
+                imlec -= 1;
+                satir_ciz(istem, s, imlec);
+            }
+            devam;
+        }
+        eger (c == 12) {
+            upp.cekirdek.ekran_temizle();
+            satir_ciz(istem, s, imlec);
+            devam;
+        }
+        eger (c == 1) {
+            imlec = 0;
+            satir_ciz(istem, s, imlec);
+            devam;
+        }
+        eger (c == 5) {
+            imlec = uz(s);
+            satir_ciz(istem, s, imlec);
+            devam;
+        }
+        eger (c == 21) {
+            s = kes_son(s, imlec);
+            imlec = 0;
+            satir_ciz(istem, s, imlec);
+            devam;
+        }
+        eger (c == 11) {
+            s = kes(s, 0, imlec);
+            satir_ciz(istem, s, imlec);
+            devam;
+        }
+        eger (c == 23) {
+            sayi b = imlec;
+            iken (b > 0 && bosluk_mu(s[b - 1])) { b -= 1; }
+            iken (b > 0 && !bosluk_mu(s[b - 1])) { b -= 1; }
+            s = kes(s, 0, b) + kes_son(s, imlec);
+            imlec = b;
+            satir_ciz(istem, s, imlec);
+            devam;
+        }
+        eger (c == 9) {
+            tamamla(istem, s, imlec);
+            eger (g_tam_satir != s) {
+                s = g_tam_satir;
+                imlec = g_tam_imlec;
+                satir_ciz(istem, s, imlec);
+            }
+            devam;
+        }
+        eger (c == 27) {
+            sayi c2 = tus_al();
+            eger (c2 != 91 && c2 != 79) { devam; }
+            sayi c3 = tus_al();
+            sayi kod = c3;
+            eger (rakam_mi(c3)) {
+                sayi c4 = tus_al();
+                iken (c4 != 126 && rakam_mi(c4)) { c4 = tus_al(); }
+                eger (c3 == 49 || c3 == 55) { kod = 72; }
+                yoksa eger (c3 == 52 || c3 == 56) { kod = 70; }
+                yoksa eger (c3 == 51) { kod = 51; }
+                yoksa { kod = 0; }
+            }
+            eger (kod == 65) {
+                eger (gi > 0) {
+                    eger (gi == g_gecmis.uzunluk()) { taslak = s; }
+                    gi -= 1;
+                    s = g_gecmis[gi];
+                    imlec = uz(s);
+                    satir_ciz(istem, s, imlec);
+                }
+            } yoksa eger (kod == 66) {
+                eger (gi < g_gecmis.uzunluk()) {
+                    gi += 1;
+                    eger (gi == g_gecmis.uzunluk()) { s = taslak; } yoksa { s = g_gecmis[gi]; }
+                    imlec = uz(s);
+                    satir_ciz(istem, s, imlec);
+                }
+            } yoksa eger (kod == 67) {
+                eger (imlec < uz(s)) {
+                    imlec += 1;
+                    upp.yaz("\e[C");
+                }
+            } yoksa eger (kod == 68) {
+                eger (imlec > 0) {
+                    imlec -= 1;
+                    upp.yaz("\e[D");
+                }
+            } yoksa eger (kod == 72) {
+                imlec = 0;
+                satir_ciz(istem, s, imlec);
+            } yoksa eger (kod == 70) {
+                imlec = uz(s);
+                satir_ciz(istem, s, imlec);
+            } yoksa eger (kod == 51) {
+                eger (imlec < uz(s)) {
+                    s = kes(s, 0, imlec) + kes_son(s, imlec + 1);
+                    satir_ciz(istem, s, imlec);
+                }
+            }
+            devam;
+        }
+        eger (c < 32) { devam; }
+        metin k = upp.metin.karakter(c);
+        eger (imlec == uz(s)) {
+            s += k;
+            imlec += 1;
+            upp.yaz(k);
+        } yoksa {
+            s = kes(s, 0, imlec) + k + kes_son(s, imlec);
+            imlec += 1;
+            satir_ciz(istem, s, imlec);
+        }
+    }
+    don s;
+}
+
+// Komut girdisi verilmemişse (boru/yönlendirme yok) terminalden Ctrl-D'ye kadar okur.
+fonk girdi_oku(metin girdi) -> metin {
+    eger (girdi != yok) { don girdi; }
+    metin s = "";
+    iken (dogru) {
+        metin l = satir_oku("");
+        eger (g_satir_eof || g_satir_kesildi) { dur; }
+        s += l + "\n";
+    }
+    don s;
+}

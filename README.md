@@ -39,6 +39,7 @@ Bu proje; derleyici mühendisliği (compiler design), soyut sözdizim ağaçlar�
 - **🛡️ Varsayılan Bellek Güvenliği:** Ham işaretçiler (`*`, `&`), doğrudan bellek manipülasyonu ve harici çekirdek bellek erişimleri (`upp.windows.bellek.*`, `upp.linux.sayi_oku/yaz`) yalnızca açıkça belirtilen `guvensiz { ... }` blokları içerisinde serbesttir.
 - **♻️ Otomatik Metin Yönetimi:** Metinler elle serbest bırakılmaz. Derleyici kapsam sonunda, `dur`/`devam` ve `don` noktalarında bırakma kodunu kendisi ekler, geçici metinleri de kopyalamadan taşır. Kopyasız okuma için `&metin` ve `&dilim[T]` görünümleri vardır (`arr[1..4]`).
 - **🖥️ İşletim Sistemi Yazmaya Hazır:** `--hedef cekirdek`, u++ programını Multiboot ile açılan x86_64 çekirdeğine çevirir. libc yoktur. Çıktı seri port ve VGA'ya gider, donanım erişimi `upp.cekirdek.*` (port G/Ç, MMIO, `hlt`/`cli`/`sti`) ile yapılır. `--hedef serbest` libc'siz `.o` üretir.
+- **🐧 Uppix:** Tamamen u++ ile yazılmış Unix benzeri işletim sistemi ([`uppix/`](uppix/README.md)). Kökü ext4 bir diskte durur ve değişiklikler kalıcıdır. FAT32 ve exFAT diskleri (USB gibi) tanır, okur ve yazar; bunların sürücüleri, ATA disk erişimi ve MBR/GPT bölümleri de u++ ile yazılmıştır. İçinde `ls`, `cat`, `grep`, `ps`, `mount`, `lsblk` dahil 73 komut, borulu ve yönlendirmeli bir kabuk (`uppsh`), `/proc` ve `/dev`, işbirlikçi görevler, Tab tamamlama ve komut geçmişi var. Çalıştırmak için: `uppc calistir uppix`.
 - **🧰 Proje Sistemi ve Asistan:** `uppc yeni`, `uppc derle`, `uppc calistir` ve `upp.proje` ile proje yönetilir. `uppc asistan` menülü bir derleme asistanıdır: hedef seçer, araç zincirini (gcc / WSL / QEMU) denetler, derler ve çalıştırır.
 - **🔄 Standalone Native Derleyici (Self-Hosting):** Tamamen saf u++ ile yazılmış, C çalışma zamanını içine gömen tek ikili (`uppc` / `uppc.exe`). `uppc kendini-derle` derleyiciyi yaklaşık 30 saniyede kendisiyle yeniden kurar ve sabit noktayı doğrular (Python yok).
 - **🧱 Zengin Tip Sistemi:** `sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8` (işaretli), `ubayt`/`u8`, `ondalik`, `metin`, `mantik`, `liste[T]`, `harita[K,V]`, `dizi[T, N]`, `sinif` ve fonksiyon türleri `fonk(sayi) -> sayi`. Koleksiyonlar değer türüdür (O(1) kopya, yazınca ayrılır) ve sınıf, iç içe liste/harita ya da fonksiyon dahil her değeri tutar. Fonksiyonlar değişkende, koleksiyonda ve alanda saklanabilir; yakalamasız anonim fonksiyon yazılır: `fonk(sayi x) -> sayi => x * 2`.
@@ -310,6 +311,32 @@ Dilin tamamı çekirdekte çalışır: sınıflar, `liste`/`harita`, metin inter
 
 [`ornekler/cekirdek/kabuk.upp`](ornekler/cekirdek/kabuk.upp) bunlarla yazılmış küçük bir kabuktur: `yardim`, `saat`, `topla`, `bekle`, `ata`/`goster`, `cik` komutlarını tanır. Bunları libc'siz çalışma zamanı (`src/runtime/upp_on_serbest.c` + `upp_cekirdek.c` + `upp_serbest.c`) sağlar: kendi yığın ayırıcısı, seri port ve VGA konsolu ile birlikte gelir. Önyükleyici Multiboot üzerinden açılır, long mode'a geçer, ilk 1 GiB'ı eşler, SSE'yi etkinleştirir ve `ana()`'yı çağırır. Önyükleyici derleyicinin içinde gömülüdür. İşletim sistemi isteyen API'ler (`upp.dosya`, `arkaplan` vb.) bu hedefte derleme hatası verir.
 
+### Uppix: u++ ile yazılmış Unix benzeri işletim sistemi
+
+[`uppix/`](uppix/README.md) bu çekirdek hedefinin üstünde kurulmuş eksiksiz bir sistemdir. Hepsi u++ ile yazılmıştır:
+
+- **Kök dosya sistemi:** ext4 diskte; okuma ve yazma, `metadata_csum` sağlamaları dahil. Yazılan disk Linux'un `e2fsck`'inden temiz geçer.
+- **FAT32 ve exFAT:** uzun (Türkçe) dosya adlarıyla okuma ve yazma. MBR/GPT bölümleri tanınır, diskler `/mnt` altına bağlanır.
+- **Kabuk (`uppsh`):** boru, yönlendirme, `&&`/`||`, arka plan işleri, değişkenler, joker, takma adlar, betikler
+- **Görevler:** işbirlikçi çoklu görev (`upp.cekirdek.gorev_baslat`)
+- **Komutlar:** `mount`, `lsblk`, `df` dahil 73 Unix komutu
+
+```text
+root@uppix:~# lsblk
+AD      BOYUT TÜR   FSTÜR  ETİKET           BAĞLAMA
+sda       64M disk  ext4   uppix-kok        /
+sdb       64M disk
+└─sdb1    63M part  vfat   UPPIXUSB         /mnt/sdb1
+sdc       32M disk  exfat                   /mnt/sdc
+root@uppix:~# echo merhaba > ~/not.txt && cp ~/not.txt /mnt/sdc/
+root@uppix:~# seq 15 | grep 1 | wc -l
+7
+```
+
+```bash
+uppc calistir uppix    # disk imajlarını hazırlar (disk_yap.sh), derler, QEMU'da açar
+```
+
 ---
 
 ## ⚙️ Native Self-Hosted Derleyici
@@ -388,6 +415,7 @@ upp-lang/
 │       └── kendini.upp           # kendini-derle (self-host)
 ├── eklenti/                # VS Code & Cursor IDE eklentisi
 ├── ornekler/               # Örnekler; ornekler/cekirdek/ x86_64 çekirdek örneği
+├── uppix/                  # Uppix: u++ ile yazılmış Unix benzeri işletim sistemi
 └── tests/                  # Entegrasyon, güvenlik, runtime ve negatif test paketi
 ```
 

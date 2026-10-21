@@ -1871,10 +1871,28 @@ fonk kilit_hazir_gerekli(sayi d) -> mantik {
     don dogru;
 }
 
+// Üst düzey 'sabit metin' düz bir metin sabitiyle başlatılıyorsa C'de statik
+// başlatılır; başka bir ifadeyle (ör. "a" + "b") başlatılıyorsa açılışta kurulur.
+fonk kuresel_sabit_metin_duz(sayi d) -> mantik {
+    sayi c = dugum_c(d);
+    don c != 0 && dugum_tur(c) == DugumTur.D_SABIT && dugum_ptrd(c) == 2 && (dugum_bayrak(c) & 32) == 0;
+}
+
+fonk kuresel_metin_hazirda(sayi d) -> mantik {
+    eger (dugum_c(d) == 0) { don yanlis; }
+    eger ((dugum_bayrak(d) & 16) == 0) { don dogru; }
+    don !kuresel_sabit_metin_duz(d);
+}
+
 fonk uret_var(sayi d, mantik kuresel) -> bos {
     sayi ty = dugum_a(d);
     metin s = uret_ctur(ty);
-    eger ((dugum_bayrak(d) & 16) != 0) {
+    mantik sabit_metin = tip_metin_mi(ty) && dugum_ptrd(ty) == 0 && (dugum_bayrak(d) & 16) != 0;
+    eger (sabit_metin && kuresel && !kuresel_sabit_metin_duz(d)) {
+        // açılışta atanır; const olamaz
+    } yoksa eger (sabit_metin) {
+        s = kat(s, " const");
+    } yoksa eger ((dugum_bayrak(d) & 16) != 0) {
         s = kat("const ", s);
     }
     s = kat(s, " ");
@@ -1910,7 +1928,7 @@ fonk uret_var(sayi d, mantik kuresel) -> bos {
         eger (dugum_c(d) != 0 && !(kuresel && sahip_metin)) {
             uret_metin_ata_hedef(ad, dugum_c(d));
         }
-    } yoksa eger (dugum_c(d) != 0 && !(kuresel && tip_metin_mi(ty))) {
+    } yoksa eger (dugum_c(d) != 0 && (!(kuresel && tip_metin_mi(ty)) || (sabit_metin && kuresel_sabit_metin_duz(d)))) {
         eger (tip_ref_metin_mi(ty)) {
             s = kat(s, " = ");
             s = kat(s, uret_gorunum_metin(dugum_c(d)));
@@ -2741,7 +2759,7 @@ fonk uret_program(sayi program) -> bos {
         sayi d = liste_al(decls, i);
         eger (dugum_tur(d) == DugumTur.D_DEGISKEN) {
             sayi ty = dugum_a(d);
-            eger (metin_esit(dugum_ad(ty), "metin") && dugum_ptrd(ty) == 0 && (dugum_bayrak(d) & 16) == 0 && dugum_c(d) != 0) {
+            eger (metin_esit(dugum_ad(ty), "metin") && dugum_ptrd(ty) == 0 && kuresel_metin_hazirda(d)) {
                 emit(kat(kat3(dugum_c_ad(d), " = upp_metin_kopya(", uret_ifade(dugum_c(d))), ");"));
                 hazir = hazir + 1;
             }
@@ -2795,7 +2813,7 @@ fonk uret_program(sayi program) -> bos {
         emit("");
         emit("/* Önyükleyicinin çağırdığı giriş: ana() döndükten sonra işlemci durdurulur. */");
         emit("void upp_cekirdek_giris(void) {");
-        emit("    upp_cekirdek_kesmeler_kur();");
+        emit("    _upp_cekirdek_hazirla();");
         emit("    (void)upp_ana();");
         emit("    _upp_sonsuz_dur();");
         emit("}");

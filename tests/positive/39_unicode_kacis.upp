@@ -1,0 +1,11 @@
+// Pozitif: \uHHHH kaçışı (Unicode kod noktası)
+// @stdout
+// ç ğ € esc-aynı
+
+fonk ana() -> sayi {
+    metin esc = "\u001b";
+    metin s = "ç ğ €";
+    eger (esc == "\e") { s += " esc-aynı"; }
+    upp.satir_yaz(s);
+    don 0;
+}

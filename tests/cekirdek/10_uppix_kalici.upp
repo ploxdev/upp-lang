@@ -1,0 +1,32 @@
+// Çekirdek: 09_uppix_disk'in yazdığı imajlarla ikinci açılış; değişiklikler kalıcı olmalı.
+// @gerek: e2fsck fsck.exfat
+// @hazirla: test -f tests/_cikti/disk/uppix-kok.img || { echo "önce 09_uppix_disk çalışmalı"; exit 1; }
+// @bayrak: --disk tests/_cikti/disk/uppix-kok.img --disk tests/_cikti/disk/usb-fat32.img --disk tests/_cikti/disk/usb-exfat.img
+// @girdi: cat /root/kalici.txt
+// @girdi: ls -l /root/kalici.txt | cut -c 1-10
+// @girdi: cat /home/arda/belgeler/a.txt
+// @girdi: tail -n 1 /home/arda/sayilar.txt
+// @girdi: cat "/mnt/sdb1/Uppix Notu.txt"
+// @girdi: cat /mnt/sdb1/Yedek/kalici.txt | tr a-z A-Z
+// @girdi: ls /mnt/sdb1 | tr '\n' ','
+// @girdi: cat /mnt/sdc/Klasör/tasindi.txt
+// @girdi: rm -r /home/arda && ls /home | wc -l
+// @girdi: poweroff
+// @icerir: ext4 kalıcı veri
+// @icerir: -rwx------
+// @icerir: derin
+// @icerir: 300
+// @icerir: FAT32 yazıldı
+// @icerir: EXT4 KALıCı VERI
+// @icerir: Belgeler,Türkçe uzun dosya adı.txt,Uppix Notu.txt,Yedek,
+// @icerir: exFAT yazıldı
+// @icerir: Sistem kapatılıyor...
+// @denetle: e2fsck -fn tests/_cikti/disk/uppix-kok.img
+// @denetle: fsck.exfat -n tests/_cikti/disk/usb-exfat.img
+
+kullan "../../uppix/kaynak/uppix.upp";
+
+fonk ana() -> sayi {
+    uppix_baslat();
+    don 0;
+}

@@ -157,6 +157,7 @@ static unsigned char _upp_yigin_varsayilan[UPP_SERBEST_YIGIN] __attribute__((ali
 static unsigned char* _upp_yigin_bas = NULL;
 static unsigned char* _upp_yigin_son = NULL;
 static unsigned char* _upp_yigin_gezgin = NULL;
+static size_t _upp_yigin_dolu = 0;
 
 #define _UPP_YB_ETIKET 16u
 #define _UPP_YB_MIN (2u * _UPP_YB_ETIKET + 16u)
@@ -219,6 +220,7 @@ static void* upp_serbest_ayir(size_t n) {
                     boy = gerek;
                 }
                 _upp_yb_yaz(b, boy, 1);
+                _upp_yigin_dolu += boy;
                 _upp_yigin_gezgin = b + boy < _upp_yigin_son ? b + boy : _upp_yigin_bas;
                 return b + _UPP_YB_ETIKET;
             }
@@ -236,6 +238,7 @@ static void upp_serbest_birak(void* p) {
     }
     b = (unsigned char*)p - _UPP_YB_ETIKET;
     boy = _upp_yb_boy(b);
+    _upp_yigin_dolu -= boy;
     /* sonraki boşsa birleştir */
     if (b + boy < _upp_yigin_son && !_upp_yb_dolu(b + boy)) {
         if (_upp_yigin_gezgin == b + boy) {

@@ -11,7 +11,7 @@ harita[metin, metin] g_proje;
 metin g_proje_dizin = "";
 
 fonk pj_renk(metin kod, metin s) -> metin {
-    don "\e[" + kod + "m" + s + "\u001b[0m";
+    don "\e[" + kod + "m" + s + "\e[0m";
 }
 
 fonk pj_oku(metin dizin) -> mantik {
@@ -109,6 +109,35 @@ fonk pj_derle(metin dizin, mantik calistir) -> sayi {
     metin cmd = os_cmd_parca(pj_kendi_exe()) + " " + os_cmd_parca(giris) + " -o " + os_cmd_parca(cikti);
     eger (!metin_esit(hedef, "yerel") && !metin_esit(hedef, "")) { cmd += " --hedef " + hedef; }
     eger (!calistir) { cmd += " --sadece-derle"; }
+    // diskler = a.img, b.img  (proje dizinine göre; çekirdek hedefinde QEMU'ya IDE disk)
+    // disk_hazirla = betik.sh (bir disk eksikse proje dizininde sh ile çalışır)
+    oto diskler = pj_al("diskler", "");
+    eger (calistir && !metin_esit(diskler, "")) {
+        mantik eksik = yanlis;
+        liste[metin] yollar;
+        her (oto p in upp.metin.bol(diskler, ",")) {
+            oto t = upp.metin.kirp(p);
+            eger (metin_esit(t, "")) { devam; }
+            oto y = upp.yol.birlestir(dizin, t);
+            yollar.ekle(y);
+            eger (!os_dosya_var(y)) { eksik = dogru; }
+        }
+        oto betik = pj_al("disk_hazirla", "");
+        eger (eksik && !metin_esit(betik, "")) {
+            upp.satir_yaz(pj_renk("36", "[u++] disk imajları hazırlanıyor: " + betik));
+            metin hk = "sh " + betik;
+            eger (os_host_linux() == 0) { hk = "wsl -e sh -c " + os_tirnak("cd " + ck_wsl_yol(dizin) + " && sh " + betik); }
+            yoksa { hk = "cd " + os_tirnak(dizin) + " && sh " + betik; }
+            // calistir: stdin kapalı; kos olsaydı WSL, QEMU'ya gidecek girdiyi tüketirdi.
+            SurecCikti hr = upp.sistem.calistir(hk);
+            eger (hr.cikti != yok) { upp.yaz(hr.cikti); }
+            eger (hr.kod != 0) {
+                upp.satir_yaz("[u++ HATA] disk hazırlama betiği başarısız: " + betik);
+                don 1;
+            }
+        }
+        her (oto y in yollar) { cmd += " --disk " + os_cmd_parca(y); }
+    }
     oto ek = pj_al("bayraklar", "");
     eger (!metin_esit(ek, "")) { cmd += " " + ek; }
     upp.satir_yaz(pj_renk("36", "[u++] " + pj_al("ad", "?") + " → " + hedef));

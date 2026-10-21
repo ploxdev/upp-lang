@@ -129,7 +129,7 @@ C ile aynı yazım: `ubayt b = (ubayt)x;`, `u16 p = (u16)x;`, `sayi n = (sayi)3.
 
 - `"... {ifade} ..."`: `{` hemen ardından harf, `_` ya da `(` gelirse tam ifade başlar: `"{a[0]}"`, `"{f(x)}"`, `"{a + b * 2}"`, `"{k.ad}"`, `"{(1 + 2)}"`. Ayrıştırılamayan ifade hata verir.
 - `{{` ve `}}` her metinde `{` ve `}` anlamına gelir. `{` ardından boşluk ya da rakam gelirse olduğu gibi kalır.
-- Metin kaçışları: `\n \t \r \\ \" \e` (ESC) ve `\xHH`.
+- Metin kaçışları: `\n \t \r \\ \" \e` (ESC), `\xHH` (bayt) ve `\uHHHH` (Unicode kod noktası, ör. `\u00e7` = ç). Bilinmeyen bir kaçış (ör. `\q`) derleme hatasıdır.
 - Yazdırılabilir türler: tamsayılar, `ondalik`, `mantik`, `metin`, `&metin`, `secenek`.
 
 | Fonksiyon | İmza | Açıklama |
@@ -187,6 +187,8 @@ Bu bölümdeki her şey, `uzunluk`/`min`/`max`/`mutlak`/`sayidan_metin`/`metinde
 | `birlestir(liste, ayirac)` | `(liste[metin], metin) -> metin` |
 | `kod(s, i)`, `ileri(s, i)` | Kod noktası değeri / bayt uzunluğu |
 | `hex_coz(h)`, `hex_kodla(s)` | Onaltılık ↔ bayt |
+| `karakter(kod)` | `sayi -> metin`: kod noktasından tek karakterlik metin (geçersizse boş) |
+| `tekrar(s, n)` | `(metin, sayi) -> metin`: `s`'yi `n` kez yan yana yazar |
 
 ## 6. `upp.dosya` (barındırılan)
 
@@ -252,22 +254,60 @@ Bu bölümdeki her şey, `uzunluk`/`min`/`max`/`mutlak`/`sayidan_metin`/`metinde
 
 `oto is = arkaplan { ... }; is.bekle();` biçiminde kullanılır. `metin` ve sayısal değerler iş parçacığına derin kopya olarak aktarılır. Koleksiyonlar, `JSONDeger` ve görünümler yakalanamaz. Kilit kullanımı: `Kilit k; k.kilitle(); ... k.birak();`
 
-## 14. `upp.cekirdek` — donanım (yalnızca `--hedef serbest|cekirdek`, `guvensiz`)
+## 14. `upp.cekirdek` — donanım (yalnızca `--hedef serbest|cekirdek`)
 
-| Fonksiyon | Açıklama |
+Donanıma doğrudan dokunan satırlar `guvensiz` ister:
+
+| Fonksiyon (`guvensiz`) | Açıklama |
 |---|---|
 | `port_yaz8/16/32(port, deger)`, `port_oku8/16/32(port) -> sayi` | x86 G/Ç portları |
 | `bellek_yaz8/16/32/64(adres, deger)`, `bellek_oku8/16/32/64(adres) -> sayi` | volatile MMIO |
 | `dur()`, `kesme_kapat()`, `kesme_ac()` | `hlt`, `cli`, `sti` |
-| `yigin_kur(adres, boyut)` | Metin/koleksiyon ayırıcısına bellek bölgesi verir (varsayılan 4 MiB `.bss`) |
+| `yigin_kur(adres, boyut)` | Metin/koleksiyon ayırıcısına bellek bölgesi verir |
+
+Geri kalanı güvenli koddan çağrılır:
+
+| Fonksiyon | Açıklama |
+|---|---|
 | `kesmeler_kur()` | IDT, PIC ve 1000 Hz PIT'i kurar (açılışta kendiliğinden çağrılır) |
 | `tik() -> sayi` | Açılıştan beri zamanlayıcı tıkı (1 ms) |
-| `tus_oku() -> sayi` | Klavye (PS/2, Türkçe Q) ya da seri porttan bir kod noktası; yoksa 0 |
-| `tus_bekle() -> sayi` | Bir tuş gelene kadar `hlt` ile bekler |
+| `tus_oku() -> sayi` | Klavye (PS/2, Türkçe Q) ya da seri porttan bir kod noktası; yoksa 0. Ok/Home/End/Delete tuşları `ESC [ A` biçiminde gelir, Ctrl+harf kontrol kodudur. Seride CR ve CR LF tek satır sonudur |
+| `tus_bekle() -> sayi` | Bir tuş gelene kadar bekler; bu sırada hazır görevler çalışır |
+| `bellek_toplam() -> sayi` | Multiboot bellek haritasındaki kullanılabilir RAM (bayt) |
+| `yigin_boyut() -> sayi`, `yigin_kullanilan() -> sayi` | Ayırıcı bölgesinin boyutu ve kullanılan bayt |
+| `gorev_baslat(f, arg, ad) -> sayi` | `fonk(sayi) -> bos` türündeki `f`'yi yeni görevde `f(arg)` olarak başlatır; kimliği (PID) döner, tablo doluysa -1 |
+| `sira_ver()` | Sırayı başka bir hazır göreve verir |
+| `gorev_kimlik() -> sayi` | Çalışan görevin kimliği (ana akış 1) |
+| `gorev_listesi() -> liste[sayi]` | Yaşayan görevlerin kimlikleri |
+| `gorev_ad(id) -> metin`, `gorev_durum(id) -> metin`, `gorev_baslama(id) -> sayi` | Ad; `"çalışıyor"` / `"hazır"` / `"uyuyor"` (yoksa `""`); başlama zamanı (ms) |
+| `gorev_oldur(id) -> mantik` | Görevi sonlandırır (ana akış 1 sonlandırılamaz) |
+| `tarih() -> metin` | CMOS saati: `"YYYY-AA-GG SS:DD:ss"` |
+| `kapat()`, `yeniden_baslat()` | ACPI ile kapatma (QEMU, Bochs, VirtualBox; olmazsa isa-debug-exit); 8042 ile sıfırlama |
+| `ekran_temizle()` | VGA ekranını ve seri terminali temizler |
+| `islemci() -> metin` | CPUID marka adı |
+| `disk_var(d) -> mantik`, `disk_sektor(d) -> sayi`, `disk_model(d) -> metin` | ATA diski `d` (0–3: birincil/ikincil kanal, ana/yardımcı; QEMU `-drive if=ide,index=d`); sektör sayısı (512 bayt) ve model adı |
+| `disk_oku(d, lba, adet, tampon, ofs) -> mantik`, `disk_yaz(...)` | `adet` sektörü tampona okur / tampondan yazar (PIO, LBA28/LBA48, yazmadan sonra önbellek boşaltma) |
 
-`kesmeler_kur` dışındaki satırlar `guvensiz` gerektirmez.
+**Bellek:** Açılışta yığın, Multiboot bellek haritasındaki en büyük boş bölgeye taşınır (ilk 1 GiB içinde; QEMU'nun varsayılan 128 MiB'ında yaklaşık 122 MiB). Önyükleyici bilgisi yoksa 4 MiB'lık `.bss` alanı kullanılır.
 
-Çekirdek hedefinde `upp.giris()` (klavye ve seri porttan satır okur, yankılar, geri silmeyi destekler), `upp.zaman()` ve `upp.uyut(ms)` da çalışır. İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe adı ve RIP ile panik verir. QEMU'da panik 3 koduyla çıkar.
+**Görevler** işbirlikçidir. Geçiş yalnızca `upp.uyut`, `sira_ver` ve girdi beklerken (`tus_bekle`, `upp.giris`) olur. Bu yüzden runtime'ın paylaşılan durumu kilitsiz güvendedir, ama uzun hesap yapan bir görev arada `sira_ver()` çağırmalıdır. Her görevin 64 KiB yığını vardır, en çok 32 görev olabilir. Biten görevin yığını bir sonraki geçişte geri verilir.
+
+Çekirdek hedefinde `upp.giris()` (klavye ve seri porttan satır okur, yankılar, geri silmeyi destekler), `upp.zaman()` ve `upp.uyut(ms)` da çalışır. VGA ekranı ANSI renklerini (`\e[1;32m`), `\e[2J`, `\e[H`, `\e[K`, `\e[nC`, `\e[nD` dizilerini ve kutu çizgi karakterlerini (`├ └ │ ─`) gösterir. İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe adı ve RIP ile panik verir. QEMU'da panik 3 koduyla çıkar.
+
+Bu yerleşiklerle yazılmış eksiksiz bir örnek: [Uppix](../uppix/README.md), u++ ile yazılmış Unix benzeri işletim sistemi (ext4 kök, FAT32/exFAT).
+
+### `upp.tampon` — bayt tamponları (her hedefte)
+
+İkili veriyi (disk sektörleri, dosya sistemi yapıları, ağ paketleri) güvenli kodda işlemek içindir. Tampon, `sayi` bir tutamaçla gösterilir. Her erişim sınır denetimlidir: geçersiz tutamaç ya da taşma açık panik verir. Çok baytlı değerler küçük sonludur (little-endian). Tamponlar elle bırakılır (`birak`).
+
+| Fonksiyon | Açıklama |
+|---|---|
+| `yeni(boyut) -> sayi`, `birak(t)`, `boyut(t) -> sayi` | Sıfırlanmış tampon; bırakma; boyut |
+| `oku8/16/32/64(t, ofs) -> sayi`, `yaz8/16/32/64(t, ofs, deger)` | Küçük sonlu tamsayı (32 bit işaretsiz okunur; 64 bit ham bit deseni) |
+| `metin(t, ofs, n) -> metin`, `metin_yaz(t, ofs, s) -> sayi` | Ham bayt ↔ metin (UTF-8 baytları; yazılan bayt sayısı döner) |
+| `utf16_metin(t, ofs, n) -> metin`, `utf16_yaz(t, ofs, s, sinir) -> sayi` | UTF-16LE ↔ metin (vekil çiftler dahil; 0x0000'da durur; yazılan kod birimi sayısı) |
+| `kopyala(hedef, hofs, kaynak, kofs, n)`, `doldur(t, ofs, n, deger)` | Örtüşmeye dayanıklı kopya; doldurma |
+| `crc32c(t, ofs, n, baslangic) -> sayi` | CRC32C (Castagnoli), son XOR'suz (ext4 biçimi); standart değer için `^ 4294967295` |
 
 ---
 
@@ -286,7 +326,7 @@ Serbest ve çekirdek hedeflerinde işletim sistemi isteyen ("barındırılan") y
 
 ```text
 uppc <dosya.upp> [-o ad] [--sadece-derle | -c] [--hedef h] [--analiz] [--json-hata]
-                 [--bicim | --bicim-kontrol] [--ast] [--runtime yol]
+                 [--bicim | --bicim-kontrol] [--ast] [--runtime yol] [--disk imaj]...
 uppc yeni <ad> [--hedef cekirdek]     # upp.proje + kaynak/ana.upp
 uppc derle [dizin]                    # upp.proje'yi derle
 uppc calistir [dizin]                 # derle ve çalıştır (çekirdekte QEMU)
@@ -302,4 +342,8 @@ giris = kaynak/ana.upp
 hedef = yerel        # yerel | windows | linux | serbest | cekirdek
 cikti = derleme/merhaba
 bayraklar =          # isteğe bağlı ek uppc bayrakları
+diskler = a.img, b.img   # çekirdek: QEMU'ya IDE disk olarak (sırayla sda, sdb...)
+disk_hazirla = disk_yap.sh  # bir disk imajı eksikse proje dizininde sh ile çalışır
 ```
+
+`--disk imaj` (en çok 4) ham disk imajını çekirdek hedefinde QEMU'ya `-drive if=ide,format=raw` olarak ekler.

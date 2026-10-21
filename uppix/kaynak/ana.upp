@@ -1,0 +1,8 @@
+// Uppix giriş noktası: uppc derle (upp.proje) ya da
+//     uppc uppix/kaynak/ana.upp --hedef cekirdek
+kullan "uppix.upp";
+
+fonk ana() -> sayi {
+    uppix_baslat();
+    don 0;
+}

@@ -1,0 +1,319 @@
+// Uppix — ortak yardımcılar: metin işlemleri, sıralama, biçimleme.
+
+fonk uz(metin s) -> sayi => upp.uzunluk(s);
+
+fonk kes(metin s, sayi bas, sayi n) -> metin {
+    eger (n <= 0 || bas >= upp.uzunluk(s)) { don ""; }
+    don upp.metin.kes(s, bas, n);
+}
+
+fonk kes_son(metin s, sayi bas) -> metin => kes(s, bas, upp.uzunluk(s) - bas);
+
+fonk bayt_say(&metin v) -> sayi => v.uzunluk;
+
+fonk bosluk_mu(sayi c) -> mantik => c == 32 || c == 9 || c == 10 || c == 13;
+
+fonk rakam_mi(sayi c) -> mantik => c >= 48 && c <= 57;
+
+fonk harf_mi(sayi c) -> mantik => (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 || c >= 192;
+
+fonk sayi_mi(metin s) -> mantik {
+    sayi n = uz(s);
+    eger (n == 0) { don yanlis; }
+    sayi i = 0;
+    eger (s[0] == 45 && n > 1) { i = 1; }
+    iken (i < n) {
+        eger (!rakam_mi(s[i])) { don yanlis; }
+        i += 1;
+    }
+    don dogru;
+}
+
+fonk sayiya(metin s) -> sayi => upp.metinden_sayiya(upp.metin.kirp(s));
+
+// Unicode kod noktası sırasıyla karşılaştırma.
+fonk metin_kucuk_mu(metin a, metin b) -> mantik {
+    sayi na = uz(a);
+    sayi nb = uz(b);
+    sayi i = 0;
+    iken (i < na && i < nb) {
+        sayi ca = a[i];
+        sayi cb = b[i];
+        eger (ca != cb) { don ca < cb; }
+        i += 1;
+    }
+    don na < nb;
+}
+
+fonk metin_buyuk_mu(metin a, metin b) -> mantik => metin_kucuk_mu(b, a);
+
+fonk bastaki_sayi(metin s) -> sayi {
+    metin t = upp.metin.kirp(s);
+    sayi i = 0;
+    eger (uz(t) > 0 && t[0] == 45) { i = 1; }
+    iken (i < uz(t) && rakam_mi(t[i])) { i += 1; }
+    don upp.metinden_sayiya(kes(t, 0, i));
+}
+
+fonk sayi_kucuk_mu(metin a, metin b) -> mantik {
+    sayi x = bastaki_sayi(a);
+    sayi y = bastaki_sayi(b);
+    eger (x != y) { don x < y; }
+    don metin_kucuk_mu(a, b);
+}
+
+fonk sayi_buyuk_mu(metin a, metin b) -> mantik => sayi_kucuk_mu(b, a);
+
+// Kararlı birleştirmeli sıralama.
+fonk sirala(liste[metin] L, fonk(metin, metin) -> mantik kucuk) -> liste[metin] {
+    sayi n = L.uzunluk();
+    eger (n <= 1) { don L; }
+    sayi orta = n / 2;
+    liste[metin] sol;
+    liste[metin] sag;
+    dongu (sayi i = 0; i < n; i += 1) {
+        eger (i < orta) { sol.ekle(L[i]); } yoksa { sag.ekle(L[i]); }
+    }
+    sol = sirala(sol, kucuk);
+    sag = sirala(sag, kucuk);
+    liste[metin] R;
+    sayi a = 0;
+    sayi b = 0;
+    iken (a < sol.uzunluk() || b < sag.uzunluk()) {
+        eger (b >= sag.uzunluk() || (a < sol.uzunluk() && !kucuk(sag[b], sol[a]))) {
+            R.ekle(sol[a]);
+            a += 1;
+        } yoksa {
+            R.ekle(sag[b]);
+            b += 1;
+        }
+    }
+    don R;
+}
+
+fonk adlari_sirala(liste[metin] L) -> liste[metin] => sirala(L, metin_kucuk_mu);
+
+// Metni satırlara böler; sondaki satır sonu boş satır üretmez.
+fonk satirlar(metin s) -> liste[metin] {
+    liste[metin] L = upp.metin.bol(s, "\n");
+    eger (L.uzunluk() > 0 && L[L.uzunluk() - 1] == "") { L.sil(L.uzunluk() - 1); }
+    don L;
+}
+
+fonk satirlari_birlestir(liste[metin] L) -> metin {
+    metin s = "";
+    her (oto x in L) { s += x + "\n"; }
+    don s;
+}
+
+// Boşluklara göre kelimelere böler (art arda boşluklar tek ayırıcıdır).
+fonk kelimeler(metin s) -> liste[metin] {
+    liste[metin] L;
+    metin cur = "";
+    sayi n = uz(s);
+    dongu (sayi i = 0; i < n; i += 1) {
+        eger (bosluk_mu(s[i])) {
+            eger (cur != "") { L.ekle(cur); cur = ""; }
+        } yoksa {
+            cur += kes(s, i, 1);
+        }
+    }
+    eger (cur != "") { L.ekle(cur); }
+    don L;
+}
+
+fonk sag_hizala(metin s, sayi w) -> metin {
+    sayi n = uz(s);
+    eger (n >= w) { don s; }
+    don upp.metin.tekrar(" ", w - n) + s;
+}
+
+fonk sol_hizala(metin s, sayi w) -> metin {
+    sayi n = uz(s);
+    eger (n >= w) { don s; }
+    don s + upp.metin.tekrar(" ", w - n);
+}
+
+fonk sifir_doldur(sayi v, sayi w) -> metin {
+    metin s = "{v}";
+    eger (uz(s) >= w) { don s; }
+    don upp.metin.tekrar("0", w - uz(s)) + s;
+}
+
+fonk boyut_insan(sayi b) -> metin {
+    eger (b < 1024) { don "{b}"; }
+    eger (b < 1048576) {
+        sayi k10 = b * 10 / 1024;
+        eger (k10 < 100) { don "{k10 / 10}.{k10 % 10}K"; }
+        don "{b / 1024}K";
+    }
+    eger (b < 1073741824) {
+        sayi m10 = b * 10 / 1048576;
+        eger (m10 < 100) { don "{m10 / 10}.{m10 % 10}M"; }
+        don "{b / 1048576}M";
+    }
+    sayi g10 = b * 10 / 1073741824;
+    don "{g10 / 10}.{g10 % 10}G";
+}
+
+fonk sure_metin(sayi ms) -> metin {
+    sayi sn = ms / 1000;
+    eger (sn < 60) { don "{sn} sn"; }
+    sayi dk = sn / 60;
+    eger (dk < 60) { don "{dk} dk"; }
+    sayi sa = dk / 60;
+    eger (sa < 24) { don "{sa} sa {dk % 60} dk"; }
+    don "{sa / 24} gün {sa % 24} sa";
+}
+
+// "\n", "\t", "\e", "\\" kaçışlarını çözer (echo -e, tr).
+fonk kacis_coz(metin s) -> metin {
+    metin r = "";
+    sayi n = uz(s);
+    sayi i = 0;
+    iken (i < n) {
+        eger (s[i] == 92 && i + 1 < n) {
+            sayi c = s[i + 1];
+            eger (c == 110) { r += "\n"; }
+            yoksa eger (c == 116) { r += "\t"; }
+            yoksa eger (c == 101) { r += "\e"; }
+            yoksa eger (c == 92) { r += "\\"; }
+            yoksa eger (c == 48) { r += ""; }
+            yoksa { r += kes(s, i, 2); }
+            i += 2;
+            devam;
+        }
+        r += kes(s, i, 1);
+        i += 1;
+    }
+    don r;
+}
+
+// Basit joker eşleşmesi: * ve ?
+fonk eslesir(metin p, metin s) -> mantik {
+    sayi np = uz(p);
+    sayi ns = uz(s);
+    sayi pi = 0;
+    sayi si = 0;
+    sayi yildiz = -1;
+    sayi geri = 0;
+    iken (si < ns) {
+        eger (pi < np && (p[pi] == 63 || p[pi] == s[si])) {
+            pi += 1;
+            si += 1;
+        } yoksa eger (pi < np && p[pi] == 42) {
+            yildiz = pi;
+            geri = si;
+            pi += 1;
+        } yoksa eger (yildiz >= 0) {
+            pi = yildiz + 1;
+            geri += 1;
+            si = geri;
+        } yoksa {
+            don yanlis;
+        }
+    }
+    iken (pi < np && p[pi] == 42) { pi += 1; }
+    don pi == np;
+}
+
+fonk joker_var_mi(metin s) -> mantik => upp.metin.bul(s, "*") >= 0 || upp.metin.bul(s, "?") >= 0;
+
+// ---- tarih ----
+fonk ay_adi(sayi ay) -> metin {
+    liste[metin] A = upp.metin.bol("Oca,Şub,Mar,Nis,May,Haz,Tem,Ağu,Eyl,Eki,Kas,Ara", ",");
+    eger (ay < 1 || ay > 12) { don "???"; }
+    don A[ay - 1];
+}
+
+fonk gun_adi(sayi yil, sayi ay, sayi gun) -> metin {
+    liste[sayi] t;
+    t.ekle(0); t.ekle(3); t.ekle(2); t.ekle(5); t.ekle(0); t.ekle(3);
+    t.ekle(5); t.ekle(1); t.ekle(4); t.ekle(6); t.ekle(2); t.ekle(4);
+    sayi y = yil;
+    eger (ay < 3) { y -= 1; }
+    sayi g = (y + y / 4 - y / 100 + y / 400 + t[ay - 1] + gun) % 7;
+    liste[metin] A = upp.metin.bol("Paz,Pzt,Sal,Çar,Per,Cum,Cmt", ",");
+    don A[g];
+}
+
+// RTC "YYYY-AA-GG SS:DD:ss" → parçalar
+fonk tarih_parca(metin t, sayi i) -> sayi {
+    eger (i == 0) { don sayiya(kes(t, 0, 4)); }
+    eger (i == 1) { don sayiya(kes(t, 5, 2)); }
+    eger (i == 2) { don sayiya(kes(t, 8, 2)); }
+    eger (i == 3) { don sayiya(kes(t, 11, 2)); }
+    eger (i == 4) { don sayiya(kes(t, 14, 2)); }
+    don sayiya(kes(t, 17, 2));
+}
+
+// 1970-01-01'den beri gün (proleptik Gregoryen; H. Hinnant'ın algoritması).
+fonk tarihten_gun(sayi yil, sayi ay, sayi gun) -> sayi {
+    sayi y = yil;
+    eger (ay <= 2) { y -= 1; }
+    sayi era = y / 400;
+    eger (y < 0) { era = (y - 399) / 400; }
+    sayi yoe = y - era * 400;
+    sayi mp = ay - 3;
+    eger (ay <= 2) { mp = ay + 9; }
+    sayi doy = (153 * mp + 2) / 5 + gun - 1;
+    sayi doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    don era * 146097 + doe - 719468;
+}
+
+sayi g_t_yil = 1970;
+sayi g_t_ay = 1;
+sayi g_t_gun = 1;
+
+fonk gunden_tarih(sayi gunler) -> bos {
+    sayi z = gunler + 719468;
+    sayi era = z / 146097;
+    eger (z < 0) { era = (z - 146096) / 146097; }
+    sayi doe = z - era * 146097;
+    sayi yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    sayi doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    sayi mp = (5 * doy + 2) / 153;
+    g_t_gun = doy - (153 * mp + 2) / 5 + 1;
+    eger (mp < 10) { g_t_ay = mp + 3; } yoksa { g_t_ay = mp - 9; }
+    g_t_yil = yoe + era * 400;
+    eger (g_t_ay <= 2) { g_t_yil += 1; }
+}
+
+// Unix saniyesinden "Eki 21 14:05"
+fonk dosya_zamani(sayi epoch) -> metin {
+    sayi gs = epoch % 86400;
+    eger (gs < 0) { gs += 86400; }
+    gunden_tarih((epoch - gs) / 86400);
+    metin gun_s = sag_hizala("{g_t_gun}", 2);
+    metin ay_s = ay_adi(g_t_ay);
+    don "{ay_s} {gun_s} {sifir_doldur(gs / 3600, 2)}:{sifir_doldur((gs / 60) % 60, 2)}";
+}
+
+// Unix saniyesinden "2026-10-21 14:05:12"
+fonk tam_zaman(sayi epoch) -> metin {
+    sayi gs = epoch % 86400;
+    eger (gs < 0) { gs += 86400; }
+    gunden_tarih((epoch - gs) / 86400);
+    don "{g_t_yil}-{sifir_doldur(g_t_ay, 2)}-{sifir_doldur(g_t_gun, 2)} {sifir_doldur(gs / 3600, 2)}:{sifir_doldur((gs / 60) % 60, 2)}:{sifir_doldur(gs % 60, 2)}";
+}
+
+// DOS (FAT/exFAT) tarih ve saati ↔ Unix saniyesi
+fonk dos_zaman_epoch(sayi tarih, sayi saat) -> sayi {
+    sayi yil = 1980 + tarih / 512;
+    sayi ay = (tarih / 32) % 16;
+    sayi gun = tarih % 32;
+    eger (ay < 1 || ay > 12 || gun < 1) { don 0; }
+    don tarihten_gun(yil, ay, gun) * 86400 + (saat / 2048) * 3600 + ((saat / 32) % 64) * 60 + (saat % 32) * 2;
+}
+
+fonk epoch_dos_tarih(sayi epoch) -> sayi {
+    gunden_tarih(epoch / 86400);
+    sayi y = g_t_yil - 1980;
+    eger (y < 0) { y = 0; }
+    don y * 512 + g_t_ay * 32 + g_t_gun;
+}
+
+fonk epoch_dos_saat(sayi epoch) -> sayi {
+    sayi gs = epoch % 86400;
+    don (gs / 3600) * 2048 + ((gs / 60) % 60) * 32 + (gs % 60) / 2;
+}

@@ -159,6 +159,7 @@ static unsigned char _upp_yigin_varsayilan[UPP_SERBEST_YIGIN] __attribute__((ali
 static unsigned char* _upp_yigin_bas = NULL;
 static unsigned char* _upp_yigin_son = NULL;
 static unsigned char* _upp_yigin_gezgin = NULL;
+static size_t _upp_yigin_dolu = 0;
 
 #define _UPP_YB_ETIKET 16u
 #define _UPP_YB_MIN (2u * _UPP_YB_ETIKET + 16u)
@@ -221,6 +222,7 @@ static void* upp_serbest_ayir(size_t n) {
                     boy = gerek;
                 }
                 _upp_yb_yaz(b, boy, 1);
+                _upp_yigin_dolu += boy;
                 _upp_yigin_gezgin = b + boy < _upp_yigin_son ? b + boy : _upp_yigin_bas;
                 return b + _UPP_YB_ETIKET;
             }
@@ -238,6 +240,7 @@ static void upp_serbest_birak(void* p) {
     }
     b = (unsigned char*)p - _UPP_YB_ETIKET;
     boy = _upp_yb_boy(b);
+    _upp_yigin_dolu -= boy;
     /* sonraki boşsa birleştir */
     if (b + boy < _upp_yigin_son && !_upp_yb_dolu(b + boy)) {
         if (_upp_yigin_gezgin == b + boy) {
@@ -1068,6 +1071,258 @@ static int _upp_utf8_yaz(long long cp, char* o) {
     return 4;
 }
 
+/* Kod noktasından tek karakterlik metin; geçersiz kod noktası boş metin verir. */
+static char* upp_metin_karakter(long long cp) {
+    char b[4];
+    if (cp < 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+        return _upp_m_bayttan("", 0u);
+    }
+    return _upp_m_bayttan(b, (size_t)_upp_utf8_yaz(cp, b));
+}
+
+static char* upp_metin_tekrar(const char* s, long long n) {
+    size_t nb = upp_metin_nbayt(s);
+    char* r = upp_mk_bas();
+    long long i;
+    for (i = 0; i < n; i++) {
+        _upp_m_ekle_n(&r, s, nb, 0);
+    }
+    return r;
+}
+
+/* =====================================================================
+ * Bayt tamponları (upp.tampon.*): ikili veri (disk sektörleri, dosya
+ * sistemi yapıları) için sınır denetimli, tutamaçla erişilen bellek.
+ * Tutamaç 1'den başlayan bir sayıdır; geçersiz tutamaç ya da sınır dışı
+ * erişim açık panik verir. Çok baytlı okuma/yazma küçük sonludur (LE).
+ * ===================================================================== */
+typedef struct {
+    unsigned char* veri;
+    size_t boyut;
+} _UppTampon;
+
+static _UppTampon* _upp_tampon = NULL;
+static long long _upp_tampon_n = 0;
+static long long _upp_tampon_kap = 0;
+
+static _UppTampon* _upp_tampon_al(long long t, long long ofs, long long n) {
+    _UppTampon* b;
+    if (t < 1 || t > _upp_tampon_n || !_upp_tampon[t - 1].veri) {
+        upp_panik("geçersiz tampon tutamacı");
+    }
+    b = &_upp_tampon[t - 1];
+    if (ofs < 0 || n < 0 || (size_t)ofs > b->boyut || (size_t)n > b->boyut - (size_t)ofs) {
+        upp_panik("tampon sınırı aşıldı");
+    }
+    return b;
+}
+
+static long long upp_tampon_yeni(long long boyut) {
+    long long i;
+    unsigned char* v;
+    if (boyut < 1 || boyut > 0x40000000LL) {
+        upp_panik("tampon boyutu geçersiz");
+    }
+    v = (unsigned char*)UPP_AYIR((size_t)boyut);
+    if (!v) {
+        upp_panik("tampon için bellek yetersiz");
+    }
+    memset(v, 0, (size_t)boyut);
+    for (i = 0; i < _upp_tampon_n; i++) {
+        if (!_upp_tampon[i].veri) {
+            _upp_tampon[i].veri = v;
+            _upp_tampon[i].boyut = (size_t)boyut;
+            return i + 1;
+        }
+    }
+    if (_upp_tampon_n == _upp_tampon_kap) {
+        long long yk = _upp_tampon_kap ? _upp_tampon_kap * 2 : 16;
+        _UppTampon* y = (_UppTampon*)UPP_YENIDEN(_upp_tampon, (size_t)yk * sizeof(_UppTampon));
+        if (!y) {
+            upp_panik("tampon tablosu için bellek yetersiz");
+        }
+        _upp_tampon = y;
+        _upp_tampon_kap = yk;
+    }
+    _upp_tampon[_upp_tampon_n].veri = v;
+    _upp_tampon[_upp_tampon_n].boyut = (size_t)boyut;
+    _upp_tampon_n++;
+    return _upp_tampon_n;
+}
+
+static void upp_tampon_birak(long long t) {
+    if (t < 1 || t > _upp_tampon_n || !_upp_tampon[t - 1].veri) {
+        return;
+    }
+    UPP_BIRAK(_upp_tampon[t - 1].veri);
+    _upp_tampon[t - 1].veri = NULL;
+    _upp_tampon[t - 1].boyut = 0;
+}
+
+static long long upp_tampon_boyut(long long t) {
+    return (long long)_upp_tampon_al(t, 0, 0)->boyut;
+}
+
+static unsigned char* _upp_tampon_p(long long t, long long ofs, long long n) {
+    return _upp_tampon_al(t, ofs, n)->veri + ofs;
+}
+
+static long long upp_tampon_oku8(long long t, long long ofs) {
+    return *_upp_tampon_p(t, ofs, 1);
+}
+
+static long long upp_tampon_oku16(long long t, long long ofs) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 2);
+    return (long long)p[0] | ((long long)p[1] << 8);
+}
+
+static long long upp_tampon_oku32(long long t, long long ofs) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 4);
+    return (long long)((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
+}
+
+static long long upp_tampon_oku64(long long t, long long ofs) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 8);
+    uint64_t v = 0;
+    int i;
+    for (i = 7; i >= 0; i--) {
+        v = (v << 8) | p[i];
+    }
+    return (long long)v;
+}
+
+static void upp_tampon_yaz8(long long t, long long ofs, long long v) {
+    *_upp_tampon_p(t, ofs, 1) = (unsigned char)v;
+}
+
+static void upp_tampon_yaz16(long long t, long long ofs, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 2);
+    p[0] = (unsigned char)v;
+    p[1] = (unsigned char)(v >> 8);
+}
+
+static void upp_tampon_yaz32(long long t, long long ofs, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 4);
+    p[0] = (unsigned char)v;
+    p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16);
+    p[3] = (unsigned char)(v >> 24);
+}
+
+static void upp_tampon_yaz64(long long t, long long ofs, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 8);
+    uint64_t u = (uint64_t)v;
+    int i;
+    for (i = 0; i < 8; i++) {
+        p[i] = (unsigned char)(u >> (8 * i));
+    }
+}
+
+/* Ham baytlardan metin (UTF-8 olduğu varsayılır). */
+static char* upp_tampon_metin(long long t, long long ofs, long long n) {
+    return _upp_m_bayttan((const char*)_upp_tampon_p(t, ofs, n), (size_t)n);
+}
+
+/* Metnin UTF-8 baytlarını yazar; yazılan bayt sayısını döner. */
+static long long upp_tampon_metin_yaz(long long t, long long ofs, const char* s) {
+    size_t n = upp_metin_nbayt(s);
+    if (n) {
+        memcpy(_upp_tampon_p(t, ofs, (long long)n), s, n);
+    }
+    return (long long)n;
+}
+
+static void upp_tampon_kopyala(long long hedef, long long hofs, long long kaynak, long long kofs, long long n) {
+    unsigned char* k = _upp_tampon_p(kaynak, kofs, n);
+    unsigned char* h = _upp_tampon_p(hedef, hofs, n);
+    if (n > 0) {
+        memmove(h, k, (size_t)n);
+    }
+}
+
+static void upp_tampon_doldur(long long t, long long ofs, long long n, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, n);
+    if (n > 0) {
+        memset(p, (int)(v & 0xFF), (size_t)n);
+    }
+}
+
+/* CRC32C (Castagnoli, yansıtılmış 0x82F63B78); son XOR yok (ext4 biçimi). */
+static uint32_t _upp_crc32c_tablo[256];
+static int _upp_crc32c_hazir = 0;
+
+static long long upp_tampon_crc32c(long long t, long long ofs, long long n, long long baslangic) {
+    unsigned char* p = _upp_tampon_p(t, ofs, n);
+    uint32_t c = (uint32_t)baslangic;
+    long long i;
+    if (!_upp_crc32c_hazir) {
+        uint32_t k;
+        int j;
+        for (k = 0; k < 256; k++) {
+            uint32_t r = k;
+            for (j = 0; j < 8; j++) {
+                r = (r & 1u) ? (r >> 1) ^ 0x82F63B78u : r >> 1;
+            }
+            _upp_crc32c_tablo[k] = r;
+        }
+        _upp_crc32c_hazir = 1;
+    }
+    for (i = 0; i < n; i++) {
+        c = _upp_crc32c_tablo[(c ^ p[i]) & 0xFFu] ^ (c >> 8);
+    }
+    return (long long)c;
+}
+
+/* UTF-16LE → metin; en çok n kod birimi, 0x0000'da durur. */
+static char* upp_tampon_utf16_metin(long long t, long long ofs, long long n) {
+    unsigned char* p = _upp_tampon_p(t, ofs, n * 2);
+    char* s = upp_mk_bas();
+    long long i;
+    for (i = 0; i < n; i++) {
+        uint32_t c = (uint32_t)p[2 * i] | ((uint32_t)p[2 * i + 1] << 8);
+        char b[4];
+        if (c == 0) {
+            break;
+        }
+        if (c >= 0xD800 && c <= 0xDBFF && i + 1 < n) {
+            uint32_t d = (uint32_t)p[2 * i + 2] | ((uint32_t)p[2 * i + 3] << 8);
+            if (d >= 0xDC00 && d <= 0xDFFF) {
+                c = 0x10000u + ((c - 0xD800u) << 10) + (d - 0xDC00u);
+                i++;
+            }
+        }
+        _upp_m_ekle_n(&s, b, (size_t)_upp_utf8_yaz((long long)c, b), c < 128);
+    }
+    return s;
+}
+
+/* Metni UTF-16LE olarak yazar (en çok 'sinir' kod birimi); yazılan kod birimi sayısını döner. */
+static long long upp_tampon_utf16_yaz(long long t, long long ofs, const char* s, long long sinir) {
+    size_t nb = upp_metin_nbayt(s);
+    size_t i = 0;
+    long long k = 0;
+    while (i < nb) {
+        long long cp = _upp_utf8_cp_at(s, nb, i);
+        i += (size_t)_upp_utf8_adv(s, nb, i);
+        if (cp >= 0x10000) {
+            if (k + 2 > sinir) {
+                break;
+            }
+            cp -= 0x10000;
+            upp_tampon_yaz16(t, ofs + 2 * k, 0xD800 + (cp >> 10));
+            upp_tampon_yaz16(t, ofs + 2 * k + 2, 0xDC00 + (cp & 0x3FF));
+            k += 2;
+        } else {
+            if (k + 1 > sinir) {
+                break;
+            }
+            upp_tampon_yaz16(t, ofs + 2 * k, cp);
+            k += 1;
+        }
+    }
+    return k;
+}
+
 /* Türkçe kurallı harf dönüşümü: i↔İ, ı↔I, ç ğ ö ş ü ve Latin-1 harfleri. */
 static long long _upp_tr_buyuk(long long c) {
     if (c == 'i') return 0x130;
@@ -1275,7 +1530,9 @@ typedef struct UppKolHarita {
 } UppKolHarita;
 
 /* Düz (kancasız) türler için çağrı yerinde tanımlayıcı. */
-#define UPP_KT_DUZ(T) (&(const UppKolTur){ sizeof(T), NULL, NULL })
+/* Statik ömürlü: koleksiyon tanımlayıcı işaretçisini saklar; bileşik sabit
+ * (compound literal) fonksiyon dönünce geçersiz olurdu. */
+#define UPP_KT_DUZ(T) (__extension__ ({ static const UppKolTur _upp_kt_duz = { sizeof(T), NULL, NULL }; &_upp_kt_duz; }))
 
 #define UPP_KOLLEKSIYON_MAX 100000000LL
 
@@ -2111,8 +2368,119 @@ static unsigned char _upp_cp437(long long cp) {
     case 0xE2: return 0x83; /* â */
     case 0xEE: return 0x8C; /* î */
     case 0xFB: return 0x96; /* û */
+    case 0xB0: return 0xF8; /* ° */
+    case 0x2500: return 0xC4; /* ─ */
+    case 0x2502: return 0xB3; /* │ */
+    case 0x250C: return 0xDA; /* ┌ */
+    case 0x2510: return 0xBF; /* ┐ */
+    case 0x2514: return 0xC0; /* └ */
+    case 0x2518: return 0xD9; /* ┘ */
+    case 0x251C: return 0xC3; /* ├ */
+    case 0x2524: return 0xB4; /* ┤ */
+    case 0x252C: return 0xC2; /* ┬ */
+    case 0x2534: return 0xC1; /* ┴ */
+    case 0x253C: return 0xC5; /* ┼ */
+    case 0x2588: return 0xDB; /* █ */
+    case 0x2591: return 0xB0; /* ░ */
+    case 0x2592: return 0xB1; /* ▒ */
+    case 0x2593: return 0xB2; /* ▓ */
     default: return '?';
     }
+}
+
+/* VGA için küçük ANSI çözümleyici: ESC[...m (renk), ESC[2J (temizle), ESC[H, ESC[K.
+ * Seri terminal aynı baytları kendisi yorumlar. */
+static int _upp_ansi_durum = 0;
+static int _upp_ansi_p[4];
+static int _upp_ansi_n = 0;
+static int _upp_vga_renk = -1;
+static const uint8_t _upp_ansi_vga[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
+
+static void _upp_vga_temizle(void) {
+    int i;
+    for (i = 0; i < _UPP_VGA_G * _UPP_VGA_Y; i++) {
+        _UPP_VGA[i] = (uint16_t)(0x0700 | ' ');
+    }
+    _upp_vga_x = 0;
+    _upp_vga_y = 0;
+}
+
+static void _upp_ansi_uygula(long long son) {
+    int i;
+    if (son == 'm') {
+        if (_upp_ansi_n == 0) {
+            _upp_vga_renk = -1;
+        }
+        for (i = 0; i < _upp_ansi_n; i++) {
+            int v = _upp_ansi_p[i];
+            int r = _upp_vga_renk < 0 ? 0x07 : _upp_vga_renk;
+            if (v == 0) {
+                _upp_vga_renk = -1;
+            } else if (v == 1) {
+                _upp_vga_renk = r | 0x08;
+            } else if (v >= 30 && v <= 37) {
+                _upp_vga_renk = (r & 0xF8) | _upp_ansi_vga[v - 30];
+            } else if (v >= 90 && v <= 97) {
+                _upp_vga_renk = (r & 0xF0) | 0x08 | _upp_ansi_vga[v - 90];
+            }
+        }
+    } else if (son == 'J') {
+        _upp_vga_temizle();
+    } else if (son == 'H') {
+        _upp_vga_x = 0;
+        _upp_vga_y = 0;
+    } else if (son == 'C' || son == 'D') {
+        int n = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
+        _upp_vga_x += son == 'C' ? n : -n;
+        if (_upp_vga_x < 0) _upp_vga_x = 0;
+        if (_upp_vga_x >= _UPP_VGA_G) _upp_vga_x = _UPP_VGA_G - 1;
+    } else if (son == 'K') {
+        for (i = _upp_vga_x; i < _UPP_VGA_G; i++) {
+            _UPP_VGA[_upp_vga_y * _UPP_VGA_G + i] = (uint16_t)(0x0700 | ' ');
+        }
+    }
+}
+
+/* 1: kod noktası kaçış dizisine ait (VGA'ya yazılmaz). */
+static int _upp_ansi_isle(long long cp) {
+    if (_upp_ansi_durum == 0) {
+        if (cp == 27) {
+            _upp_ansi_durum = 1;
+            return 1;
+        }
+        return 0;
+    }
+    if (_upp_ansi_durum == 1) {
+        if (cp == '[') {
+            _upp_ansi_durum = 2;
+            _upp_ansi_n = 0;
+            _upp_ansi_p[0] = 0;
+            return 1;
+        }
+        _upp_ansi_durum = 0;
+        return 1;
+    }
+    if (cp >= '0' && cp <= '9') {
+        if (_upp_ansi_n == 0) {
+            _upp_ansi_n = 1;
+            _upp_ansi_p[0] = 0;
+        }
+        _upp_ansi_p[_upp_ansi_n - 1] = _upp_ansi_p[_upp_ansi_n - 1] * 10 + (int)(cp - '0');
+        return 1;
+    }
+    if (cp == ';') {
+        if (_upp_ansi_n == 0) {
+            _upp_ansi_n = 1;
+            _upp_ansi_p[0] = 0;
+        }
+        if (_upp_ansi_n < 4) {
+            _upp_ansi_p[_upp_ansi_n++] = 0;
+        }
+        return 1;
+    }
+    _upp_ansi_durum = 0;
+    _upp_ansi_uygula(cp);
+    return 1;
 }
 
 static void _upp_akis_bayt(int akis, const char* p, size_t n, int nl) {
@@ -2121,10 +2489,13 @@ static void _upp_akis_bayt(int akis, const char* p, size_t n, int nl) {
     while (p && i < n) {
         size_t a = (size_t)_upp_utf8_adv(p, n, i);
         size_t k;
+        long long cp = _upp_utf8_cp_at(p, n, i);
         for (k = 0; k < a; k++) {
             _upp_seri_bayt((unsigned char)p[i + k]);
         }
-        _upp_vga_karakter(_upp_cp437(_upp_utf8_cp_at(p, n, i)), renk);
+        if (!_upp_ansi_isle(cp)) {
+            _upp_vga_karakter(_upp_cp437(cp), _upp_vga_renk >= 0 && akis != 2 ? (uint8_t)_upp_vga_renk : renk);
+        }
         i += a;
     }
     if (nl) {
@@ -2334,6 +2705,8 @@ static volatile uint32_t _upp_tus_kuyruk[_UPP_TUS_N];
 static volatile unsigned _upp_tus_bas = 0;
 static volatile unsigned _upp_tus_son = 0;
 static int _upp_tus_shift = 0;
+static int _upp_tus_ctrl = 0;
+static int _upp_tus_e0 = 0;
 
 static void _upp_tus_koy(uint32_t c) {
     unsigned s = (_upp_tus_son + 1u) % _UPP_TUS_N;
@@ -2357,8 +2730,44 @@ static const uint16_t _upp_trq_shift[0x3A] = {
     'B', 'N', 'M', 0xD6, 0xC7, ':', 0, '*', 0, ' ',
 };
 
+/* Genişletilmiş tuşlar (ok, Home/End, Delete) seri terminaldeki gibi ESC [ X dizisine çevrilir. */
+static void _upp_tus_dizi(uint32_t son) {
+    _upp_tus_koy(27);
+    _upp_tus_koy('[');
+    _upp_tus_koy(son);
+}
+
 static void _upp_klavye(void) {
     uint8_t sc = _upp_inb(0x60);
+    if (sc == 0xE0) {
+        _upp_tus_e0 = 1;
+        return;
+    }
+    if (_upp_tus_e0) {
+        _upp_tus_e0 = 0;
+        if (sc == 0x1D) { _upp_tus_ctrl = 1; return; }
+        if (sc == 0x9D) { _upp_tus_ctrl = 0; return; }
+        switch (sc) {
+        case 0x48: _upp_tus_dizi('A'); break;
+        case 0x50: _upp_tus_dizi('B'); break;
+        case 0x4D: _upp_tus_dizi('C'); break;
+        case 0x4B: _upp_tus_dizi('D'); break;
+        case 0x47: _upp_tus_dizi('H'); break;
+        case 0x4F: _upp_tus_dizi('F'); break;
+        case 0x53: _upp_tus_dizi('3'); _upp_tus_koy('~'); break;
+        case 0x1C: _upp_tus_koy('\n'); break;
+        default: break;
+        }
+        return;
+    }
+    if (sc == 0x1D) {
+        _upp_tus_ctrl = 1;
+        return;
+    }
+    if (sc == 0x9D) {
+        _upp_tus_ctrl = 0;
+        return;
+    }
     if (sc == 0x2A || sc == 0x36) {
         _upp_tus_shift = 1;
         return;
@@ -2372,6 +2781,9 @@ static void _upp_klavye(void) {
     }
     {
         uint32_t c = _upp_tus_shift ? _upp_trq_shift[sc] : _upp_trq_normal[sc];
+        if (_upp_tus_ctrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+            c &= 0x1Fu;
+        }
         if (c) {
             _upp_tus_koy(c);
         }
@@ -2495,14 +2907,639 @@ static long long upp_cekirdek_tik(void) {
     return (long long)_upp_tik;
 }
 
+/* =====================================================================
+ * Bellek haritası: Multiboot 1 bilgisinden RAM'i bulur ve yığını
+ * çekirdeğin bitişinden sonraki en büyük boş bölgeye (ilk 1 GiB'lik
+ * birebir eşleme içinde) taşır. Önyükleyici yoksa (serbest .o) atlanır.
+ * ===================================================================== */
+extern uint32_t upp_multiboot_bilgi __attribute__((weak));
+extern unsigned char _upp_cekirdek_son[] __attribute__((weak));
+static uint64_t _upp_ram_toplam = 0;
+
+static void _upp_bellek_kur(void) {
+    const uint32_t* mb;
+    uint64_t taban, en_bas = 0, en_son = 0, sinir = 0x40000000ull;
+    if (&upp_multiboot_bilgi == NULL || _upp_cekirdek_son == NULL || upp_multiboot_bilgi == 0) {
+        return;
+    }
+    mb = (const uint32_t*)(uintptr_t)upp_multiboot_bilgi;
+    taban = ((uint64_t)(uintptr_t)_upp_cekirdek_son + 0xFFFull) & ~0xFFFull;
+    if (mb[0] & 64u) {
+        uintptr_t p = (uintptr_t)mb[12];
+        uintptr_t z = p + mb[11];
+        while (p < z) {
+            uint32_t boy = *(const uint32_t*)p;
+            uint64_t bas = *(const uint64_t*)(p + 4);
+            uint64_t uz = *(const uint64_t*)(p + 12);
+            uint32_t tur = *(const uint32_t*)(p + 20);
+            if (tur == 1) {
+                uint64_t s = bas, e = bas + uz;
+                _upp_ram_toplam += uz;
+                if (e > sinir) e = sinir;
+                if (s < taban) s = taban;
+                if (e > s && e - s > en_son - en_bas) {
+                    en_bas = s;
+                    en_son = e;
+                }
+            }
+            p += (uintptr_t)boy + 4u;
+        }
+    } else if (mb[0] & 1u) {
+        uint64_t e = 0x100000ull + (uint64_t)mb[2] * 1024u;
+        _upp_ram_toplam = e;
+        if (e > sinir) e = sinir;
+        if (e > taban) {
+            en_bas = taban;
+            en_son = e;
+        }
+    }
+    if (!_upp_yigin_bas && en_son - en_bas >= 0x100000ull) {
+        _upp_yigin_bolge((void*)(uintptr_t)en_bas, (size_t)(en_son - en_bas));
+    }
+}
+
+static long long upp_cekirdek_bellek_toplam(void) {
+    return (long long)_upp_ram_toplam;
+}
+
+static long long upp_cekirdek_yigin_boyut(void) {
+    _upp_yigin_hazir();
+    return (long long)(_upp_yigin_son - _upp_yigin_bas);
+}
+
+static long long upp_cekirdek_yigin_kullanilan(void) {
+    return (long long)_upp_yigin_dolu;
+}
+
+/* Çekirdek girişinde, upp_ana()'dan önce. */
+static void _upp_cekirdek_hazirla(void) {
+    _upp_bellek_kur();
+    upp_cekirdek_kesmeler_kur();
+}
+
+/* =====================================================================
+ * Görevler: işbirlikçi çoklu görev. Geçiş yalnızca upp.uyut,
+ * upp.cekirdek.sira_ver ve girdi beklerken olur; runtime'ın paylaşılan
+ * durumu bu yüzden kilitsiz güvendedir. Görev 1 çekirdeğin ana akışıdır.
+ * ===================================================================== */
+#define _UPP_GOREV_N 32
+#define _UPP_GOREV_YIGIN (64u * 1024u)
+#define _UPP_G_BOS 0
+#define _UPP_G_HAZIR 1
+#define _UPP_G_UYUYOR 2
+#define _UPP_G_BITTI 3
+
+typedef struct {
+    uint64_t rsp;
+    unsigned char* yigin;
+    int durum;
+    long long kimlik;
+    char* ad;
+    uint64_t uyan;
+    uint64_t baslama;
+    void (*f)(long long);
+    long long arg;
+} UppGorev;
+
+static UppGorev _upp_gorev[_UPP_GOREV_N];
+static int _upp_gorev_cur = 0;
+static long long _upp_gorev_sonraki = 2;
+static int _upp_gorev_kuruldu = 0;
+
+__asm__(
+    ".text\n"
+    ".global _upp_gorev_gec\n"
+    "_upp_gorev_gec:\n"
+    "    push %rbp\n    push %rbx\n    push %r12\n    push %r13\n    push %r14\n    push %r15\n"
+    "    mov %rsp, (%rdi)\n"
+    "    mov %rsi, %rsp\n"
+    "    pop %r15\n    pop %r14\n    pop %r13\n    pop %r12\n    pop %rbx\n    pop %rbp\n"
+    "    ret\n");
+extern void _upp_gorev_gec(uint64_t* eski, uint64_t yeni);
+
+static void _upp_gorev_ilk(void) {
+    if (_upp_gorev_kuruldu) {
+        return;
+    }
+    _upp_gorev_kuruldu = 1;
+    upp_cekirdek_kesmeler_kur();
+    _upp_gorev[0].durum = _UPP_G_HAZIR;
+    _upp_gorev[0].kimlik = 1;
+    _upp_gorev[0].ad = _upp_m_c("ana");
+    _upp_gorev[0].baslama = 0;
+}
+
+static void _upp_gorev_temizle(void) {
+    int k;
+    for (k = 1; k < _UPP_GOREV_N; k++) {
+        UppGorev* g = &_upp_gorev[k];
+        if (k != _upp_gorev_cur && g->durum == _UPP_G_BITTI) {
+            UPP_BIRAK(g->yigin);
+            upp_metin_release(g->ad);
+            g->yigin = NULL;
+            g->ad = NULL;
+            g->durum = _UPP_G_BOS;
+        }
+    }
+}
+
+/* Sıradaki hazır görev (şimdiki görev en sona bakılır); yoksa -1. */
+static int _upp_gorev_sec(void) {
+    int i;
+    for (i = 1; i <= _UPP_GOREV_N; i++) {
+        int k = (_upp_gorev_cur + i) % _UPP_GOREV_N;
+        UppGorev* g = &_upp_gorev[k];
+        if (g->durum == _UPP_G_UYUYOR && _upp_tik >= g->uyan) {
+            g->durum = _UPP_G_HAZIR;
+        }
+        if (g->durum == _UPP_G_HAZIR) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+static void _upp_gecis(void) {
+    for (;;) {
+        int k = _upp_gorev_sec();
+        if (k >= 0) {
+            if (k != _upp_gorev_cur) {
+                int eski = _upp_gorev_cur;
+                _upp_gorev_cur = k;
+                _upp_gorev_gec(&_upp_gorev[eski].rsp, _upp_gorev[k].rsp);
+                _upp_gorev_temizle();
+            }
+            return;
+        }
+        __asm__ volatile("sti; hlt");
+    }
+}
+
+static int _upp_baska_hazir(void) {
+    int k;
+    if (!_upp_gorev_kuruldu) {
+        return 0;
+    }
+    k = _upp_gorev_sec();
+    return k >= 0 && k != _upp_gorev_cur;
+}
+
+static void _upp_gorev_giris(void) {
+    UppGorev* g = &_upp_gorev[_upp_gorev_cur];
+    g->f(g->arg);
+    _upp_gorev[_upp_gorev_cur].durum = _UPP_G_BITTI;
+    _upp_gecis();
+    _upp_sonsuz_dur();
+}
+
+static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, const char* ad) {
+    int k, i;
+    UppGorev* g;
+    uint64_t* sp;
+    _upp_gorev_ilk();
+    if (!f) {
+        upp_panik("görev başlatılamadı: fonksiyon değeri 'yok'");
+    }
+    _upp_gorev_temizle();
+    for (k = 1; k < _UPP_GOREV_N; k++) {
+        if (_upp_gorev[k].durum == _UPP_G_BOS) {
+            break;
+        }
+    }
+    if (k == _UPP_GOREV_N) {
+        return -1;
+    }
+    g = &_upp_gorev[k];
+    g->yigin = (unsigned char*)UPP_AYIR(_UPP_GOREV_YIGIN);
+    if (!g->yigin) {
+        return -1;
+    }
+    sp = (uint64_t*)(((uintptr_t)(g->yigin + _UPP_GOREV_YIGIN)) & ~(uintptr_t)15u);
+    *--sp = 0;
+    *--sp = (uint64_t)(uintptr_t)_upp_gorev_giris;
+    for (i = 0; i < 6; i++) {
+        *--sp = 0;
+    }
+    g->rsp = (uint64_t)(uintptr_t)sp;
+    g->f = f;
+    g->arg = arg;
+    g->ad = upp_metin_kopya(ad ? ad : "");
+    g->kimlik = _upp_gorev_sonraki++;
+    g->baslama = _upp_tik;
+    g->uyan = 0;
+    g->durum = _UPP_G_HAZIR;
+    return g->kimlik;
+}
+
+static void upp_cekirdek_sira_ver(void) {
+    _upp_gorev_ilk();
+    _upp_gecis();
+}
+
+static int _upp_gorev_bul(long long kimlik) {
+    int k;
+    _upp_gorev_ilk();
+    for (k = 0; k < _UPP_GOREV_N; k++) {
+        int d = _upp_gorev[k].durum;
+        if ((d == _UPP_G_HAZIR || d == _UPP_G_UYUYOR) && _upp_gorev[k].kimlik == kimlik) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+static long long upp_cekirdek_gorev_kimlik(void) {
+    _upp_gorev_ilk();
+    return _upp_gorev[_upp_gorev_cur].kimlik;
+}
+
+static UppKolListe upp_cekirdek_gorev_listesi(void) {
+    UppKolListe L = {0};
+    int k;
+    _upp_gorev_ilk();
+    for (k = 0; k < _UPP_GOREV_N; k++) {
+        int d = _upp_gorev[k].durum;
+        if (d == _UPP_G_HAZIR || d == _UPP_G_UYUYOR) {
+            *(long long*)upp_liste_ekle_ptr(&L, &upp_kt_sayi) = _upp_gorev[k].kimlik;
+        }
+    }
+    return L;
+}
+
+static char* upp_cekirdek_gorev_ad(long long kimlik) {
+    int k = _upp_gorev_bul(kimlik);
+    if (k < 0) {
+        return _upp_m_c("");
+    }
+    return upp_metin_kopya(_upp_gorev[k].ad);
+}
+
+static char* upp_cekirdek_gorev_durum(long long kimlik) {
+    int k = _upp_gorev_bul(kimlik);
+    if (k < 0) {
+        return _upp_m_c("");
+    }
+    if (k == _upp_gorev_cur) {
+        return _upp_m_c("çalışıyor");
+    }
+    return _upp_m_c(_upp_gorev[k].durum == _UPP_G_UYUYOR ? "uyuyor" : "hazır");
+}
+
+static long long upp_cekirdek_gorev_baslama(long long kimlik) {
+    int k = _upp_gorev_bul(kimlik);
+    if (k < 0) {
+        return -1;
+    }
+    return (long long)(_upp_gorev[k].baslama * 1000u / _UPP_TIK_HZ);
+}
+
+static bool upp_cekirdek_gorev_oldur(long long kimlik) {
+    int k = _upp_gorev_bul(kimlik);
+    if (k <= 0) {
+        return false;
+    }
+    _upp_gorev[k].durum = _UPP_G_BITTI;
+    if (k == _upp_gorev_cur) {
+        _upp_gecis();
+    }
+    _upp_gorev_temizle();
+    return true;
+}
+
+/* =====================================================================
+ * Gerçek zamanlı saat (CMOS), güç, ekran, işlemci adı
+ * ===================================================================== */
+static uint8_t _upp_cmos(uint8_t r) {
+    _upp_outb(0x70, r);
+    return _upp_inb(0x71);
+}
+
+static int _upp_bcd(int v) {
+    return (v & 0x0F) + (v >> 4) * 10;
+}
+
+static void _upp_mk_iki(char** s, int v) {
+    char b[2];
+    b[0] = (char)('0' + (v / 10) % 10);
+    b[1] = (char)('0' + v % 10);
+    _upp_m_ekle_n(s, b, 2u, 1);
+}
+
+/* "YYYY-AA-GG SS:DD:ss" (CMOS saati; QEMU'da UTC) */
+static char* upp_cekirdek_tarih(void) {
+    int i, sn, dk, sa, gun, ay, yil, b;
+    char* s;
+    for (i = 0; i < 100000 && (_upp_cmos(0x0A) & 0x80); i++) {
+    }
+    sn = _upp_cmos(0x00);
+    dk = _upp_cmos(0x02);
+    sa = _upp_cmos(0x04);
+    gun = _upp_cmos(0x07);
+    ay = _upp_cmos(0x08);
+    yil = _upp_cmos(0x09);
+    b = _upp_cmos(0x0B);
+    if (!(b & 4)) {
+        int pm = sa & 0x80;
+        sn = _upp_bcd(sn);
+        dk = _upp_bcd(dk);
+        sa = _upp_bcd(sa & 0x7F) | pm;
+        gun = _upp_bcd(gun);
+        ay = _upp_bcd(ay);
+        yil = _upp_bcd(yil);
+    }
+    if (!(b & 2) && (sa & 0x80)) {
+        sa = ((sa & 0x7F) + 12) % 24;
+    }
+    sa &= 0x7F;
+    s = upp_mk_bas();
+    upp_mk_sayi(&s, 2000 + yil);
+    _upp_m_ekle_n(&s, "-", 1u, 1);
+    _upp_mk_iki(&s, ay);
+    _upp_m_ekle_n(&s, "-", 1u, 1);
+    _upp_mk_iki(&s, gun);
+    _upp_m_ekle_n(&s, " ", 1u, 1);
+    _upp_mk_iki(&s, sa);
+    _upp_m_ekle_n(&s, ":", 1u, 1);
+    _upp_mk_iki(&s, dk);
+    _upp_m_ekle_n(&s, ":", 1u, 1);
+    _upp_mk_iki(&s, sn);
+    return s;
+}
+
+/* ACPI kapatma (QEMU/Bochs/VirtualBox), olmazsa QEMU isa-debug-exit. */
+static void upp_cekirdek_kapat(void) {
+    __asm__ volatile("cli");
+    _upp_outw(0x604, 0x2000);
+    _upp_outw(0xB004, 0x2000);
+    _upp_outw(0x4004, 0x3400);
+    _upp_outl(0xf4, 0);
+    _upp_sonsuz_dur();
+}
+
+/* 8042 klavye denetleyicisiyle sıfırlama; olmazsa üçlü hata. */
+static void upp_cekirdek_yeniden_baslat(void) {
+    int i;
+    UppIdtGosterge bos;
+    __asm__ volatile("cli");
+    for (i = 0; i < 100000 && (_upp_inb(0x64) & 2u); i++) {
+    }
+    _upp_outb(0x64, 0xFE);
+    bos.sinir = 0;
+    bos.taban = 0;
+    __asm__ volatile("lidt %0\n int3" : : "m"(bos));
+    _upp_sonsuz_dur();
+}
+
+static void upp_cekirdek_ekran_temizle(void) {
+    const char* e = "\x1b[2J\x1b[H";
+    size_t i;
+    for (i = 0; e[i]; i++) {
+        _upp_seri_bayt((unsigned char)e[i]);
+    }
+    _upp_vga_temizle();
+}
+
+static char* upp_cekirdek_islemci(void) {
+    uint32_t r[12];
+    uint32_t a, b, c, d;
+    unsigned i;
+    char* s;
+    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000000u));
+    if (a < 0x80000004u) {
+        uint32_t v[3];
+        __asm__ volatile("cpuid" : "=a"(a), "=b"(v[0]), "=c"(v[2]), "=d"(v[1]) : "a"(0u));
+        s = upp_mk_bas();
+        _upp_m_ekle_n(&s, (const char*)v, 12u, 1);
+        return s;
+    }
+    for (i = 0; i < 3u; i++) {
+        __asm__ volatile("cpuid" : "=a"(r[i * 4]), "=b"(r[i * 4 + 1]), "=c"(r[i * 4 + 2]), "=d"(r[i * 4 + 3]) : "a"(0x80000002u + i));
+    }
+    {
+        const char* p = (const char*)r;
+        size_t bas = 0, son = 48;
+        while (bas < son && p[bas] == ' ') bas++;
+        while (son > bas && (p[son - 1] == 0 || p[son - 1] == ' ')) son--;
+        s = upp_mk_bas();
+        _upp_m_ekle_n(&s, p + bas, son - bas, 1);
+    }
+    return s;
+}
+
+/* =====================================================================
+ * ATA PIO disk sürücüsü: birincil/ikincil kanal, ana/yardımcı sürücü
+ * (QEMU -drive if=ide,index=0..3 → disk 0..3). Kesmesiz (nIEN), yoklamalı.
+ * LBA28, gerektiğinde LBA48. Sektör 512 bayt.
+ * ===================================================================== */
+typedef struct {
+    int var;
+    int lba48;
+    uint64_t sektor;
+    char model[41];
+} _UppDisk;
+
+static _UppDisk _upp_disk[4];
+static int _upp_disk_tarandi = 0;
+
+static uint16_t _upp_ata_taban(int d) { return d < 2 ? 0x1F0 : 0x170; }
+static uint16_t _upp_ata_denetim(int d) { return d < 2 ? 0x3F6 : 0x376; }
+
+static void _upp_ata_400ns(int d) {
+    int i;
+    for (i = 0; i < 4; i++) {
+        (void)_upp_inb(_upp_ata_denetim(d));
+    }
+}
+
+/* BSY bitinin düşmesini bekler; 0 = tamam, -1 = zaman aşımı/hata. */
+static int _upp_ata_bekle(int d, int drq) {
+    uint16_t b = _upp_ata_taban(d);
+    long i;
+    for (i = 0; i < 5000000L; i++) {
+        uint8_t s = _upp_inb((uint16_t)(b + 7));
+        if (s == 0xFF) {
+            return -1;
+        }
+        if (s & 0x80) {
+            continue;
+        }
+        if (s & 0x21) {
+            return -1;
+        }
+        if (!drq || (s & 0x08)) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static void _upp_disk_tara(void) {
+    int d;
+    if (_upp_disk_tarandi) {
+        return;
+    }
+    _upp_disk_tarandi = 1;
+    for (d = 0; d < 4; d++) {
+        uint16_t b = _upp_ata_taban(d);
+        uint16_t w[256];
+        uint8_t s;
+        int i;
+        _upp_disk[d].var = 0;
+        _upp_outb(_upp_ata_denetim(d), 0x02);
+        _upp_outb((uint16_t)(b + 6), (uint8_t)(0xA0 | ((d & 1) << 4)));
+        _upp_ata_400ns(d);
+        _upp_outb((uint16_t)(b + 2), 0);
+        _upp_outb((uint16_t)(b + 3), 0);
+        _upp_outb((uint16_t)(b + 4), 0);
+        _upp_outb((uint16_t)(b + 5), 0);
+        _upp_outb((uint16_t)(b + 7), 0xEC);
+        s = _upp_inb((uint16_t)(b + 7));
+        if (s == 0 || s == 0xFF) {
+            continue;
+        }
+        for (i = 0; i < 1000000 && (_upp_inb((uint16_t)(b + 7)) & 0x80); i++) {
+        }
+        if (_upp_inb((uint16_t)(b + 4)) != 0 || _upp_inb((uint16_t)(b + 5)) != 0) {
+            continue; /* ATAPI ya da SATA: desteklenmiyor */
+        }
+        if (_upp_ata_bekle(d, 1) != 0) {
+            continue;
+        }
+        for (i = 0; i < 256; i++) {
+            w[i] = _upp_inw(b);
+        }
+        _upp_disk[d].var = 1;
+        _upp_disk[d].lba48 = (w[83] & (1u << 10)) != 0;
+        if (_upp_disk[d].lba48) {
+            _upp_disk[d].sektor = (uint64_t)w[100] | ((uint64_t)w[101] << 16) | ((uint64_t)w[102] << 32) | ((uint64_t)w[103] << 48);
+        } else {
+            _upp_disk[d].sektor = (uint64_t)w[60] | ((uint64_t)w[61] << 16);
+        }
+        for (i = 0; i < 20; i++) {
+            _upp_disk[d].model[2 * i] = (char)(w[27 + i] >> 8);
+            _upp_disk[d].model[2 * i + 1] = (char)(w[27 + i] & 0xFF);
+        }
+        _upp_disk[d].model[40] = 0;
+        for (i = 39; i >= 0 && _upp_disk[d].model[i] == ' '; i--) {
+            _upp_disk[d].model[i] = 0;
+        }
+    }
+}
+
+static bool upp_cekirdek_disk_var(long long d) {
+    _upp_disk_tara();
+    return d >= 0 && d < 4 && _upp_disk[d].var;
+}
+
+static long long upp_cekirdek_disk_sektor(long long d) {
+    if (!upp_cekirdek_disk_var(d)) {
+        return 0;
+    }
+    return (long long)_upp_disk[d].sektor;
+}
+
+static char* upp_cekirdek_disk_model(long long d) {
+    if (!upp_cekirdek_disk_var(d)) {
+        return _upp_m_c("");
+    }
+    return _upp_m_c(_upp_disk[d].model);
+}
+
+/* adet sektörü (≤ 256) tek komutla aktarır. */
+static int _upp_ata_aktar(int d, uint64_t lba, int adet, unsigned char* p, int yaz) {
+    uint16_t b = _upp_ata_taban(d);
+    int i, k;
+    if (_upp_ata_bekle(d, 0) != 0) {
+        return 0;
+    }
+    if (_upp_disk[d].lba48) {
+        _upp_outb((uint16_t)(b + 6), (uint8_t)(0x40 | ((d & 1) << 4)));
+        _upp_ata_400ns(d);
+        _upp_outb((uint16_t)(b + 2), (uint8_t)((adet >> 8) & 0xFF));
+        _upp_outb((uint16_t)(b + 3), (uint8_t)(lba >> 24));
+        _upp_outb((uint16_t)(b + 4), (uint8_t)(lba >> 32));
+        _upp_outb((uint16_t)(b + 5), (uint8_t)(lba >> 40));
+        _upp_outb((uint16_t)(b + 2), (uint8_t)(adet & 0xFF));
+        _upp_outb((uint16_t)(b + 3), (uint8_t)lba);
+        _upp_outb((uint16_t)(b + 4), (uint8_t)(lba >> 8));
+        _upp_outb((uint16_t)(b + 5), (uint8_t)(lba >> 16));
+        _upp_outb((uint16_t)(b + 7), yaz ? 0x34 : 0x24);
+    } else {
+        _upp_outb((uint16_t)(b + 6), (uint8_t)(0xE0 | ((d & 1) << 4) | ((lba >> 24) & 0x0F)));
+        _upp_ata_400ns(d);
+        _upp_outb((uint16_t)(b + 2), (uint8_t)(adet & 0xFF));
+        _upp_outb((uint16_t)(b + 3), (uint8_t)lba);
+        _upp_outb((uint16_t)(b + 4), (uint8_t)(lba >> 8));
+        _upp_outb((uint16_t)(b + 5), (uint8_t)(lba >> 16));
+        _upp_outb((uint16_t)(b + 7), yaz ? 0x30 : 0x20);
+    }
+    for (k = 0; k < adet; k++) {
+        _upp_ata_400ns(d);
+        if (_upp_ata_bekle(d, 1) != 0) {
+            return 0;
+        }
+        for (i = 0; i < 256; i++) {
+            unsigned char* q = p + (size_t)k * 512u + (size_t)i * 2u;
+            if (yaz) {
+                _upp_outw(b, (uint16_t)(q[0] | (q[1] << 8)));
+            } else {
+                uint16_t w = _upp_inw(b);
+                q[0] = (unsigned char)w;
+                q[1] = (unsigned char)(w >> 8);
+            }
+        }
+    }
+    if (yaz) {
+        _upp_outb((uint16_t)(b + 7), _upp_disk[d].lba48 ? 0xEA : 0xE7);
+        if (_upp_ata_bekle(d, 0) != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static bool _upp_disk_gc(long long d, long long lba, long long adet, long long t, long long ofs, int yaz) {
+    unsigned char* p;
+    if (!upp_cekirdek_disk_var(d) || lba < 0 || adet < 0 || (uint64_t)(lba + adet) > _upp_disk[d].sektor) {
+        return false;
+    }
+    p = _upp_tampon_p(t, ofs, adet * 512);
+    while (adet > 0) {
+        int n = adet > 128 ? 128 : (int)adet;
+        if (!_upp_ata_aktar((int)d, (uint64_t)lba, n, p, yaz)) {
+            return false;
+        }
+        adet -= n;
+        lba += n;
+        p += (size_t)n * 512u;
+    }
+    return true;
+}
+
+static bool upp_cekirdek_disk_oku(long long d, long long lba, long long adet, long long t, long long ofs) {
+    return _upp_disk_gc(d, lba, adet, t, ofs, 0);
+}
+
+static bool upp_cekirdek_disk_yaz(long long d, long long lba, long long adet, long long t, long long ofs) {
+    return _upp_disk_gc(d, lba, adet, t, ofs, 1);
+}
+
 /* ---- girdi: PS/2 kuyruğu + COM1 (UTF-8) ---- */
 static int _upp_seri_var(void) {
     _upp_seri_kur();
     return (_upp_inb(_UPP_COM1 + 5) & 1u) != 0;
 }
 
+static int _upp_seri_son_cr = 0;
+
+/* Seri girdiden bir kod noktası; CR → LF, CR LF çifti tek satır sonudur (0 = tuş yok). */
 static uint32_t _upp_seri_cp(void) {
     uint32_t c = _upp_inb(_UPP_COM1);
+    if (c == '\n' && _upp_seri_son_cr) {
+        _upp_seri_son_cr = 0;
+        return 0;
+    }
+    _upp_seri_son_cr = c == '\r';
     int ek = 0;
     if (c >= 0xF0) { ek = 3; c &= 0x07u; }
     else if (c >= 0xE0) { ek = 2; c &= 0x0Fu; }
@@ -2531,6 +3568,7 @@ static long long upp_cekirdek_tus_oku(void) {
     return 0;
 }
 
+/* Tuş gelene kadar bekler; bu sırada hazır görevler çalışır. */
 static long long upp_cekirdek_tus_bekle(void) {
     upp_cekirdek_kesmeler_kur();
     for (;;) {
@@ -2538,7 +3576,11 @@ static long long upp_cekirdek_tus_bekle(void) {
         if (c) {
             return c;
         }
-        __asm__ volatile("hlt");
+        if (_upp_baska_hazir()) {
+            _upp_gecis();
+        } else {
+            __asm__ volatile("hlt");
+        }
     }
 }
 
@@ -2555,9 +3597,10 @@ static void upp_uyut(long long ms) {
         return;
     }
     hedef = _upp_tik + (uint64_t)ms * _UPP_TIK_HZ / 1000u;
-    while (_upp_tik < hedef) {
-        __asm__ volatile("hlt");
-    }
+    _upp_gorev_ilk();
+    _upp_gorev[_upp_gorev_cur].uyan = hedef;
+    _upp_gorev[_upp_gorev_cur].durum = _UPP_G_UYUYOR;
+    _upp_gecis();
 }
 
 /* Satır okur: klavye ya da seri girdi; yankılar, geri silme destekli. */

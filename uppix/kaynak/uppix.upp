@@ -1,0 +1,272 @@
+// Uppix — u++ ile yazılmış Unix benzeri işletim sistemi.
+// Bu dosya açılışı yapar: çekirdek günlüğü, dosya sistemi, /etc, komut tablosu,
+// /etc/profile ve oturum kabuğu. Giriş noktası uppix_baslat()'tır.
+
+kullan "yardimci.upp";
+kullan "cikti.upp";
+kullan "vfs.upp";
+kullan "blok.upp";
+kullan "ext4.upp";
+kullan "fat.upp";
+kullan "exfat.upp";
+kullan "satir.upp";
+kullan "kabuk.upp";
+kullan "komut_dosya.upp";
+kullan "komut_metin.upp";
+kullan "komut_sistem.upp";
+kullan "komut_disk.upp";
+
+sabit metin UPPIX_SURUM = "0.2.0";
+
+liste[metin] g_dmesg;
+
+fonk klog(metin m) -> bos {
+    sayi t = upp.zaman();
+    metin z = "[" + sag_hizala("{t / 1000}", 5) + "." + sifir_doldur(t % 1000, 3) + "] " + m;
+    g_dmesg.ekle(z);
+    upp.satir_yaz("\e[90m" + z + "\e[0m");
+}
+
+fonk komutlari_kur() -> bos {
+    komut_ekle("alias", k_alias, "takma ad tanımla / listele");
+    komut_ekle("basename", k_basename, "yolun son parçası");
+    komut_ekle("blkid", k_blkid, "blok aygıtlarının türü ve etiketi");
+    komut_ekle("cat", k_cat, "dosyaları birleştirip yazdır (-n)");
+    komut_ekle("cd", k_cd, "dizin değiştir (cd -, cd ~)");
+    komut_ekle("chmod", k_chmod, "izinleri değiştir (755, +x)");
+    komut_ekle("clear", k_clear, "ekranı temizle");
+    komut_ekle("cp", k_cp, "kopyala (-r)");
+    komut_ekle("cut", k_cut, "alan/karakter kes (-d -f -c)");
+    komut_ekle("date", k_date, "tarih ve saat");
+    komut_ekle("df", k_df, "dosya sistemi doluluğu (-h)");
+    komut_ekle("dirname", k_dirname, "yolun dizin kısmı");
+    komut_ekle("dmesg", k_dmesg, "çekirdek günlüğü");
+    komut_ekle("du", k_du, "disk kullanımı (-s -h)");
+    komut_ekle("echo", k_echo, "metin yazdır (-n -e)");
+    komut_ekle("env", k_env, "ortam değişkenleri");
+    komut_ekle("exit", k_exit, "kabuktan çık");
+    komut_ekle("export", k_export, "ortam değişkeni ata");
+    komut_ekle("expr", k_expr, "tamsayı aritmetiği");
+    komut_ekle("false", k_false, "başarısız (1) dön");
+    komut_ekle("find", k_find, "dosya ara (-name -type)");
+    komut_ekle("free", k_free, "bellek durumu (-h)");
+    komut_ekle("grep", k_grep, "satır ara (-i -v -n -c, ^ $)");
+    komut_ekle("head", k_head, "ilk satırlar (-n N)");
+    komut_ekle("help", k_help, "bu liste");
+    komut_ekle("history", k_history, "komut geçmişi (-c)");
+    komut_ekle("hostname", k_hostname, "makine adı");
+    komut_ekle("id", k_id, "kullanıcı kimliği");
+    komut_ekle("jobs", k_jobs, "arka plan işleri");
+    komut_ekle("kill", k_kill, "süreci sonlandır (PID, %iş)");
+    komut_ekle("lsblk", k_lsblk, "diskler ve bölümler");
+    komut_ekle("ls", k_ls, "dizin listele (-l -a -h -1)");
+    komut_ekle("mkdir", k_mkdir, "dizin oluştur (-p)");
+    komut_ekle("mount", k_mount, "dosya sistemi bağla / listele (-t -o ro)");
+    komut_ekle("umount", k_umount, "dosya sistemini ayır");
+    komut_ekle("mv", k_mv, "taşı / yeniden adlandır");
+    komut_ekle("nproc", k_nproc, "işlemci sayısı");
+    komut_ekle("poweroff", k_poweroff, "makineyi kapat");
+    komut_ekle("halt", k_poweroff, "makineyi kapat");
+    komut_ekle("shutdown", k_poweroff, "makineyi kapat");
+    komut_ekle("printenv", k_env, "ortam değişkeni yazdır");
+    komut_ekle("ps", k_ps, "süreçler");
+    komut_ekle("pwd", k_pwd, "çalışma dizini");
+    komut_ekle("reboot", k_reboot, "yeniden başlat");
+    komut_ekle("rev", k_rev, "satırları ters çevir");
+    komut_ekle("rm", k_rm, "sil (-r -f)");
+    komut_ekle("rmdir", k_rmdir, "boş dizini sil");
+    komut_ekle("seq", k_seq, "sayı dizisi");
+    komut_ekle("sh", k_sh, "betik çalıştır (sh dosya, sh -c)");
+    komut_ekle("sleep", k_sleep, "bekle (1, 0.5, 300ms)");
+    komut_ekle("sort", k_sort, "sırala (-r -n -u)");
+    komut_ekle("source", k_source, "betiği bu kabukta çalıştır");
+    komut_ekle(".", k_source, "betiği bu kabukta çalıştır");
+    komut_ekle("stat", k_stat, "dosya bilgisi");
+    komut_ekle("sync", k_sync, "bekleyen yazmaları diske aktar");
+    komut_ekle("tail", k_tail, "son satırlar (-n N)");
+    komut_ekle("tee", k_tee, "girdiyi dosyaya ve çıktıya yaz (-a)");
+    komut_ekle("test", k_test, "koşul değerlendir");
+    komut_ekle("[", k_test, "koşul değerlendir");
+    komut_ekle("time", k_time, "komut süresini ölç");
+    komut_ekle("touch", k_touch, "dosya oluştur / zamanını güncelle");
+    komut_ekle("tr", k_tr, "karakter çevir/sil (-d)");
+    komut_ekle("tree", k_tree, "dizin ağacı");
+    komut_ekle("true", k_true, "başarılı (0) dön");
+    komut_ekle("uname", k_uname, "sistem bilgisi (-a)");
+    komut_ekle("unalias", k_unalias, "takma adı kaldır");
+    komut_ekle("uniq", k_uniq, "art arda tekrarları ayıkla (-c -d -u)");
+    komut_ekle("unset", k_unset, "ortam değişkenini sil");
+    komut_ekle("uppfetch", k_uppfetch, "sistem özeti");
+    komut_ekle("uptime", k_uptime, "çalışma süresi (-p)");
+    komut_ekle("wc", k_wc, "satır/kelime/bayt say (-l -w -c)");
+    komut_ekle("which", k_which, "komutun yolu");
+    komut_ekle("whoami", k_whoami, "kullanıcı adı");
+}
+
+// Yalnızca eksik dosyaları oluşturur (ext4 kökte ilk açılış ya da ramfs).
+fonk etc_dosya(metin yol, metin icerik, sayi kip) -> bos {
+    eger (fs_coz(yol) < 0) { fs_dosya(yol, icerik, kip); }
+}
+
+fonk etc_kur() -> bos {
+    etc_dosya("/etc/hostname", "uppix\n", 420);
+    etc_dosya("/etc/passwd", "root:x:0:0:root:/root:/bin/sh\n", 420);
+    etc_dosya("/etc/group", "root:x:0:\n", 420);
+    etc_dosya("/etc/shells", "/bin/sh\n", 420);
+    etc_dosya("/etc/os-release", "NAME=\"Uppix\"\nVERSION=\"" + UPPIX_SURUM + "\"\nID=uppix\nPRETTY_NAME=\"Uppix " + UPPIX_SURUM + " (u++)\"\n", 420);
+    metin motd = "\n";
+    motd += "  Uppix'e hoş geldiniz — tamamen u++ ile yazılmış bir Unix benzeri sistem.\n";
+    motd += "\n";
+    motd += "  'help' komutları listeler, 'uppfetch' sistem özetini gösterir.\n";
+    motd += "  Dosya sistemi RAM'dedir (ramfs); kapatınca içerik kaybolur.\n";
+    motd += "\n";
+    etc_dosya("/etc/motd", motd, 420);
+    metin profil = "# /etc/profile — her oturumda çalışır\n";
+    profil += "export PATH=/bin:/usr/bin\n";
+    profil += "alias ll='ls -l'\n";
+    profil += "alias la='ls -a'\n";
+    profil += "alias l='ls -1'\n";
+    profil += "alias ..='cd ..'\n";
+    etc_dosya("/etc/profile", profil, 420);
+    metin beni = "Uppix ramfs üzerinde çalışıyor.\n";
+    beni += "Bir şeyler deneyin:\n";
+    beni += "  ls -l /\n";
+    beni += "  cat /proc/meminfo\n";
+    beni += "  echo merhaba > /tmp/not.txt && cat /tmp/not.txt\n";
+    beni += "  seq 10 | grep 1 | wc -l\n";
+    beni += "  sleep 3 && echo bitti &\n";
+    beni += "  ps\n";
+    beni += "  sh /usr/share/ornekler/selam.sh Dünya\n";
+    etc_dosya("/root/beni_oku.txt", beni, 420);
+    fs_dizin("/usr/share/ornekler", 493);
+    metin betik = "#!/bin/sh\n";
+    betik += "# Örnek betik: konum parametreleri ve koşullar\n";
+    betik += "echo \"Merhaba, $1!\"\n";
+    betik += "echo \"Bu betik $# argüman aldı: $@\"\n";
+    betik += "test -d /tmp && echo \"/tmp var\" || echo \"/tmp yok\"\n";
+    betik += "echo \"Kabuk süreci: $$\"\n";
+    etc_dosya("/usr/share/ornekler/selam.sh", betik, 493);
+    metin sayac = "#!/bin/sh\n";
+    sayac += "# Arka planda saniyede bir yazar: sh /usr/share/ornekler/sayac.sh 5 &\n";
+    sayac += "echo \"sayaç başladı ($1 adım)\"\n";
+    sayac += "sleep 1 && echo \"  tik 1\"\n";
+    sayac += "sleep 1 && echo \"  tik 2\"\n";
+    sayac += "sleep 1 && echo \"  tik 3\"\n";
+    sayac += "echo \"sayaç bitti\"\n";
+    etc_dosya("/usr/share/ornekler/sayac.sh", sayac, 493);
+}
+
+fonk bin_kur() -> bos {
+    sayi bin = fs_coz("/bin");
+    liste[metin] adlar;
+    her (oto ad in g_komut) { adlar.ekle(ad); }
+    her (oto ad in adlari_sirala(adlar)) {
+        eger (ad == "." || ad == "[") { devam; }
+        sayi no = fs_dugum_ekle(bin, ad, D_DOSYA, 493);
+        g_fs[no].veri = "#!/yerlesik/" + ad + "\n";
+    }
+}
+
+// Diskleri tarar; ext4 kökü bağlar ("uppix-kok" etiketli olan önce). Dönüş: kök ext4 mü.
+fonk diskleri_kur() -> mantik {
+    blok_tara();
+    her (oto b in g_blok) {
+        metin tanim = "/dev/" + b.ad + ": " + boyut_insan(b.sektor * 512);
+        eger (b.bolum == 0) { tanim += " " + upp.cekirdek.disk_model(b.disk); }
+        eger (b.fs != "") { tanim += ", " + b.fs; }
+        eger (b.etiket != "") { tanim += " \"" + b.etiket + "\""; }
+        klog("blok: " + tanim);
+    }
+    sayi kok = -1;
+    dongu (sayi i = 0; i < g_blok.uzunluk(); i += 1) {
+        eger (g_blok[i].fs == "ext4" && (kok < 0 || g_blok[i].etiket == "uppix-kok")) {
+            eger (kok < 0 || g_blok[kok].etiket != "uppix-kok") { kok = i; }
+        }
+    }
+    eger (kok < 0) {
+        klog("kök: ext4 disk bulunamadı, RAM'deki rootfs kullanılıyor");
+        don yanlis;
+    }
+    eger (fs_bagla("ext4", "/dev/" + g_blok[kok].ad, kok, 0, yanlis) < 0) {
+        klog("kök: /dev/" + g_blok[kok].ad + " bağlanamadı: " + g_fs_hata);
+        don yanlis;
+    }
+    metin kip = "rw";
+    eger (g_bag[g_fs[0].bag].salt_okunur) { kip = "ro (desteklenmeyen özellik)"; }
+    klog("ext4: /dev/" + g_blok[kok].ad + " kök (/) olarak bağlandı, " + kip);
+    don dogru;
+}
+
+// Kök dışındaki dosya sistemlerini /mnt/<aygıt> altına bağlar.
+fonk diger_diskleri_bagla() -> bos {
+    sayi mnt = fs_coz("/mnt");
+    dongu (sayi i = 0; i < g_blok.uzunluk(); i += 1) {
+        eger (g_blok[i].fs == "") { devam; }
+        mantik bagli = yanlis;
+        her (oto x in g_bag) {
+            eger (x.etkin && x.aygit == "/dev/" + g_blok[i].ad) { bagli = dogru; }
+        }
+        eger (bagli) { devam; }
+        sayi d = fs_yeni(mnt, g_blok[i].ad, D_DIZIN, 493);
+        eger (d < 0) { devam; }
+        eger (fs_bagla(g_blok[i].fs, "/dev/" + g_blok[i].ad, i, d, yanlis) < 0) {
+            klog(g_blok[i].fs + ": /dev/" + g_blok[i].ad + " bağlanamadı: " + g_fs_hata);
+            fs_sil(d);
+        } yoksa {
+            klog(g_blok[i].fs + ": /dev/" + g_blok[i].ad + " → /mnt/" + g_blok[i].ad);
+        }
+    }
+}
+
+fonk ortam_kur() -> bos {
+    g_ortam.koy("HOME", "/root");
+    g_ortam.koy("USER", "root");
+    g_ortam.koy("LOGNAME", "root");
+    g_ortam.koy("SHELL", "/bin/sh");
+    g_ortam.koy("PATH", "/bin:/usr/bin");
+    g_ortam.koy("TERM", "vt100");
+    g_ortam.koy("HOSTNAME", "uppix");
+    g_ortam.koy("PWD", "/root");
+}
+
+fonk uppix_baslat() -> bos {
+    upp.cekirdek.ekran_temizle();
+    upp.satir_yaz("\e[1;36mUppix " + UPPIX_SURUM + "\e[0m — u++ ile yazılmış Unix benzeri işletim sistemi");
+    klog("Uppix " + UPPIX_SURUM + " çekirdeği başlıyor (x86_64, Multiboot)");
+    klog("işlemci: " + upp.cekirdek.islemci());
+    klog("bellek: {upp.cekirdek.bellek_toplam() / 1048576} MiB RAM, çekirdek yığını {upp.cekirdek.yigin_boyut() / 1048576} MiB");
+    klog("kesmeler: IDT 48 giriş, PIC yeniden eşlendi, PIT 1000 Hz");
+    klog("girdi: PS/2 klavye (Türkçe Q), COM1 seri 115200");
+    klog("saat: CMOS RTC " + upp.cekirdek.tarih() + " UTC");
+    zaman_kur();
+    ext4_kaydet();
+    fat_kaydet();
+    exfat_kaydet();
+    fs_kok_kur();
+    mantik disk_kok = diskleri_kur();
+    fs_sanal_kur();
+    klog("procfs: /proc, devfs: /dev, tmpfs: /tmp ve /mnt bağlandı");
+    diger_diskleri_bagla();
+    ortam_kur();
+    komutlari_kur();
+    etc_kur();
+    bin_kur();
+    sayi hn = fs_coz("/etc/hostname");
+    eger (hn >= 0) {
+        metin ad = upp.metin.kirp(fs_oku(hn));
+        eger (ad != "") { g_ortam.koy("HOSTNAME", ad); }
+    }
+    eger (!disk_kok) { klog("rootfs: kalıcı değil; değişiklikler kapatınca kaybolur"); }
+    klog("uppsh: {g_komut.uzunluk()} yerleşik komut /bin altında");
+    klog("görevler: işbirlikçi zamanlayıcı hazır (en çok 32 görev)");
+    g_cwd = fs_coz("/root");
+    liste[metin] profil_arg;
+    profil_arg.ekle("source");
+    profil_arg.ekle("/etc/profile");
+    k_source(profil_arg, yok);
+    terminale_yaz(fs_oku(fs_coz("/etc/motd")));
+    kabuk_dongu();
+    fs_tum_ayir();
+    upp.satir_yaz("Oturum kapandı.");
+    upp.cekirdek.kapat();
+}

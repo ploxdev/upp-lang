@@ -1,0 +1,7 @@
+// Negatif: bilinmeyen kaçış dizisi sessizce harfe dönüşmez, hata verir
+// @icerir: Bilinmeyen kaçış dizisi '\q'
+
+fonk ana() -> sayi {
+    upp.satir_yaz("a\qb");
+    don 0;
+}

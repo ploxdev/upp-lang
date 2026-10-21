@@ -1,0 +1,3 @@
+# /etc/fstab — Uppix açılışta kökü (etiket uppix-kok) kendisi bağlar;
+# diğer diskler /mnt/<aygıt> altına otomatik bağlanır.
+LABEL=uppix-kok  /  ext4  rw  0 1

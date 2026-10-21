@@ -1,0 +1,1047 @@
+// Uppix — ext4 sürücüsü (okuma + yazma).
+// Okuma: extent ağaçları (her derinlik), eski usul doğrudan/dolaylı bloklar, inline/kısa
+// sembolik bağlar, htree dizinler (doğrusal tarama). Yazma: dosya içeriği (en çok 4 extent),
+// dosya/dizin oluşturma, silme, ad değiştirme/taşıma, izin ve zaman; metadata_csum
+// (CRC32C) inode, dizin bloğu, bitmap, grup tanımlayıcı ve süperblok sağlamaları.
+// Günlük (journal) kullanılmaz; htree ile dizinlenmiş dizine ekleme yapılmaz.
+
+sinif Ext4 {
+    sayi blok;
+    sayi bs;
+    sayi spb;
+    sayi grup_say;
+    sayi bpg;
+    sayi ipg;
+    sayi isz;
+    sayi ilk_veri;
+    sayi ilk_ino;
+    sayi dsz;
+    sayi inc;
+    sayi roc;
+    sayi sb;
+    sayi gdt;
+    sayi gdt_blok;
+    sayi gdt_blok_say;
+    sayi tohum;
+    mantik csum;
+    mantik yaz_ok;
+    sayi blok_say;
+    sayi kucuk;
+}
+
+liste[Ext4] g_ext4;
+liste[sayi] g_iki_us;
+
+sabit sayi E4_UZANTI = 524288;
+sabit sayi E4_DIZINLI = 4096;
+sabit sayi E4_ICERIDE = 268435456;
+sabit sayi E4_32 = 4294967296;
+
+fonk iki_us(sayi i) -> sayi {
+    eger (g_iki_us.uzunluk() == 0) {
+        sayi v = 1;
+        dongu (sayi k = 0; k < 8; k += 1) {
+            g_iki_us.ekle(v);
+            v = v * 2;
+        }
+    }
+    don g_iki_us[i];
+}
+
+fonk bit_var(sayi t, sayi i) -> mantik => (upp.tampon.oku8(t, i / 8) / iki_us(i % 8)) % 2 == 1;
+
+fonk bit_yaz(sayi t, sayi i, mantik dolu) -> bos {
+    sayi b = upp.tampon.oku8(t, i / 8);
+    sayi m = iki_us(i % 8);
+    mantik simdi_dolu = (b / m) % 2 == 1;
+    eger (dolu && !simdi_dolu) { b += m; }
+    eger (!dolu && simdi_dolu) { b -= m; }
+    upp.tampon.yaz8(t, i / 8, b);
+}
+
+fonk e4_s(sayi no) -> sayi => g_bag[g_fs[no].bag].dno;
+
+fonk e4_blok_oku(sayi s, sayi blok, sayi adet, sayi t, sayi ofs) -> mantik {
+    sayi spb = g_ext4[s].spb;
+    don blok_oku(g_ext4[s].blok, blok * spb, adet * spb, t, ofs);
+}
+
+fonk e4_blok_yaz(sayi s, sayi blok, sayi adet, sayi t, sayi ofs) -> mantik {
+    sayi spb = g_ext4[s].spb;
+    don blok_yaz(g_ext4[s].blok, blok * spb, adet * spb, t, ofs);
+}
+
+fonk e4_crc_sayi(sayi s, sayi crc, sayi deger) -> sayi {
+    sayi k = g_ext4[s].kucuk;
+    upp.tampon.yaz32(k, 0, deger);
+    don upp.tampon.crc32c(k, 0, 4, crc);
+}
+
+// ---- grup tanımlayıcıları ----
+fonk e4_gd32(sayi s, sayi g, sayi lo, sayi hi) -> sayi {
+    sayi o = g * g_ext4[s].dsz;
+    sayi v = upp.tampon.oku32(g_ext4[s].gdt, o + lo);
+    eger (g_ext4[s].dsz >= 64) { v += upp.tampon.oku32(g_ext4[s].gdt, o + hi) * E4_32; }
+    don v;
+}
+
+fonk e4_gd16(sayi s, sayi g, sayi lo, sayi hi) -> sayi {
+    sayi o = g * g_ext4[s].dsz;
+    sayi v = upp.tampon.oku16(g_ext4[s].gdt, o + lo);
+    eger (g_ext4[s].dsz >= 64) { v += upp.tampon.oku16(g_ext4[s].gdt, o + hi) * 65536; }
+    don v;
+}
+
+fonk e4_gd16_yaz(sayi s, sayi g, sayi lo, sayi hi, sayi v) -> bos {
+    sayi o = g * g_ext4[s].dsz;
+    upp.tampon.yaz16(g_ext4[s].gdt, o + lo, v % 65536);
+    eger (g_ext4[s].dsz >= 64) { upp.tampon.yaz16(g_ext4[s].gdt, o + hi, v / 65536); }
+}
+
+fonk e4_gd_bayrak(sayi s, sayi g) -> sayi => upp.tampon.oku16(g_ext4[s].gdt, g * g_ext4[s].dsz + 18);
+
+fonk e4_gd_yaz(sayi s, sayi g) -> mantik {
+    sayi dsz = g_ext4[s].dsz;
+    sayi o = g * dsz;
+    sayi gdt = g_ext4[s].gdt;
+    eger (g_ext4[s].csum) {
+        upp.tampon.yaz16(gdt, o + 30, 0);
+        sayi c = e4_crc_sayi(s, g_ext4[s].tohum, g);
+        c = upp.tampon.crc32c(gdt, o, dsz, c);
+        upp.tampon.yaz16(gdt, o + 30, c % 65536);
+    }
+    sayi bs = g_ext4[s].bs;
+    sayi bi = o / bs;
+    don e4_blok_yaz(s, g_ext4[s].gdt_blok + bi, 1, gdt, bi * bs);
+}
+
+fonk e4_sb_yaz(sayi s) -> mantik {
+    sayi sb = g_ext4[s].sb;
+    upp.tampon.yaz32(sb, 48, simdi());
+    eger (g_ext4[s].csum) {
+        upp.tampon.yaz32(sb, 1020, upp.tampon.crc32c(sb, 0, 1020, 4294967295));
+    }
+    don blok_yaz(g_ext4[s].blok, 2, 2, sb, 0);
+}
+
+fonk e4_sb_bos_blok(sayi s) -> sayi {
+    sayi sb = g_ext4[s].sb;
+    sayi v = upp.tampon.oku32(sb, 12);
+    eger ((g_ext4[s].inc / 128) % 2 == 1) { v += upp.tampon.oku32(sb, 344) * E4_32; }
+    don v;
+}
+
+fonk e4_sb_bos_blok_yaz(sayi s, sayi v) -> bos {
+    sayi sb = g_ext4[s].sb;
+    upp.tampon.yaz32(sb, 12, v % E4_32);
+    eger ((g_ext4[s].inc / 128) % 2 == 1) { upp.tampon.yaz32(sb, 344, v / E4_32); }
+}
+
+// ---- inode'lar ----
+fonk e4_ino_bayt(sayi s, sayi ino) -> sayi {
+    sayi g = (ino - 1) / g_ext4[s].ipg;
+    sayi i = (ino - 1) % g_ext4[s].ipg;
+    don e4_gd32(s, g, 8, 40) * g_ext4[s].bs + i * g_ext4[s].isz;
+}
+
+fonk e4_inode_oku(sayi s, sayi ino) -> sayi {
+    sayi bs = g_ext4[s].bs;
+    sayi isz = g_ext4[s].isz;
+    sayi yer = e4_ino_bayt(s, ino);
+    sayi b = upp.tampon.yeni(bs);
+    sayi it = upp.tampon.yeni(isz);
+    eger (e4_blok_oku(s, yer / bs, 1, b, 0)) { upp.tampon.kopyala(it, 0, b, yer % bs, isz); }
+    upp.tampon.birak(b);
+    don it;
+}
+
+fonk e4_inode_tohum(sayi s, sayi ino, sayi it) -> sayi {
+    sayi c = e4_crc_sayi(s, g_ext4[s].tohum, ino);
+    don e4_crc_sayi(s, c, upp.tampon.oku32(it, 100));
+}
+
+fonk e4_inode_yaz(sayi s, sayi ino, sayi it) -> mantik {
+    sayi bs = g_ext4[s].bs;
+    sayi isz = g_ext4[s].isz;
+    eger (g_ext4[s].csum) {
+        upp.tampon.yaz16(it, 124, 0);
+        mantik hi = isz > 128 && upp.tampon.oku16(it, 128) >= 4;
+        eger (hi) { upp.tampon.yaz16(it, 130, 0); }
+        sayi c = upp.tampon.crc32c(it, 0, isz, e4_inode_tohum(s, ino, it));
+        upp.tampon.yaz16(it, 124, c % 65536);
+        eger (hi) { upp.tampon.yaz16(it, 130, c / 65536); }
+    }
+    sayi yer = e4_ino_bayt(s, ino);
+    sayi b = upp.tampon.yeni(bs);
+    mantik tamam = e4_blok_oku(s, yer / bs, 1, b, 0);
+    eger (tamam) {
+        upp.tampon.kopyala(b, yer % bs, it, 0, isz);
+        tamam = e4_blok_yaz(s, yer / bs, 1, b, 0);
+    }
+    upp.tampon.birak(b);
+    don tamam;
+}
+
+fonk e4_boyut(sayi it) -> sayi => upp.tampon.oku32(it, 4) + upp.tampon.oku32(it, 108) * E4_32;
+
+fonk e4_boyut_yaz(sayi it, sayi v) -> bos {
+    upp.tampon.yaz32(it, 4, v % E4_32);
+    upp.tampon.yaz32(it, 108, v / E4_32);
+}
+
+fonk e4_zaman_yaz(sayi it, mantik degisti) -> bos {
+    sayi z = simdi();
+    upp.tampon.yaz32(it, 12, z);
+    eger (degisti) { upp.tampon.yaz32(it, 16, z); }
+}
+
+// ---- blok eşleme: (mantıksal, fiziksel, uzunluk) üçlüleri; fiziksel -1 = sıfır ----
+liste[sayi] g_e4_meta;
+
+fonk e4_kapsam_dugum(sayi s, sayi t, sayi ofs) -> liste[sayi] {
+    liste[sayi] R;
+    eger (upp.tampon.oku16(t, ofs) != 62218) { don R; }
+    sayi adet = upp.tampon.oku16(t, ofs + 2);
+    sayi derinlik = upp.tampon.oku16(t, ofs + 6);
+    dongu (sayi i = 0; i < adet; i += 1) {
+        sayi e = ofs + 12 + i * 12;
+        eger (derinlik == 0) {
+            sayi lb = upp.tampon.oku32(t, e);
+            sayi uz_ = upp.tampon.oku16(t, e + 4);
+            sayi pb = upp.tampon.oku16(t, e + 6) * E4_32 + upp.tampon.oku32(t, e + 8);
+            eger (uz_ > 32768) {
+                uz_ -= 32768;
+                pb = -1;
+            }
+            R.ekle(lb);
+            R.ekle(pb);
+            R.ekle(uz_);
+        } yoksa {
+            sayi cocuk = upp.tampon.oku32(t, e + 4) + upp.tampon.oku16(t, e + 8) * E4_32;
+            g_e4_meta.ekle(cocuk);
+            g_e4_meta.ekle(1);
+            sayi c = upp.tampon.yeni(g_ext4[s].bs);
+            eger (e4_blok_oku(s, cocuk, 1, c, 0)) {
+                her (oto x in e4_kapsam_dugum(s, c, 0)) { R.ekle(x); }
+            }
+            upp.tampon.birak(c);
+        }
+    }
+    don R;
+}
+
+// Eski usul (ext2/3) blok haritası: dolaylı bloğu çözer.
+fonk e4_dolayli(sayi s, sayi blok, sayi seviye, sayi lb_bas, liste[sayi] R) -> liste[sayi] {
+    liste[sayi] S = R;
+    eger (blok == 0) { don S; }
+    g_e4_meta.ekle(blok);
+    g_e4_meta.ekle(1);
+    sayi bs = g_ext4[s].bs;
+    sayi n = bs / 4;
+    sayi c = upp.tampon.yeni(bs);
+    eger (e4_blok_oku(s, blok, 1, c, 0)) {
+        sayi kapsam = 1;
+        dongu (sayi k = 1; k < seviye; k += 1) { kapsam = kapsam * n; }
+        dongu (sayi i = 0; i < n; i += 1) {
+            sayi p = upp.tampon.oku32(c, i * 4);
+            eger (p == 0) { devam; }
+            eger (seviye == 1) {
+                S.ekle(lb_bas + i);
+                S.ekle(p);
+                S.ekle(1);
+            } yoksa {
+                S = e4_dolayli(s, p, seviye - 1, lb_bas + i * kapsam, S);
+            }
+        }
+    }
+    upp.tampon.birak(c);
+    don S;
+}
+
+// Dosyanın kapsamları; g_e4_meta'ya meta veri bloklarını (çiftler) ekler.
+fonk e4_kapsamlar(sayi s, sayi it) -> liste[sayi] {
+    g_e4_meta.temizle();
+    sayi bayrak = upp.tampon.oku32(it, 32);
+    eger ((bayrak / E4_UZANTI) % 2 == 1) { don e4_kapsam_dugum(s, it, 40); }
+    liste[sayi] R;
+    eger ((bayrak / E4_ICERIDE) % 2 == 1) { don R; }
+    dongu (sayi i = 0; i < 12; i += 1) {
+        sayi p = upp.tampon.oku32(it, 40 + i * 4);
+        eger (p != 0) {
+            R.ekle(i);
+            R.ekle(p);
+            R.ekle(1);
+        }
+    }
+    sayi n = g_ext4[s].bs / 4;
+    R = e4_dolayli(s, upp.tampon.oku32(it, 88), 1, 12, R);
+    R = e4_dolayli(s, upp.tampon.oku32(it, 92), 2, 12 + n, R);
+    R = e4_dolayli(s, upp.tampon.oku32(it, 96), 3, 12 + n + n * n, R);
+    don R;
+}
+
+// Dosya verisini okur (boyuta kadar).
+fonk e4_veri(sayi s, sayi it) -> metin {
+    sayi boy = e4_boyut(it);
+    eger (boy == 0) { don ""; }
+    sayi bayrak = upp.tampon.oku32(it, 32);
+    sayi kip = upp.tampon.oku16(it, 0);
+    eger ((bayrak / E4_ICERIDE) % 2 == 1 || ((kip / 4096) == 10 && boy < 60 && (bayrak / E4_UZANTI) % 2 == 0)) {
+        sayi n = boy;
+        eger (n > 60) { n = 60; }
+        don upp.tampon.metin(it, 40, n);
+    }
+    sayi bs = g_ext4[s].bs;
+    sayi bloklar = (boy + bs - 1) / bs;
+    sayi t = upp.tampon.yeni(bloklar * bs);
+    liste[sayi] K = e4_kapsamlar(s, it);
+    sayi i = 0;
+    iken (i + 2 < K.uzunluk()) {
+        sayi lb = K[i];
+        sayi pb = K[i + 1];
+        sayi n2 = K[i + 2];
+        i += 3;
+        eger (pb < 0 || lb >= bloklar) { devam; }
+        eger (lb + n2 > bloklar) { n2 = bloklar - lb; }
+        e4_blok_oku(s, pb, n2, t, lb * bs);
+    }
+    metin m = upp.tampon.metin(t, 0, boy);
+    upp.tampon.birak(t);
+    don m;
+}
+
+fonk e4_tur(sayi kip) -> sayi {
+    sayi f = kip / 4096;
+    eger (f == 4) { don D_DIZIN; }
+    eger (f == 2 || f == 6 || f == 1 || f == 12) { don D_AYGIT; }
+    don D_DOSYA;
+}
+
+// ---- bitmap ve ayırma ----
+fonk e4_grup_bloklari(sayi s, sayi g) -> sayi {
+    sayi kalan = g_ext4[s].blok_say - g_ext4[s].ilk_veri - g * g_ext4[s].bpg;
+    eger (kalan > g_ext4[s].bpg) { don g_ext4[s].bpg; }
+    don kalan;
+}
+
+fonk e4_bitmap_csum(sayi s, sayi g, sayi bm, mantik blok_bitmap) -> bos {
+    eger (!g_ext4[s].csum) { don; }
+    sayi o = g * g_ext4[s].dsz;
+    sayi gdt = g_ext4[s].gdt;
+    eger (blok_bitmap) {
+        sayi c = upp.tampon.crc32c(bm, 0, g_ext4[s].bpg / 8, g_ext4[s].tohum);
+        upp.tampon.yaz16(gdt, o + 24, c % 65536);
+        eger (g_ext4[s].dsz >= 64) { upp.tampon.yaz16(gdt, o + 56, c / 65536); }
+    } yoksa {
+        sayi c2 = upp.tampon.crc32c(bm, 0, g_ext4[s].ipg / 8, g_ext4[s].tohum);
+        upp.tampon.yaz16(gdt, o + 26, c2 % 65536);
+        eger (g_ext4[s].dsz >= 64) { upp.tampon.yaz16(gdt, o + 58, c2 / 65536); }
+    }
+}
+
+// n blok ayırır; en çok 4 parça. Dönüş: [baş, uzunluk, ...]; yer yoksa boş.
+fonk e4_bloklar_ayir(sayi s, sayi n) -> liste[sayi] {
+    liste[sayi] R;
+    eger (n <= 0) { don R; }
+    sayi bs = g_ext4[s].bs;
+    sayi kalan = n;
+    // 1. aşama: yer bul (değiştirmeden)
+    liste[sayi] aday;
+    sayi bm = upp.tampon.yeni(bs);
+    dongu (sayi g = 0; g < g_ext4[s].grup_say && kalan > 0; g += 1) {
+        eger ((e4_gd_bayrak(s, g) / 2) % 2 == 1 || e4_gd16(s, g, 12, 44) == 0) { devam; }
+        eger (!e4_blok_oku(s, e4_gd32(s, g, 0, 32), 1, bm, 0)) { devam; }
+        sayi nb = e4_grup_bloklari(s, g);
+        sayi i = 0;
+        iken (i < nb && kalan > 0) {
+            eger (i % 8 == 0 && i + 8 <= nb && upp.tampon.oku8(bm, i / 8) == 255) {
+                i += 8;
+                devam;
+            }
+            eger (bit_var(bm, i)) {
+                i += 1;
+                devam;
+            }
+            sayi bas = i;
+            iken (i < nb && kalan > 0 && !bit_var(bm, i) && i - bas < 32768) {
+                i += 1;
+                kalan -= 1;
+            }
+            aday.ekle(g);
+            aday.ekle(bas);
+            aday.ekle(i - bas);
+            eger (aday.uzunluk() >= 12 && kalan > 0) {
+                upp.tampon.birak(bm);
+                don R;
+            }
+        }
+    }
+    eger (kalan > 0) {
+        upp.tampon.birak(bm);
+        don R;
+    }
+    // 2. aşama: işaretle
+    sayi k = 0;
+    iken (k + 2 < aday.uzunluk()) {
+        sayi g2 = aday[k];
+        sayi bas2 = aday[k + 1];
+        sayi uzn = aday[k + 2];
+        k += 3;
+        sayi bmb = e4_gd32(s, g2, 0, 32);
+        e4_blok_oku(s, bmb, 1, bm, 0);
+        dongu (sayi j = 0; j < uzn; j += 1) { bit_yaz(bm, bas2 + j, dogru); }
+        e4_blok_yaz(s, bmb, 1, bm, 0);
+        e4_bitmap_csum(s, g2, bm, dogru);
+        e4_gd16_yaz(s, g2, 12, 44, e4_gd16(s, g2, 12, 44) - uzn);
+        e4_gd_yaz(s, g2);
+        R.ekle(g_ext4[s].ilk_veri + g2 * g_ext4[s].bpg + bas2);
+        R.ekle(uzn);
+    }
+    upp.tampon.birak(bm);
+    e4_sb_bos_blok_yaz(s, e4_sb_bos_blok(s) - n);
+    e4_sb_yaz(s);
+    don R;
+}
+
+fonk e4_bloklar_birak(sayi s, sayi bas, sayi n) -> bos {
+    eger (n <= 0 || bas <= 0) { don; }
+    sayi bs = g_ext4[s].bs;
+    sayi bm = upp.tampon.yeni(bs);
+    sayi b = bas;
+    sayi son = bas + n;
+    iken (b < son) {
+        sayi g = (b - g_ext4[s].ilk_veri) / g_ext4[s].bpg;
+        sayi grup_son = g_ext4[s].ilk_veri + (g + 1) * g_ext4[s].bpg;
+        sayi parca_son = son;
+        eger (parca_son > grup_son) { parca_son = grup_son; }
+        sayi bmb = e4_gd32(s, g, 0, 32);
+        e4_blok_oku(s, bmb, 1, bm, 0);
+        sayi birakilan = 0;
+        dongu (sayi x = b; x < parca_son; x += 1) {
+            sayi i = x - g_ext4[s].ilk_veri - g * g_ext4[s].bpg;
+            eger (bit_var(bm, i)) {
+                bit_yaz(bm, i, yanlis);
+                birakilan += 1;
+            }
+        }
+        e4_blok_yaz(s, bmb, 1, bm, 0);
+        e4_bitmap_csum(s, g, bm, dogru);
+        e4_gd16_yaz(s, g, 12, 44, e4_gd16(s, g, 12, 44) + birakilan);
+        e4_gd_yaz(s, g);
+        e4_sb_bos_blok_yaz(s, e4_sb_bos_blok(s) + birakilan);
+        b = parca_son;
+    }
+    upp.tampon.birak(bm);
+    e4_sb_yaz(s);
+}
+
+fonk e4_inode_ayir(sayi s, mantik dizin) -> sayi {
+    sayi bs = g_ext4[s].bs;
+    sayi ipg = g_ext4[s].ipg;
+    sayi bm = upp.tampon.yeni(bs);
+    dongu (sayi g = 0; g < g_ext4[s].grup_say; g += 1) {
+        eger (e4_gd_bayrak(s, g) % 2 == 1 || e4_gd16(s, g, 14, 46) == 0) { devam; }
+        sayi bmb = e4_gd32(s, g, 4, 36);
+        eger (!e4_blok_oku(s, bmb, 1, bm, 0)) { devam; }
+        dongu (sayi i = 0; i < ipg; i += 1) {
+            sayi ino = g * ipg + i + 1;
+            eger (ino < g_ext4[s].ilk_ino || bit_var(bm, i)) { devam; }
+            bit_yaz(bm, i, dogru);
+            e4_blok_yaz(s, bmb, 1, bm, 0);
+            e4_bitmap_csum(s, g, bm, yanlis);
+            e4_gd16_yaz(s, g, 14, 46, e4_gd16(s, g, 14, 46) - 1);
+            eger (dizin) { e4_gd16_yaz(s, g, 16, 48, e4_gd16(s, g, 16, 48) + 1); }
+            sayi kullanilmayan = e4_gd16(s, g, 28, 50);
+            eger (i + 1 > ipg - kullanilmayan) { e4_gd16_yaz(s, g, 28, 50, ipg - (i + 1)); }
+            e4_gd_yaz(s, g);
+            sayi sb = g_ext4[s].sb;
+            upp.tampon.yaz32(sb, 16, upp.tampon.oku32(sb, 16) - 1);
+            e4_sb_yaz(s);
+            upp.tampon.birak(bm);
+            don ino;
+        }
+    }
+    upp.tampon.birak(bm);
+    don -1;
+}
+
+fonk e4_inode_birak(sayi s, sayi ino, mantik dizin) -> bos {
+    sayi ipg = g_ext4[s].ipg;
+    sayi g = (ino - 1) / ipg;
+    sayi i = (ino - 1) % ipg;
+    sayi bm = upp.tampon.yeni(g_ext4[s].bs);
+    sayi bmb = e4_gd32(s, g, 4, 36);
+    eger (e4_blok_oku(s, bmb, 1, bm, 0)) {
+        bit_yaz(bm, i, yanlis);
+        e4_blok_yaz(s, bmb, 1, bm, 0);
+        e4_bitmap_csum(s, g, bm, yanlis);
+        e4_gd16_yaz(s, g, 14, 46, e4_gd16(s, g, 14, 46) + 1);
+        eger (dizin) { e4_gd16_yaz(s, g, 16, 48, e4_gd16(s, g, 16, 48) - 1); }
+        e4_gd_yaz(s, g);
+        sayi sb = g_ext4[s].sb;
+        upp.tampon.yaz32(sb, 16, upp.tampon.oku32(sb, 16) + 1);
+        e4_sb_yaz(s);
+    }
+    upp.tampon.birak(bm);
+}
+
+// Dosyanın tüm veri ve meta veri bloklarını bırakır.
+fonk e4_veri_birak(sayi s, sayi it) -> bos {
+    liste[sayi] K = e4_kapsamlar(s, it);
+    liste[sayi] M = g_e4_meta;
+    sayi i = 0;
+    iken (i + 2 < K.uzunluk()) {
+        eger (K[i + 1] > 0) { e4_bloklar_birak(s, K[i + 1], K[i + 2]); }
+        i += 3;
+    }
+    sayi j = 0;
+    iken (j + 1 < M.uzunluk()) {
+        e4_bloklar_birak(s, M[j], M[j + 1]);
+        j += 2;
+    }
+}
+
+// i_block'a extent başlığı ve [mantıksal, fiziksel, uzunluk] girdileri yazar.
+fonk e4_kapsam_yaz(sayi it, liste[sayi] K) -> bos {
+    upp.tampon.doldur(it, 40, 60, 0);
+    upp.tampon.yaz16(it, 40, 62218);
+    upp.tampon.yaz16(it, 42, K.uzunluk() / 3);
+    upp.tampon.yaz16(it, 44, 4);
+    upp.tampon.yaz16(it, 46, 0);
+    sayi i = 0;
+    iken (i + 2 < K.uzunluk()) {
+        sayi e = 52 + (i / 3) * 12;
+        upp.tampon.yaz32(it, e, K[i]);
+        upp.tampon.yaz16(it, e + 4, K[i + 2]);
+        upp.tampon.yaz16(it, e + 6, K[i + 1] / E4_32);
+        upp.tampon.yaz32(it, e + 8, K[i + 1] % E4_32);
+        i += 3;
+    }
+    sayi bayrak = upp.tampon.oku32(it, 32);
+    eger ((bayrak / E4_UZANTI) % 2 == 0) { upp.tampon.yaz32(it, 32, bayrak + E4_UZANTI); }
+}
+
+fonk e4_blok_sayisi_yaz(sayi s, sayi it, sayi bloklar) -> bos {
+    upp.tampon.yaz32(it, 28, bloklar * g_ext4[s].spb);
+    upp.tampon.yaz16(it, 116, 0);
+}
+
+fonk e4_yazilabilir(sayi s) -> mantik {
+    eger (!g_ext4[s].yaz_ok) {
+        g_fs_hata = "ext4: bu dosya sisteminin özellikleriyle yazma desteklenmiyor (salt okunur)";
+        don yanlis;
+    }
+    don dogru;
+}
+
+// ---- dizin girdileri ----
+fonk e4_dirent_csum(sayi s, sayi dino, sayi dit, sayi b) -> bos {
+    eger (!g_ext4[s].csum) { don; }
+    sayi bs = g_ext4[s].bs;
+    sayi k = bs - 12;
+    upp.tampon.yaz32(b, k, 0);
+    upp.tampon.yaz16(b, k + 4, 12);
+    upp.tampon.yaz8(b, k + 6, 0);
+    upp.tampon.yaz8(b, k + 7, 222);
+    upp.tampon.yaz32(b, k + 8, upp.tampon.crc32c(b, 0, k, e4_inode_tohum(s, dino, dit)));
+}
+
+fonk e4_dirent_yaz(sayi b, sayi o, sayi ino, sayi rec, metin ad, sayi ft) -> bos {
+    upp.tampon.yaz32(b, o, ino);
+    upp.tampon.yaz16(b, o + 4, rec);
+    sayi n = upp.tampon.metin_yaz(b, o + 8, ad);
+    upp.tampon.yaz8(b, o + 6, n);
+    upp.tampon.yaz8(b, o + 7, ft);
+}
+
+fonk e4_dizin_bloklari(sayi s, sayi dit) -> liste[sayi] {
+    liste[sayi] R;
+    sayi n = e4_boyut(dit) / g_ext4[s].bs;
+    liste[sayi] K = e4_kapsamlar(s, dit);
+    dongu (sayi lb = 0; lb < n; lb += 1) {
+        sayi pb = 0;
+        sayi i = 0;
+        iken (i + 2 < K.uzunluk()) {
+            eger (lb >= K[i] && lb < K[i] + K[i + 2] && K[i + 1] > 0) { pb = K[i + 1] + lb - K[i]; }
+            i += 3;
+        }
+        R.ekle(pb);
+    }
+    don R;
+}
+
+fonk e4_kayit_boy(sayi ad_bayt) -> sayi => (8 + ad_bayt + 3) / 4 * 4;
+
+fonk e4_dizin_ekle(sayi s, sayi dino, metin ad, sayi ino, sayi ft) -> mantik {
+    sayi dit = e4_inode_oku(s, dino);
+    eger ((upp.tampon.oku32(dit, 32) / E4_DIZINLI) % 2 == 1) {
+        upp.tampon.birak(dit);
+        g_fs_hata = "ext4: htree ile dizinlenmiş dizine yazma desteklenmiyor";
+        don yanlis;
+    }
+    sayi bs = g_ext4[s].bs;
+    sayi son = bs;
+    eger (g_ext4[s].csum) { son = bs - 12; }
+    sayi gerek = e4_kayit_boy(bayt_say(ad));
+    sayi b = upp.tampon.yeni(bs);
+    liste[sayi] bloklar = e4_dizin_bloklari(s, dit);
+    her (oto pb in bloklar) {
+        eger (pb <= 0 || !e4_blok_oku(s, pb, 1, b, 0)) { devam; }
+        sayi o = 0;
+        iken (o < son) {
+            sayi ino2 = upp.tampon.oku32(b, o);
+            sayi rl = upp.tampon.oku16(b, o + 4);
+            eger (rl < 8) { dur; }
+            sayi gercek = e4_kayit_boy(upp.tampon.oku8(b, o + 6));
+            eger (ino2 == 0 && rl >= gerek) {
+                e4_dirent_yaz(b, o, ino, rl, ad, ft);
+            } yoksa eger (ino2 != 0 && rl - gercek >= gerek) {
+                upp.tampon.yaz16(b, o + 4, gercek);
+                e4_dirent_yaz(b, o + gercek, ino, rl - gercek, ad, ft);
+            } yoksa {
+                o += rl;
+                devam;
+            }
+            e4_dirent_csum(s, dino, dit, b);
+            e4_blok_yaz(s, pb, 1, b, 0);
+            e4_zaman_yaz(dit, dogru);
+            e4_inode_yaz(s, dino, dit);
+            upp.tampon.birak(b);
+            upp.tampon.birak(dit);
+            don dogru;
+        }
+    }
+    // yer yok: dizine yeni blok ekle
+    liste[sayi] yeni = e4_bloklar_ayir(s, 1);
+    eger (yeni.uzunluk() == 0) {
+        upp.tampon.birak(b);
+        upp.tampon.birak(dit);
+        g_fs_hata = "aygıtta yer kalmadı";
+        don yanlis;
+    }
+    liste[sayi] K = e4_kapsamlar(s, dit);
+    sayi lb = bloklar.uzunluk();
+    sayi n = K.uzunluk();
+    eger (n >= 3 && K[n - 1] < 32768 && K[n - 2] + K[n - 1] == yeni[0] && K[n - 3] + K[n - 1] == lb) {
+        K[n - 1] = K[n - 1] + 1;
+    } yoksa {
+        K.ekle(lb);
+        K.ekle(yeni[0]);
+        K.ekle(1);
+    }
+    eger ((upp.tampon.oku32(dit, 32) / E4_UZANTI) % 2 == 0 || upp.tampon.oku16(dit, 46) != 0 || K.uzunluk() > 12) {
+        e4_bloklar_birak(s, yeni[0], 1);
+        upp.tampon.birak(b);
+        upp.tampon.birak(dit);
+        g_fs_hata = "ext4: dizin genişletilemiyor (çok parçalı)";
+        don yanlis;
+    }
+    upp.tampon.doldur(b, 0, bs, 0);
+    e4_dirent_yaz(b, 0, ino, son, ad, ft);
+    e4_dirent_csum(s, dino, dit, b);
+    e4_blok_yaz(s, yeni[0], 1, b, 0);
+    e4_kapsam_yaz(dit, K);
+    e4_boyut_yaz(dit, e4_boyut(dit) + bs);
+    e4_blok_sayisi_yaz(s, dit, lb + 1);
+    e4_zaman_yaz(dit, dogru);
+    e4_inode_yaz(s, dino, dit);
+    upp.tampon.birak(b);
+    upp.tampon.birak(dit);
+    don dogru;
+}
+
+// Girdiyi kaldırır; kaldırılan inode numarasını döner (yoksa -1).
+fonk e4_dizin_cikar(sayi s, sayi dino, metin ad) -> sayi {
+    sayi dit = e4_inode_oku(s, dino);
+    sayi bs = g_ext4[s].bs;
+    sayi son = bs;
+    eger (g_ext4[s].csum) { son = bs - 12; }
+    sayi b = upp.tampon.yeni(bs);
+    sayi bulunan = -1;
+    her (oto pb in e4_dizin_bloklari(s, dit)) {
+        eger (bulunan >= 0) { dur; }
+        eger (pb <= 0 || !e4_blok_oku(s, pb, 1, b, 0)) { devam; }
+        sayi o = 0;
+        sayi onceki = -1;
+        iken (o < son) {
+            sayi ino2 = upp.tampon.oku32(b, o);
+            sayi rl = upp.tampon.oku16(b, o + 4);
+            eger (rl < 8) { dur; }
+            sayi nl = upp.tampon.oku8(b, o + 6);
+            eger (ino2 != 0 && upp.tampon.metin(b, o + 8, nl) == ad) {
+                bulunan = ino2;
+                eger (onceki >= 0) {
+                    upp.tampon.yaz16(b, onceki + 4, upp.tampon.oku16(b, onceki + 4) + rl);
+                } yoksa {
+                    upp.tampon.yaz32(b, o, 0);
+                }
+                e4_dirent_csum(s, dino, dit, b);
+                e4_blok_yaz(s, pb, 1, b, 0);
+                dur;
+            }
+            onceki = o;
+            o += rl;
+        }
+    }
+    eger (bulunan >= 0) {
+        e4_zaman_yaz(dit, dogru);
+        e4_inode_yaz(s, dino, dit);
+    }
+    upp.tampon.birak(b);
+    upp.tampon.birak(dit);
+    don bulunan;
+}
+
+fonk e4_bag_degis(sayi s, sayi ino, sayi fark) -> bos {
+    sayi it = e4_inode_oku(s, ino);
+    sayi l = upp.tampon.oku16(it, 26) + fark;
+    eger (l < 1) { l = 1; }
+    upp.tampon.yaz16(it, 26, l);
+    e4_zaman_yaz(it, dogru);
+    e4_inode_yaz(s, ino, it);
+    upp.tampon.birak(it);
+}
+
+// ---- sürücü işlemleri ----
+fonk e4_bagla(sayi bag) -> mantik {
+    sayi blok = g_bag[bag].blok;
+    sayi sb = upp.tampon.yeni(1024);
+    eger (!blok_oku(blok, 2, 2, sb, 0) || upp.tampon.oku16(sb, 56) != 61267) {
+        upp.tampon.birak(sb);
+        g_fs_hata = "ext4 süperbloğu bulunamadı";
+        don yanlis;
+    }
+    Ext4 e;
+    e.blok = blok;
+    e.sb = sb;
+    e.bs = 1024;
+    dongu (sayi i = 0; i < upp.tampon.oku32(sb, 24); i += 1) { e.bs = e.bs * 2; }
+    e.spb = e.bs / 512;
+    e.bpg = upp.tampon.oku32(sb, 32);
+    e.ipg = upp.tampon.oku32(sb, 40);
+    e.ilk_veri = upp.tampon.oku32(sb, 20);
+    e.inc = upp.tampon.oku32(sb, 96);
+    e.roc = upp.tampon.oku32(sb, 100);
+    e.isz = 128;
+    e.ilk_ino = 11;
+    eger (upp.tampon.oku32(sb, 76) >= 1) {
+        e.isz = upp.tampon.oku16(sb, 88);
+        e.ilk_ino = upp.tampon.oku32(sb, 84);
+    }
+    e.blok_say = upp.tampon.oku32(sb, 4);
+    e.dsz = 32;
+    eger ((e.inc / 128) % 2 == 1) {
+        e.blok_say += upp.tampon.oku32(sb, 336) * E4_32;
+        e.dsz = upp.tampon.oku16(sb, 254);
+        eger (e.dsz < 32) { e.dsz = 32; }
+    }
+    e.grup_say = (e.blok_say - e.ilk_veri + e.bpg - 1) / e.bpg;
+    e.gdt_blok = e.ilk_veri + 1;
+    e.gdt_blok_say = (e.grup_say * e.dsz + e.bs - 1) / e.bs;
+    e.gdt = upp.tampon.yeni(e.gdt_blok_say * e.bs);
+    e.kucuk = upp.tampon.yeni(8);
+    e.csum = (e.roc / 1024) % 2 == 1;
+    eger ((e.inc / 8192) % 2 == 1) {
+        e.tohum = upp.tampon.oku32(sb, 624);
+    } yoksa {
+        e.tohum = upp.tampon.crc32c(sb, 104, 16, 4294967295);
+    }
+    // Yazma yalnızca bilinen özelliklerle: filetype, extents, 64bit, flex_bg, csum_seed;
+    // ro_compat: sparse_super, large_file, huge_file, dir_nlink, extra_isize, metadata_csum.
+    sayi inc_kalan = e.inc;
+    sayi roc_kalan = e.roc;
+    her (oto x in liste_sayilar("8192,512,128,64,2")) {
+        eger ((inc_kalan / x) % 2 == 1) { inc_kalan -= x; }
+    }
+    her (oto y in liste_sayilar("1024,64,32,8,2,1")) {
+        eger ((roc_kalan / y) % 2 == 1) { roc_kalan -= y; }
+    }
+    e.yaz_ok = inc_kalan == 0 && roc_kalan == 0 && e.bs <= 65536;
+    g_ext4.ekle(e);
+    sayi s = g_ext4.uzunluk() - 1;
+    g_bag[bag].dno = s;
+    eger (!e4_blok_oku(s, e.gdt_blok, e.gdt_blok_say, e.gdt, 0)) {
+        g_fs_hata = "ext4 grup tanımlayıcıları okunamadı";
+        don yanlis;
+    }
+    eger (!g_ext4[s].yaz_ok) { g_bag[bag].salt_okunur = dogru; }
+    sayi nokta = g_bag[bag].nokta;
+    g_fs[nokta].ino = 2;
+    sayi kit = e4_inode_oku(s, 2);
+    g_fs[nokta].boyut = e4_boyut(kit);
+    upp.tampon.birak(kit);
+    don dogru;
+}
+
+fonk liste_sayilar(metin s) -> liste[sayi] {
+    liste[sayi] R;
+    her (oto p in upp.metin.bol(s, ",")) {
+        eger (p != "") { R.ekle(sayiya(p)); }
+    }
+    don R;
+}
+
+fonk e4_ayir(sayi bag) -> bos {
+    sayi s = g_bag[bag].dno;
+    eger (s < 0) { don; }
+    eger (!g_bag[bag].salt_okunur) { e4_sb_yaz(s); }
+}
+
+fonk e4_yukle(sayi no) -> bos {
+    sayi s = e4_s(no);
+    sayi dit = e4_inode_oku(s, g_fs[no].ino);
+    metin veri = e4_veri(s, dit);
+    upp.tampon.birak(dit);
+    sayi n = bayt_say(veri);
+    eger (n == 0) { don; }
+    sayi b = upp.tampon.yeni(n);
+    upp.tampon.metin_yaz(b, 0, veri);
+    sayi o = 0;
+    iken (o + 8 <= n) {
+        sayi ino = upp.tampon.oku32(b, o);
+        sayi rl = upp.tampon.oku16(b, o + 4);
+        sayi nl = upp.tampon.oku8(b, o + 6);
+        eger (rl < 8) {
+            // bozuk kayıt: bloğun sonuna atla
+            sayi bs = g_ext4[s].bs;
+            o = (o / bs + 1) * bs;
+            devam;
+        }
+        eger (ino != 0 && nl > 0 && o + 8 + nl <= n) {
+            metin ad = upp.tampon.metin(b, o + 8, nl);
+            eger (ad != "." && ad != "..") {
+                sayi it = e4_inode_oku(s, ino);
+                sayi kip = upp.tampon.oku16(it, 0);
+                fs_disk_dugum(no, ad, e4_tur(kip), kip % 4096, ino, 0, 0, e4_boyut(it), upp.tampon.oku32(it, 16));
+                upp.tampon.birak(it);
+            }
+        }
+        o += rl;
+    }
+    upp.tampon.birak(b);
+}
+
+fonk e4_oku(sayi no) -> metin {
+    sayi s = e4_s(no);
+    sayi it = e4_inode_oku(s, g_fs[no].ino);
+    metin m = e4_veri(s, it);
+    upp.tampon.birak(it);
+    don m;
+}
+
+fonk e4_yaz(sayi no, metin veri) -> mantik {
+    sayi s = e4_s(no);
+    eger (!e4_yazilabilir(s)) { don yanlis; }
+    sayi ino = g_fs[no].ino;
+    sayi it = e4_inode_oku(s, ino);
+    eger ((upp.tampon.oku32(it, 32) / E4_ICERIDE) % 2 == 1) {
+        upp.tampon.birak(it);
+        g_fs_hata = "ext4: satır içi (inline) veriye yazma desteklenmiyor";
+        don yanlis;
+    }
+    sayi bs = g_ext4[s].bs;
+    sayi boy = bayt_say(veri);
+    sayi n = (boy + bs - 1) / bs;
+    liste[sayi] parcalar = e4_bloklar_ayir(s, n);
+    eger (n > 0 && parcalar.uzunluk() == 0) {
+        upp.tampon.birak(it);
+        g_fs_hata = "aygıtta yer kalmadı (ya da boş alan çok parçalı)";
+        don yanlis;
+    }
+    // yeni veriyi yaz
+    liste[sayi] K;
+    eger (n > 0) {
+        sayi t = upp.tampon.yeni(n * bs);
+        upp.tampon.metin_yaz(t, 0, veri);
+        sayi lb = 0;
+        sayi i = 0;
+        iken (i + 1 < parcalar.uzunluk()) {
+            e4_blok_yaz(s, parcalar[i], parcalar[i + 1], t, lb * bs);
+            K.ekle(lb);
+            K.ekle(parcalar[i]);
+            K.ekle(parcalar[i + 1]);
+            lb += parcalar[i + 1];
+            i += 2;
+        }
+        upp.tampon.birak(t);
+    }
+    // eski blokları bırak, inode'u güncelle
+    e4_veri_birak(s, it);
+    e4_kapsam_yaz(it, K);
+    e4_boyut_yaz(it, boy);
+    e4_blok_sayisi_yaz(s, it, n);
+    upp.tampon.yaz32(it, 16, g_fs[no].zaman);
+    upp.tampon.yaz32(it, 12, simdi());
+    mantik tamam = e4_inode_yaz(s, ino, it);
+    upp.tampon.birak(it);
+    don tamam;
+}
+
+fonk e4_olustur(sayi ust, metin ad, mantik dizin) -> sayi {
+    sayi s = e4_s(ust);
+    eger (!e4_yazilabilir(s)) { don -1; }
+    eger (bayt_say(ad) > 255) {
+        g_fs_hata = "dosya adı çok uzun";
+        don -1;
+    }
+    sayi ino = e4_inode_ayir(s, dizin);
+    eger (ino < 0) {
+        g_fs_hata = "aygıtta boş inode kalmadı";
+        don -1;
+    }
+    sayi isz = g_ext4[s].isz;
+    sayi bs = g_ext4[s].bs;
+    sayi it = upp.tampon.yeni(isz);
+    sayi z = simdi();
+    sayi kip = 33188;
+    sayi ft = 1;
+    sayi tur = D_DOSYA;
+    eger (dizin) {
+        kip = 16877;
+        ft = 2;
+        tur = D_DIZIN;
+    }
+    upp.tampon.yaz16(it, 0, kip);
+    upp.tampon.yaz32(it, 8, z);
+    upp.tampon.yaz32(it, 12, z);
+    upp.tampon.yaz32(it, 16, z);
+    upp.tampon.yaz16(it, 26, 1);
+    eger (isz > 128) {
+        upp.tampon.yaz16(it, 128, 32);
+        upp.tampon.yaz32(it, 144, z);
+    }
+    liste[sayi] bos_k;
+    e4_kapsam_yaz(it, bos_k);
+    sayi boy = 0;
+    eger (dizin) {
+        liste[sayi] yeni = e4_bloklar_ayir(s, 1);
+        eger (yeni.uzunluk() == 0) {
+            e4_inode_birak(s, ino, dizin);
+            upp.tampon.birak(it);
+            g_fs_hata = "aygıtta yer kalmadı";
+            don -1;
+        }
+        upp.tampon.yaz16(it, 26, 2);
+        sayi son = bs;
+        eger (g_ext4[s].csum) { son = bs - 12; }
+        sayi b = upp.tampon.yeni(bs);
+        e4_dirent_yaz(b, 0, ino, 12, ".", 2);
+        e4_dirent_yaz(b, 12, g_fs[ust].ino, son - 12, "..", 2);
+        e4_dirent_csum(s, ino, it, b);
+        e4_blok_yaz(s, yeni[0], 1, b, 0);
+        upp.tampon.birak(b);
+        liste[sayi] K;
+        K.ekle(0);
+        K.ekle(yeni[0]);
+        K.ekle(1);
+        e4_kapsam_yaz(it, K);
+        boy = bs;
+        e4_boyut_yaz(it, bs);
+        e4_blok_sayisi_yaz(s, it, 1);
+    }
+    e4_inode_yaz(s, ino, it);
+    eger (!e4_dizin_ekle(s, g_fs[ust].ino, ad, ino, ft)) {
+        e4_veri_birak(s, it);
+        e4_inode_birak(s, ino, dizin);
+        upp.tampon.birak(it);
+        don -1;
+    }
+    upp.tampon.birak(it);
+    eger (dizin) { e4_bag_degis(s, g_fs[ust].ino, 1); }
+    don fs_disk_dugum(ust, ad, tur, kip % 4096, ino, 0, 0, boy, z);
+}
+
+fonk e4_sil(sayi no) -> mantik {
+    sayi s = e4_s(no);
+    eger (!e4_yazilabilir(s)) { don yanlis; }
+    sayi ino = g_fs[no].ino;
+    sayi ust_ino = g_fs[g_fs[no].ust].ino;
+    mantik dizin = g_fs[no].tur == D_DIZIN;
+    eger (e4_dizin_cikar(s, ust_ino, g_fs[no].ad) < 0) {
+        g_fs_hata = "ext4: dizin girdisi bulunamadı";
+        don yanlis;
+    }
+    sayi it = e4_inode_oku(s, ino);
+    sayi kalan = upp.tampon.oku16(it, 26) - 1;
+    eger (dizin || kalan <= 0) {
+        e4_veri_birak(s, it);
+        upp.tampon.doldur(it, 0, g_ext4[s].isz, 0);
+        upp.tampon.yaz32(it, 20, simdi());
+        e4_inode_yaz(s, ino, it);
+        e4_inode_birak(s, ino, dizin);
+    } yoksa {
+        upp.tampon.yaz16(it, 26, kalan);
+        e4_inode_yaz(s, ino, it);
+    }
+    upp.tampon.birak(it);
+    eger (dizin) { e4_bag_degis(s, ust_ino, -1); }
+    don dogru;
+}
+
+fonk e4_tasi(sayi no, sayi yeni_ust, metin yeni_ad) -> mantik {
+    sayi s = e4_s(no);
+    eger (!e4_yazilabilir(s)) { don yanlis; }
+    sayi ino = g_fs[no].ino;
+    sayi eski_ust = g_fs[g_fs[no].ust].ino;
+    sayi yeni_ust_ino = g_fs[yeni_ust].ino;
+    mantik dizin = g_fs[no].tur == D_DIZIN;
+    sayi ft = 1;
+    eger (dizin) { ft = 2; }
+    eger (!e4_dizin_ekle(s, yeni_ust_ino, yeni_ad, ino, ft)) { don yanlis; }
+    e4_dizin_cikar(s, eski_ust, g_fs[no].ad);
+    eger (dizin && eski_ust != yeni_ust_ino) {
+        sayi it = e4_inode_oku(s, ino);
+        liste[sayi] bl = e4_dizin_bloklari(s, it);
+        eger (bl.uzunluk() > 0 && bl[0] > 0) {
+            sayi b = upp.tampon.yeni(g_ext4[s].bs);
+            e4_blok_oku(s, bl[0], 1, b, 0);
+            sayi o = upp.tampon.oku16(b, 4);
+            upp.tampon.yaz32(b, o, yeni_ust_ino);
+            e4_dirent_csum(s, ino, it, b);
+            e4_blok_yaz(s, bl[0], 1, b, 0);
+            upp.tampon.birak(b);
+        }
+        upp.tampon.birak(it);
+        e4_bag_degis(s, eski_ust, -1);
+        e4_bag_degis(s, yeni_ust_ino, 1);
+    }
+    don dogru;
+}
+
+fonk e4_oznitelik(sayi no) -> mantik {
+    sayi s = e4_s(no);
+    eger (!e4_yazilabilir(s)) { don yanlis; }
+    sayi ino = g_fs[no].ino;
+    sayi it = e4_inode_oku(s, ino);
+    sayi kip = upp.tampon.oku16(it, 0);
+    upp.tampon.yaz16(it, 0, (kip / 4096) * 4096 + g_fs[no].kip % 4096);
+    upp.tampon.yaz32(it, 16, g_fs[no].zaman);
+    upp.tampon.yaz32(it, 12, simdi());
+    mantik tamam = e4_inode_yaz(s, ino, it);
+    upp.tampon.birak(it);
+    don tamam;
+}
+
+fonk e4_alan(sayi bag) -> liste[sayi] {
+    sayi s = g_bag[bag].dno;
+    liste[sayi] R;
+    R.ekle(g_ext4[s].blok_say * g_ext4[s].bs);
+    R.ekle(e4_sb_bos_blok(s) * g_ext4[s].bs);
+    don R;
+}
+
+fonk ext4_kaydet() -> bos {
+    Surucu s;
+    s.ad = "ext4";
+    s.bagla = e4_bagla;
+    s.ayir = e4_ayir;
+    s.yukle = e4_yukle;
+    s.oku = e4_oku;
+    s.yaz = e4_yaz;
+    s.olustur = e4_olustur;
+    s.sil = e4_sil;
+    s.tasi = e4_tasi;
+    s.oznitelik = e4_oznitelik;
+    s.alan = e4_alan;
+    g_surucu.koy("ext4", s);
+}

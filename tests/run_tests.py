@@ -16,6 +16,11 @@ Kaynak yorumları:
   derleme/  yalnızca C üretimi başarılı olmalı (serbest/çekirdek hedefleri için)
   cekirdek/ --hedef cekirdek ile derlenip QEMU'da açılır; QEMU yoksa atlanır
   // @girdi: METİN    cekirdek/ testlerinde seri porta gönderilecek satır
+  // @gerek: araç...  cekirdek/: bu komutlar POSIX kabukta yoksa test atlanır
+  // @hazirla: KOMUT  cekirdek/: derlemeden önce POSIX kabukta çalışır (ör. disk imajı)
+  // @denetle: KOMUT  cekirdek/: QEMU kapandıktan sonra çalışır; 0 dışı çıkış = başarısız
+  POSIX kabuk: Linux'ta sh, Windows'ta WSL. UPP_FS_ARACLAR ortam değişkeni
+  (dosfstools/mtools/exfatprogs paketlerinin açıldığı dizin) FS_ARACLAR olarak geçer.
 
 Kullanım:
   python tests/run_tests.py
@@ -111,6 +116,9 @@ class Meta:
     cikis: Optional[int] = None
     bayrak: List[str] = field(default_factory=list)
     girdi: List[str] = field(default_factory=list)
+    gerek: List[str] = field(default_factory=list)
+    hazirla: List[str] = field(default_factory=list)
+    denetle: List[str] = field(default_factory=list)
 
 
 def meta_oku(kaynak: str, yol: str) -> Meta:
@@ -141,6 +149,18 @@ def meta_oku(kaynak: str, yol: str) -> Meta:
         if s.startswith("// @bayrak:"):
             stdout_mod = False
             meta.bayrak += s.split(":", 1)[1].split()
+            continue
+        if s.startswith("// @gerek:"):
+            stdout_mod = False
+            meta.gerek += s.split(":", 1)[1].split()
+            continue
+        if s.startswith("// @hazirla:"):
+            stdout_mod = False
+            meta.hazirla.append(s.split(":", 1)[1].strip())
+            continue
+        if s.startswith("// @denetle:"):
+            stdout_mod = False
+            meta.denetle.append(s.split(":", 1)[1].strip())
             continue
         if s.startswith("// @cikis:"):
             stdout_mod = False
@@ -379,8 +399,34 @@ def calistir_runtime(uppc: str, yol: str, kaynak: str, meta: Meta, cikti_dir: st
     return Sonuc("runtime", ad, True)
 
 
+def posix_kabuk(komut: str, timeout: float = 300.0) -> Tuple[int, str]:
+    """Komutu depo kökünde POSIX kabukta çalıştırır (Windows'ta WSL)."""
+    araclar = os.environ.get("UPP_FS_ARACLAR", "")
+    on = "export FS_ARACLAR='%s'; " % araclar if araclar else ""
+    on += 'if [ -n "$FS_ARACLAR" ]; then PATH="$FS_ARACLAR/usr/sbin:$FS_ARACLAR/usr/bin:$PATH"; fi; '
+    on += 'PATH="$PATH:/sbin:/usr/sbin"; export PATH MTOOLS_SKIP_CHECK=1 LC_ALL=C.UTF-8; '
+    if os.name == "nt":
+        argv = ["wsl", "-e", "bash", "-c", on + komut]
+    else:
+        argv = ["bash", "-c", on + komut]
+    try:
+        r = subprocess.run(argv, cwd=ROOT, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, str(e)
+    return r.returncode, r.stdout.decode("utf-8", errors="replace")
+
+
 def calistir_cekirdek(uppc: str, yol: str, meta: Meta, cikti_dir: str, timeout: float) -> Sonuc:
     ad = os.path.relpath(yol, TESTS)
+    if meta.gerek:
+        kod, _ = posix_kabuk(" && ".join("command -v %s >/dev/null" % g for g in meta.gerek), 60.0)
+        if kod != 0:
+            return Sonuc("cekirdek", ad, True, "atlandı (araç yok: %s)" % " ".join(meta.gerek))
+    for komut in meta.hazirla:
+        kod, cik = posix_kabuk(komut)
+        if kod != 0:
+            return Sonuc("cekirdek", ad, False, "@hazirla başarısız: " + komut + "\n" + cik)
     stem = os.path.join(cikti_dir, "ck_" + os.path.splitext(os.path.basename(yol))[0])
     girdi = "".join(g + "\n" for g in meta.girdi)
     # stdin çekirdek kapanana kadar açık kalmalı: EOF'ta wsl/QEMU hemen sonlanır.
@@ -420,6 +466,10 @@ def calistir_cekirdek(uppc: str, yol: str, meta: Meta, cikti_dir: str, timeout: 
     eksik = [x for x in meta.icerir if x not in cikti]
     if eksik:
         return Sonuc("cekirdek", ad, False, "çıktıda yok: " + ", ".join(eksik) + "\n  bulunan:\n" + tum)
+    for komut in meta.denetle:
+        kod, cik = posix_kabuk(komut)
+        if kod != 0:
+            return Sonuc("cekirdek", ad, False, "@denetle başarısız: " + komut + "\n" + cik)
     return Sonuc("cekirdek", ad, True)
 
 

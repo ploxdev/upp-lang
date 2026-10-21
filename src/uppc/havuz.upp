@@ -67,6 +67,7 @@ sayi g_tmp = 0;
 sayi g_bg_id = 0;
 sayi g_cur_fn = 0;
 metin g_cur_class = "";
+metin g_kacis_hatasi = "";
 liste[sayi] g_anon;
 sayi g_anon_n = 0;
 harita[metin,sayi] g_ft_id;

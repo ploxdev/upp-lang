@@ -1,0 +1,7 @@
+
+  Uppix'e hoş geldiniz — tamamen u++ ile yazılmış bir Unix benzeri sistem.
+
+  Kök dosya sistemi ext4 diskte: yaptığınız değişiklikler kalıcıdır.
+  USB gibi FAT32/exFAT diskler /mnt altına bağlanır ('lsblk', 'df -h').
+  'help' komutları listeler, 'uppfetch' sistem özetini gösterir.
+

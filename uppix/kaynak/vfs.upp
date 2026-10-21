@@ -1,0 +1,696 @@
+// Uppix — sanal dosya sistemi (VFS).
+// Her düğüm (inode) g_fs listesinde bir sınıf değeridir; numarası listedeki yeridir.
+// Bellekteki dosya sistemleri (rootfs, tmpfs, procfs, devfs, binfs) veriyi düğümde
+// tutar. Disk dosya sistemleri (ext4, vfat, exfat) birer sürücüdür: VFS onların
+// fonksiyon değerlerini (sinif Surucu) çağırır, dizinleri gerektiğinde yükler ve
+// düğümleri önbellek olarak kullanır.
+
+sabit sayi D_YOK = 0;
+sabit sayi D_DOSYA = 1;
+sabit sayi D_DIZIN = 2;
+sabit sayi D_SANAL = 3;
+sabit sayi D_AYGIT = 4;
+
+sinif Dugum {
+    metin ad;
+    sayi ust;
+    sayi tur;
+    metin veri;
+    liste[sayi] cocuklar;
+    sayi zaman;
+    sayi kip;
+    fonk() -> metin uret;
+    metin aygit;
+    sayi bag;
+    sayi ino;
+    sayi ek;
+    sayi ek2;
+    sayi boyut;
+    mantik yuklu;
+}
+
+// Bağlama (mount) kaydı
+sinif Baglama {
+    metin tur;
+    metin aygit;
+    sayi nokta;
+    sayi blok;
+    sayi dno;
+    mantik salt_okunur;
+    mantik etkin;
+    sayi eski_bag;
+    sayi eski_ino;
+    sayi eski_ek;
+    sayi eski_ek2;
+    sayi eski_boyut;
+    mantik eski_yuklu;
+    liste[sayi] eski_cocuklar;
+}
+
+// Disk dosya sistemi sürücüsü: her işlem bir fonksiyon değeridir.
+sinif Surucu {
+    metin ad;
+    fonk(sayi) -> mantik bagla;
+    fonk(sayi) -> bos ayir;
+    fonk(sayi) -> bos yukle;
+    fonk(sayi) -> metin oku;
+    fonk(sayi, metin) -> mantik yaz;
+    fonk(sayi, metin, mantik) -> sayi olustur;
+    fonk(sayi) -> mantik sil;
+    fonk(sayi, sayi, metin) -> mantik tasi;
+    fonk(sayi) -> mantik oznitelik;
+    fonk(sayi) -> liste[sayi] alan;
+}
+
+liste[Dugum] g_fs;
+liste[Baglama] g_bag;
+harita[metin, Surucu] g_surucu;
+sayi g_cwd = 0;
+metin g_fs_hata = "";
+sayi g_acilis_epoch = 0;
+u64 g_rastgele = 88172645463325252u64;
+
+// ---- zaman: Unix saniyesi ----
+fonk simdi() -> sayi => g_acilis_epoch + upp.zaman() / 1000;
+
+fonk zaman_kur() -> bos {
+    metin t = upp.cekirdek.tarih();
+    sayi gun = tarihten_gun(tarih_parca(t, 0), tarih_parca(t, 1), tarih_parca(t, 2));
+    g_acilis_epoch = gun * 86400 + tarih_parca(t, 3) * 3600 + tarih_parca(t, 4) * 60 + tarih_parca(t, 5) - upp.zaman() / 1000;
+}
+
+// ---- bağlamalar ----
+fonk bag_bellekte(sayi b) -> mantik {
+    eger (b < 0 || b >= g_bag.uzunluk()) { don dogru; }
+    metin t = g_bag[b].tur;
+    don t == "rootfs" || t == "tmpfs" || t == "procfs" || t == "devfs" || t == "binfs";
+}
+
+fonk dugum_surucu(sayi no) -> Surucu => g_surucu.al(g_bag[g_fs[no].bag].tur);
+
+fonk fs_salt_okunur(sayi no) -> mantik {
+    sayi b = g_fs[no].bag;
+    eger (b < 0 || b >= g_bag.uzunluk()) { don yanlis; }
+    eger (g_bag[b].tur == "procfs") { don dogru; }
+    don g_bag[b].salt_okunur;
+}
+
+// ---- düğümler ----
+// Önbelleğe düğüm ekler (sürücüler dizin yüklerken de kullanır).
+fonk fs_dugum_ekle(sayi ust, metin ad, sayi tur, sayi kip) -> sayi {
+    Dugum d;
+    d.ad = ad;
+    d.ust = ust;
+    d.tur = tur;
+    d.veri = "";
+    d.zaman = simdi();
+    d.kip = kip;
+    d.aygit = "";
+    d.bag = 0;
+    d.ino = 0;
+    d.ek = -1;
+    d.ek2 = 0;
+    d.boyut = 0;
+    d.yuklu = dogru;
+    sayi no = g_fs.uzunluk();
+    eger (no != ust) { d.bag = g_fs[ust].bag; }
+    eger (tur == D_DIZIN && !bag_bellekte(d.bag)) { d.yuklu = yanlis; }
+    g_fs.ekle(d);
+    eger (no != ust) { g_fs[ust].cocuklar.ekle(no); }
+    don no;
+}
+
+// Disk sürücüsünün yüklediği bir girdi.
+fonk fs_disk_dugum(sayi ust, metin ad, sayi tur, sayi kip, sayi ino, sayi ek, sayi ek2, sayi boyut, sayi zaman) -> sayi {
+    sayi no = fs_dugum_ekle(ust, ad, tur, kip);
+    g_fs[no].ino = ino;
+    g_fs[no].ek = ek;
+    g_fs[no].ek2 = ek2;
+    g_fs[no].boyut = boyut;
+    g_fs[no].zaman = zaman;
+    don no;
+}
+
+fonk fs_yukle(sayi no) -> bos {
+    eger (no < 0 || g_fs[no].tur != D_DIZIN || g_fs[no].yuklu) { don; }
+    g_fs[no].yuklu = dogru;
+    eger (bag_bellekte(g_fs[no].bag)) { don; }
+    Surucu s = dugum_surucu(no);
+    s.yukle(no);
+}
+
+fonk fs_cocuklar(sayi no) -> liste[sayi] {
+    fs_yukle(no);
+    don g_fs[no].cocuklar;
+}
+
+fonk fs_dizin_mi(sayi no) -> mantik => no >= 0 && g_fs[no].tur == D_DIZIN;
+
+fonk fs_cocuk(sayi dizin, metin ad) -> sayi {
+    eger (!fs_dizin_mi(dizin)) { don -1; }
+    her (oto c in fs_cocuklar(dizin)) {
+        eger (g_fs[c].ad == ad) { don c; }
+    }
+    don -1;
+}
+
+fonk yol_temiz(metin y) -> metin {
+    metin r = y;
+    iken (uz(r) > 1 && upp.metin.biter(r, "/")) { r = kes(r, 0, uz(r) - 1); }
+    don r;
+}
+
+fonk yol_ad(metin y) -> metin {
+    metin t = yol_temiz(y);
+    eger (t == "/") { don "/"; }
+    sayi i = uz(t) - 1;
+    iken (i >= 0 && t[i] != 47) { i -= 1; }
+    don kes_son(t, i + 1);
+}
+
+fonk yol_dizin(metin y) -> metin {
+    metin t = yol_temiz(y);
+    sayi i = uz(t) - 1;
+    iken (i >= 0 && t[i] != 47) { i -= 1; }
+    eger (i < 0) { don "."; }
+    eger (i == 0) { don "/"; }
+    don kes(t, 0, i);
+}
+
+fonk yol_birlestir(metin a, metin b) -> metin {
+    eger (upp.metin.baslar(b, "/")) { don b; }
+    eger (upp.metin.biter(a, "/")) { don a + b; }
+    don a + "/" + b;
+}
+
+// Yolu düğüm numarasına çözer; yoksa -1.
+fonk fs_coz(metin yol) -> sayi {
+    eger (yol == "") { don -1; }
+    sayi cur = g_cwd;
+    metin y = yol;
+    eger (y == "~" || upp.metin.baslar(y, "~/")) { y = ortam("HOME") + kes_son(y, 1); }
+    eger (upp.metin.baslar(y, "/")) { cur = 0; }
+    her (oto p in upp.metin.bol(y, "/")) {
+        eger (p == "" || p == ".") { devam; }
+        eger (g_fs[cur].tur != D_DIZIN) { don -1; }
+        eger (p == "..") {
+            cur = g_fs[cur].ust;
+            devam;
+        }
+        sayi c = fs_cocuk(cur, p);
+        eger (c < 0) { don -1; }
+        cur = c;
+    }
+    don cur;
+}
+
+fonk fs_yol(sayi no) -> metin {
+    eger (no <= 0) { don "/"; }
+    metin s = "";
+    sayi cur = no;
+    iken (cur != 0) {
+        s = "/" + g_fs[cur].ad + s;
+        cur = g_fs[cur].ust;
+    }
+    don s;
+}
+
+// a, b'nin atası mı (ya da kendisi mi)?
+fonk fs_ata_mi(sayi a, sayi b) -> mantik {
+    sayi cur = b;
+    iken (dogru) {
+        eger (cur == a) { don dogru; }
+        eger (cur == 0) { don yanlis; }
+        cur = g_fs[cur].ust;
+    }
+    don yanlis;
+}
+
+// Bağlama noktası mı? (bağlı dosya sisteminin kökü)
+fonk fs_baglama_noktasi_mi(sayi no) -> mantik {
+    her (oto b in g_bag) {
+        eger (b.etkin && b.nokta == no) { don dogru; }
+    }
+    don yanlis;
+}
+
+// ---- aygıtlar ----
+fonk rastgele() -> sayi {
+    g_rastgele = g_rastgele * 6364136223846793005u64 + 1442695040888963407u64;
+    sayi r = g_rastgele / 131072u64;
+    don r;
+}
+
+fonk aygit_oku(metin ad) -> metin {
+    eger (ad == "rastgele") {
+        metin s = "";
+        dongu (sayi i = 0; i < 4; i += 1) { s += "{rastgele() % 100000} "; }
+        don upp.metin.kirp(s) + "\n";
+    }
+    don "";
+}
+
+fonk aygit_yaz(metin ad, metin veri) -> bos {
+    eger (ad == "konsol") { terminale_yaz(veri); }
+}
+
+// ---- okuma / yazma ----
+fonk fs_oku(sayi no) -> metin {
+    sayi t = g_fs[no].tur;
+    eger (t == D_SANAL) {
+        eger (g_fs[no].uret == yok) { don ""; }
+        don g_fs[no].uret();
+    }
+    eger (t == D_AYGIT) { don aygit_oku(g_fs[no].aygit); }
+    eger (!bag_bellekte(g_fs[no].bag)) {
+        Surucu s = dugum_surucu(no);
+        don s.oku(no);
+    }
+    don g_fs[no].veri;
+}
+
+fonk fs_yaz(sayi no, metin veri, mantik ekle) -> mantik {
+    g_fs_hata = "";
+    sayi t = g_fs[no].tur;
+    eger (t == D_AYGIT) {
+        aygit_yaz(g_fs[no].aygit, veri);
+        don dogru;
+    }
+    eger (t == D_SANAL || fs_salt_okunur(no)) {
+        g_fs_hata = "salt okunur dosya sistemi";
+        don yanlis;
+    }
+    eger (!bag_bellekte(g_fs[no].bag)) {
+        metin yeni = veri;
+        eger (ekle) { yeni = fs_oku(no) + veri; }
+        Surucu s = dugum_surucu(no);
+        g_fs[no].zaman = simdi();
+        eger (!s.yaz(no, yeni)) { don yanlis; }
+        g_fs[no].boyut = bayt_say(yeni);
+        don dogru;
+    }
+    eger (ekle) { g_fs[no].veri += veri; } yoksa { g_fs[no].veri = veri; }
+    g_fs[no].zaman = simdi();
+    don dogru;
+}
+
+fonk fs_boyut(sayi no) -> sayi {
+    sayi t = g_fs[no].tur;
+    eger (!bag_bellekte(g_fs[no].bag) && (t == D_DOSYA || t == D_DIZIN)) { don g_fs[no].boyut; }
+    eger (t == D_DIZIN) { don 40 + 20 * g_fs[no].cocuklar.uzunluk(); }
+    eger (t == D_DOSYA) { don bayt_say(g_fs[no].veri); }
+    don 0;
+}
+
+// Yeni dosya ya da dizin; disk dosya sistemlerinde sürücü oluşturur. Hata: -1.
+fonk fs_yeni(sayi ust, metin ad, sayi tur, sayi kip) -> sayi {
+    g_fs_hata = "";
+    eger (fs_salt_okunur(ust)) {
+        g_fs_hata = "salt okunur dosya sistemi";
+        don -1;
+    }
+    fs_yukle(ust);
+    eger (!bag_bellekte(g_fs[ust].bag)) {
+        Surucu s = dugum_surucu(ust);
+        sayi no = s.olustur(ust, ad, tur == D_DIZIN);
+        eger (no >= 0) {
+            g_fs[no].kip = kip;
+            s.oznitelik(no);
+        }
+        don no;
+    }
+    sayi yeni = fs_dugum_ekle(ust, ad, tur, kip);
+    g_fs[ust].zaman = simdi();
+    don yeni;
+}
+
+// Düğümü üst dizinin önbellek listesinden ayırır.
+fonk fs_ayir(sayi no) -> bos {
+    sayi u = g_fs[no].ust;
+    sayi n = g_fs[u].cocuklar.uzunluk();
+    dongu (sayi i = 0; i < n; i += 1) {
+        eger (g_fs[u].cocuklar[i] == no) {
+            g_fs[u].cocuklar.sil(i);
+            dur;
+        }
+    }
+    g_fs[u].zaman = simdi();
+}
+
+fonk fs_yok_et(sayi no) -> bos {
+    her (oto c in g_fs[no].cocuklar) { fs_yok_et(c); }
+    g_fs[no].tur = D_YOK;
+    g_fs[no].veri = "";
+    g_fs[no].cocuklar.temizle();
+}
+
+// Siler (dizinse içindekilerle birlikte).
+fonk fs_sil(sayi no) -> mantik {
+    g_fs_hata = "";
+    eger (fs_baglama_noktasi_mi(no)) {
+        g_fs_hata = "aygıt ya da kaynak meşgul (bağlama noktası)";
+        don yanlis;
+    }
+    eger (fs_salt_okunur(no)) {
+        g_fs_hata = "salt okunur dosya sistemi";
+        don yanlis;
+    }
+    eger (g_fs[no].tur == D_DIZIN) {
+        her (oto c in fs_cocuklar(no)) {
+            eger (!fs_sil(c)) { don yanlis; }
+        }
+    }
+    eger (!bag_bellekte(g_fs[no].bag)) {
+        Surucu s = dugum_surucu(no);
+        eger (!s.sil(no)) { don yanlis; }
+    }
+    fs_ayir(no);
+    fs_yok_et(no);
+    don dogru;
+}
+
+// Aynı dosya sisteminde ad değiştirir / taşır; farklıysa kopyalayıp siler.
+fonk fs_tasi(sayi no, sayi yeni_ust, metin yeni_ad) -> mantik {
+    g_fs_hata = "";
+    fs_yukle(yeni_ust);
+    eger (g_fs[no].bag != g_fs[yeni_ust].bag) {
+        eger (fs_kopyala(no, yeni_ust, yeni_ad) < 0) { don yanlis; }
+        don fs_sil(no);
+    }
+    eger (fs_salt_okunur(no)) {
+        g_fs_hata = "salt okunur dosya sistemi";
+        don yanlis;
+    }
+    eger (!bag_bellekte(g_fs[no].bag)) {
+        Surucu s = dugum_surucu(no);
+        eger (!s.tasi(no, yeni_ust, yeni_ad)) { don yanlis; }
+    }
+    fs_ayir(no);
+    g_fs[no].ust = yeni_ust;
+    g_fs[no].ad = yeni_ad;
+    g_fs[yeni_ust].cocuklar.ekle(no);
+    g_fs[yeni_ust].zaman = simdi();
+    don dogru;
+}
+
+// Özyinelemeli kopya; sanal dosya ve aygıtın o anki içeriği düz dosya olur.
+fonk fs_kopyala(sayi no, sayi hedef_ust, metin ad) -> sayi {
+    eger (g_fs[no].tur == D_DIZIN) {
+        sayi d = fs_yeni(hedef_ust, ad, D_DIZIN, g_fs[no].kip);
+        eger (d < 0) { don -1; }
+        her (oto c in fs_cocuklar(no)) {
+            eger (c != d && fs_kopyala(c, d, g_fs[c].ad) < 0) { don -1; }
+        }
+        don d;
+    }
+    sayi f = fs_yeni(hedef_ust, ad, D_DOSYA, g_fs[no].kip);
+    eger (f < 0) { don -1; }
+    eger (!fs_yaz(f, fs_oku(no), yanlis)) { don -1; }
+    don f;
+}
+
+// İzin ve zaman değişikliğini sürücüye bildirir.
+fonk fs_oznitelik(sayi no) -> mantik {
+    eger (bag_bellekte(g_fs[no].bag)) { don dogru; }
+    eger (fs_salt_okunur(no)) {
+        g_fs_hata = "salt okunur dosya sistemi";
+        don yanlis;
+    }
+    Surucu s = dugum_surucu(no);
+    don s.oznitelik(no);
+}
+
+// Yol için dosya oluşturur ya da var olanı döndürür; üst dizin yoksa -1.
+fonk fs_dosya_ac(metin yol) -> sayi {
+    sayi no = fs_coz(yol);
+    eger (no >= 0) { don no; }
+    sayi u = fs_coz(yol_dizin(yol));
+    eger (!fs_dizin_mi(u)) { don -1; }
+    metin ad = yol_ad(yol);
+    eger (ad == "" || ad == "." || ad == "..") { don -1; }
+    don fs_yeni(u, ad, D_DOSYA, 420);
+}
+
+// "drwxr-xr-x"
+fonk kip_metin(sayi no) -> metin {
+    sayi t = g_fs[no].tur;
+    metin s = "-";
+    eger (t == D_DIZIN) { s = "d"; } yoksa eger (t == D_AYGIT) { s = "c"; }
+    sayi k = g_fs[no].kip;
+    metin harf = "rwxrwxrwx";
+    sayi bit = 256;
+    dongu (sayi i = 0; i < 9; i += 1) {
+        eger ((k / bit) % 2 == 1) { s += kes(harf, i, 1); } yoksa { s += "-"; }
+        bit = bit / 2;
+    }
+    don s;
+}
+
+fonk calistirilabilir_mi(sayi no) -> mantik => (g_fs[no].kip / 64) % 2 == 1;
+
+fonk kullanilan_bayt(sayi no) -> sayi {
+    sayi t = fs_boyut(no);
+    eger (g_fs[no].tur == D_DIZIN) {
+        her (oto c in fs_cocuklar(no)) { t += kullanilan_bayt(c); }
+    }
+    don t;
+}
+
+// ---- bağlama / ayırma ----
+// tur: "tmpfs", "procfs", "devfs", "binfs" ya da kayıtlı bir sürücü adı.
+fonk fs_bagla(metin tur, metin aygit, sayi blok, sayi nokta, mantik salt) -> sayi {
+    g_fs_hata = "";
+    eger (!fs_dizin_mi(nokta)) {
+        g_fs_hata = "bağlama noktası bir dizin değil";
+        don -1;
+    }
+    fs_yukle(nokta);
+    Baglama b;
+    b.tur = tur;
+    b.aygit = aygit;
+    b.nokta = nokta;
+    b.blok = blok;
+    b.dno = -1;
+    b.salt_okunur = salt;
+    b.etkin = dogru;
+    b.eski_bag = g_fs[nokta].bag;
+    b.eski_ino = g_fs[nokta].ino;
+    b.eski_ek = g_fs[nokta].ek;
+    b.eski_ek2 = g_fs[nokta].ek2;
+    b.eski_boyut = g_fs[nokta].boyut;
+    b.eski_yuklu = g_fs[nokta].yuklu;
+    b.eski_cocuklar = g_fs[nokta].cocuklar;
+    sayi no = g_bag.uzunluk();
+    g_bag.ekle(b);
+    g_fs[nokta].bag = no;
+    g_fs[nokta].ek = -1;
+    g_fs[nokta].ek2 = 0;
+    g_fs[nokta].boyut = 0;
+    g_fs[nokta].cocuklar.temizle();
+    g_fs[nokta].yuklu = dogru;
+    eger (bag_bellekte(no)) { don no; }
+    eger (!g_surucu.var_mi(tur)) {
+        g_fs_hata = "bilinmeyen dosya sistemi türü: " + tur;
+        fs_bag_geri_al(no);
+        don -1;
+    }
+    g_fs[nokta].yuklu = yanlis;
+    Surucu s = g_surucu.al(tur);
+    eger (!s.bagla(no)) {
+        eger (g_fs_hata == "") { g_fs_hata = "dosya sistemi okunamadı"; }
+        fs_bag_geri_al(no);
+        don -1;
+    }
+    don no;
+}
+
+fonk fs_bag_geri_al(sayi no) -> bos {
+    sayi nokta = g_bag[no].nokta;
+    her (oto c in g_fs[nokta].cocuklar) { fs_yok_et(c); }
+    g_fs[nokta].bag = g_bag[no].eski_bag;
+    g_fs[nokta].ino = g_bag[no].eski_ino;
+    g_fs[nokta].ek = g_bag[no].eski_ek;
+    g_fs[nokta].ek2 = g_bag[no].eski_ek2;
+    g_fs[nokta].boyut = g_bag[no].eski_boyut;
+    g_fs[nokta].yuklu = g_bag[no].eski_yuklu;
+    g_fs[nokta].cocuklar = g_bag[no].eski_cocuklar;
+    g_bag[no].etkin = yanlis;
+}
+
+fonk fs_ayir_bag(sayi no) -> mantik {
+    g_fs_hata = "";
+    sayi nokta = g_bag[no].nokta;
+    // altında başka bağlama varsa reddet
+    dongu (sayi i = 0; i < g_bag.uzunluk(); i += 1) {
+        eger (i != no && g_bag[i].etkin && g_bag[i].nokta != nokta && fs_ata_mi(nokta, g_bag[i].nokta)) {
+            g_fs_hata = "hedef meşgul (altında bağlama var)";
+            don yanlis;
+        }
+    }
+    eger (fs_ata_mi(nokta, g_cwd) && g_cwd != nokta) { g_cwd = nokta; }
+    eger (!bag_bellekte(no)) {
+        Surucu s = g_surucu.al(g_bag[no].tur);
+        s.ayir(no);
+    }
+    fs_bag_geri_al(no);
+    don dogru;
+}
+
+// Aynı noktaya sonradan bağlanan bir dosya sistemi bu bağlamayı örtüyorsa gizlenir.
+fonk bag_gorunur(sayi i) -> mantik {
+    eger (!g_bag[i].etkin) { don yanlis; }
+    dongu (sayi j = i + 1; j < g_bag.uzunluk(); j += 1) {
+        eger (g_bag[j].etkin && g_bag[j].nokta == g_bag[i].nokta) { don yanlis; }
+    }
+    don dogru;
+}
+
+fonk fs_bag_bul(metin nokta_yolu) -> sayi {
+    sayi n = fs_coz(nokta_yolu);
+    sayi i = g_bag.uzunluk() - 1;
+    iken (i >= 0) {
+        eger (g_bag[i].etkin && (g_bag[i].nokta == n || g_bag[i].aygit == nokta_yolu)) { don i; }
+        i -= 1;
+    }
+    don -1;
+}
+
+fonk fs_tum_ayir() -> bos {
+    sayi i = g_bag.uzunluk() - 1;
+    iken (i >= 1) {
+        eger (g_bag[i].etkin && !bag_bellekte(i)) {
+            Surucu s = g_surucu.al(g_bag[i].tur);
+            s.ayir(i);
+        }
+        i -= 1;
+    }
+}
+
+// ---- /proc üreteçleri ----
+fonk proc_version() -> metin => "Uppix sürüm {UPPIX_SURUM} (u++ ile yazıldı) #1 x86_64\n";
+
+fonk proc_uptime() -> metin {
+    sayi ms = upp.zaman();
+    don "{ms / 1000}.{sifir_doldur((ms % 1000) / 10, 2)} 0.00\n";
+}
+
+fonk proc_meminfo() -> metin {
+    sayi top = upp.cekirdek.bellek_toplam() / 1024;
+    sayi yb = upp.cekirdek.yigin_boyut() / 1024;
+    sayi yk = upp.cekirdek.yigin_kullanilan() / 1024;
+    metin s = "MemTotal:    " + sag_hizala("{top}", 10) + " kB\n";
+    s += "MemFree:     " + sag_hizala("{yb - yk}", 10) + " kB\n";
+    s += "HeapTotal:   " + sag_hizala("{yb}", 10) + " kB\n";
+    s += "HeapUsed:    " + sag_hizala("{yk}", 10) + " kB\n";
+    don s;
+}
+
+fonk proc_cpuinfo() -> metin {
+    metin ad = upp.cekirdek.islemci();
+    don "processor\t: 0\nmodel name\t: " + ad + "\narch\t\t: x86_64\n";
+}
+
+fonk proc_mounts() -> metin {
+    metin s = "";
+    dongu (sayi i = 0; i < g_bag.uzunluk(); i += 1) {
+        eger (!bag_gorunur(i)) { devam; }
+        Baglama b = g_bag[i];
+        metin kip = "rw";
+        eger (b.salt_okunur || b.tur == "procfs") { kip = "ro"; }
+        s += b.aygit + " " + fs_yol(b.nokta) + " " + b.tur + " " + kip + " 0 0\n";
+    }
+    don s;
+}
+
+fonk proc_dmesg() -> metin => satirlari_birlestir(g_dmesg);
+
+fonk proc_partitions() -> metin {
+    metin s = "major minor  #blocks  name\n\n";
+    her (oto b in g_blok) {
+        s += "   8 " + sag_hizala("{b.disk * 16 + b.bolum}", 5) + " " + sag_hizala("{b.sektor / 2}", 9) + " " + b.ad + "\n";
+    }
+    don s;
+}
+
+fonk fs_sanal(sayi ust, metin ad, fonk() -> metin f) -> sayi {
+    sayi no = fs_dugum_ekle(ust, ad, D_SANAL, 292);
+    g_fs[no].uret = f;
+    don no;
+}
+
+fonk fs_aygit(sayi ust, metin ad, metin aygit) -> sayi {
+    sayi no = fs_dugum_ekle(ust, ad, D_AYGIT, 438);
+    g_fs[no].aygit = aygit;
+    don no;
+}
+
+// Yol üzerinde (gerekirse ara dizinlerle) dosya; yalnızca bellekteki dosya sistemlerinde
+// ve açılışta kullanılır.
+fonk fs_dosya(metin yol, metin icerik, sayi kip) -> sayi {
+    sayi no = fs_dosya_ac(yol);
+    eger (no < 0) { don -1; }
+    fs_yaz(no, icerik, yanlis);
+    g_fs[no].kip = kip;
+    fs_oznitelik(no);
+    don no;
+}
+
+fonk fs_dizin(metin yol, sayi kip) -> sayi {
+    sayi var_olan = fs_coz(yol);
+    eger (var_olan >= 0) { don var_olan; }
+    sayi u = fs_coz(yol_dizin(yol));
+    eger (u < 0) { don -1; }
+    don fs_yeni(u, yol_ad(yol), D_DIZIN, kip);
+}
+
+fonk fs_kok_kur() -> bos {
+    g_fs.temizle();
+    g_bag.temizle();
+    Baglama kok;
+    kok.tur = "rootfs";
+    kok.aygit = "rootfs";
+    kok.nokta = 0;
+    kok.blok = -1;
+    kok.dno = -1;
+    kok.salt_okunur = yanlis;
+    kok.etkin = dogru;
+    kok.eski_bag = 0;
+    kok.eski_ino = 0;
+    kok.eski_yuklu = dogru;
+    g_bag.ekle(kok);
+    fs_dugum_ekle(0, "", D_DIZIN, 493);
+    g_cwd = 0;
+}
+
+// Kökün altındaki standart dizinler ve sanal dosya sistemleri.
+fonk fs_sanal_kur() -> bos {
+    liste[metin] dizinler = upp.metin.bol("/bin,/boot,/dev,/etc,/home,/mnt,/proc,/root,/tmp,/usr,/usr/bin,/usr/share,/var,/var/log", ",");
+    her (oto d in dizinler) {
+        sayi kip = 493;
+        eger (d == "/tmp") { kip = 1023; }
+        eger (d == "/root") { kip = 448; }
+        fs_dizin(d, kip);
+    }
+    sayi proc = fs_coz("/proc");
+    fs_bagla("procfs", "proc", -1, proc, dogru);
+    fs_sanal(proc, "cpuinfo", proc_cpuinfo);
+    fs_sanal(proc, "meminfo", proc_meminfo);
+    fs_sanal(proc, "mounts", proc_mounts);
+    fs_sanal(proc, "partitions", proc_partitions);
+    fs_sanal(proc, "uptime", proc_uptime);
+    fs_sanal(proc, "version", proc_version);
+    fs_sanal(proc, "dmesg", proc_dmesg);
+    sayi dev = fs_coz("/dev");
+    fs_bagla("devfs", "devfs", -1, dev, yanlis);
+    fs_aygit(dev, "null", "null");
+    fs_aygit(dev, "console", "konsol");
+    fs_aygit(dev, "tty", "konsol");
+    fs_aygit(dev, "random", "rastgele");
+    her (oto b in g_blok) {
+        sayi a = fs_aygit(dev, b.ad, "blok");
+        g_fs[a].kip = 432;
+    }
+    fs_bagla("tmpfs", "tmpfs", -1, fs_coz("/tmp"), yanlis);
+    fs_bagla("tmpfs", "tmpfs", -1, fs_coz("/mnt"), yanlis);
+    fs_bagla("binfs", "binfs", -1, fs_coz("/bin"), yanlis);
+}

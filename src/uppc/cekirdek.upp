@@ -46,6 +46,7 @@ fonk ck_ld() -> metin {
     o += "    .rodata : ALIGN(4K) { *(.rodata .rodata.*) }\n";
     o += "    .data : ALIGN(4K) { *(.data .data.*) }\n";
     o += "    .bss : ALIGN(4K) { *(COMMON) *(.bss .bss.*) }\n";
+    o += "    _upp_cekirdek_son = .;\n";
     o += "    /DISCARD/ : { *(.eh_frame) *(.note .note.*) *(.comment) }\n";
     o += "}\n";
     don o;
@@ -61,6 +62,7 @@ fonk ck_wsl_yol(metin p) -> metin {
     don g;
 }
 
+liste[metin] g_ck_diskler;
 metin g_ck_onek = "";
 metin g_ck_gcc = "";
 metin g_ck_ld = "";
@@ -155,8 +157,22 @@ fonk cekirdek_derle(metin c_yol, metin kok, mantik calistir) -> sayi {
     }
     metin hedef = os_cmd_parca(elf32);
     eger (metin_esit(upp.metin.kes(q, 0, 3), "wsl")) { hedef = os_tirnak(ck_wsl_yol(elf32)); }
+    // Ham disk imajları IDE kanallarına sırayla bağlanır (sda, sdb, sdc, sdd).
+    metin diskler = "";
+    sayi di = 0;
+    her (oto d in g_ck_diskler) {
+        eger (di >= 4) { dur; }
+        eger (!os_dosya_var(d)) {
+            upp.satir_yaz("[u++ HATA] disk imajı bulunamadı: " + d);
+            don 1;
+        }
+        metin dy = d;
+        eger (metin_esit(upp.metin.kes(q, 0, 3), "wsl")) { dy = ck_wsl_yol(d); }
+        diskler += " -drive " + os_tirnak("file=" + dy + ",format=raw,if=ide,index=" + sayi_metin(di));
+        di = di + 1;
+    }
     upp.satir_yaz("==================================================");
-    sayi kod = upp.sistem.kos(q + " -kernel " + hedef + " -serial stdio -display none -no-reboot -device isa-debug-exit,iobase=0xf4,iosize=0x04");
+    sayi kod = upp.sistem.kos(q + " -kernel " + hedef + diskler + " -serial stdio -display none -no-reboot -device isa-debug-exit,iobase=0xf4,iosize=0x04");
     // isa-debug-exit: çıkış kodu (deger << 1) | 1
     eger (kod == 1 || kod == 0) { don 0; }
     don kod / 2;

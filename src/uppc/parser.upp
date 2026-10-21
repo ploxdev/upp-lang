@@ -162,7 +162,25 @@ fonk metin_coz(metin raw) -> metin {
                 i = i + adv + nadv + 2;
                 devam;
             }
+            yoksa eger (nxt == 117) {
+                // \uHHHH: Unicode kod noktası
+                sayi bas = i + adv + nadv;
+                sayi kod = 0;
+                sayi k = 0;
+                iken (k < 4 && bas + k < n - 1 && hex_hane_deger(metin_cp(raw, bas + k)) >= 0) {
+                    kod = kod * 16 + hex_hane_deger(metin_cp(raw, bas + k));
+                    k = k + 1;
+                }
+                eger (k != 4 || (kod >= 55296 && kod <= 57343)) {
+                    g_kacis_hatasi = "'\\u' ardından 4 onaltılık hane gelmeli (ör. \\u00e7)";
+                } yoksa {
+                    s = kat(s, upp.metin.karakter(kod));
+                }
+                i = bas + k;
+                devam;
+            }
             yoksa {
+                g_kacis_hatasi = kat3("Bilinmeyen kaçış dizisi '\\", intern_dilim(raw, i + adv, i + adv + nadv), "'. Geçerli: \\n \\t \\r \\\\ \\\" \\e \\xHH \\uHHHH");
                 s = kat(s, intern_dilim(raw, i + adv, i + adv + nadv));
             }
             i = i + adv + nadv;
@@ -249,6 +267,12 @@ fonk kacis_var(metin text) -> mantik {
 
 fonk interp_ayristir(sayi n) -> bos {
     oto text = metin_coz(dugum_ad(n));
+    eger (!metin_esit(g_kacis_hatasi, "")) {
+        oto kh = g_kacis_hatasi;
+        g_kacis_hatasi = "";
+        hata_ver(dugum_satir(n), dugum_sutun(n), kh);
+        don;
+    }
     mantik aday = interp_aday_var(text);
     eger (!aday && !kacis_var(text)) { don; }
     sayi satir = dugum_satir(n);

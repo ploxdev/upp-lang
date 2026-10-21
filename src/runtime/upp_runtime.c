@@ -862,6 +862,258 @@ static int _upp_utf8_yaz(long long cp, char* o) {
     return 4;
 }
 
+/* Kod noktasından tek karakterlik metin; geçersiz kod noktası boş metin verir. */
+static char* upp_metin_karakter(long long cp) {
+    char b[4];
+    if (cp < 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+        return _upp_m_bayttan("", 0u);
+    }
+    return _upp_m_bayttan(b, (size_t)_upp_utf8_yaz(cp, b));
+}
+
+static char* upp_metin_tekrar(const char* s, long long n) {
+    size_t nb = upp_metin_nbayt(s);
+    char* r = upp_mk_bas();
+    long long i;
+    for (i = 0; i < n; i++) {
+        _upp_m_ekle_n(&r, s, nb, 0);
+    }
+    return r;
+}
+
+/* =====================================================================
+ * Bayt tamponları (upp.tampon.*): ikili veri (disk sektörleri, dosya
+ * sistemi yapıları) için sınır denetimli, tutamaçla erişilen bellek.
+ * Tutamaç 1'den başlayan bir sayıdır; geçersiz tutamaç ya da sınır dışı
+ * erişim açık panik verir. Çok baytlı okuma/yazma küçük sonludur (LE).
+ * ===================================================================== */
+typedef struct {
+    unsigned char* veri;
+    size_t boyut;
+} _UppTampon;
+
+static _UppTampon* _upp_tampon = NULL;
+static long long _upp_tampon_n = 0;
+static long long _upp_tampon_kap = 0;
+
+static _UppTampon* _upp_tampon_al(long long t, long long ofs, long long n) {
+    _UppTampon* b;
+    if (t < 1 || t > _upp_tampon_n || !_upp_tampon[t - 1].veri) {
+        upp_panik("geçersiz tampon tutamacı");
+    }
+    b = &_upp_tampon[t - 1];
+    if (ofs < 0 || n < 0 || (size_t)ofs > b->boyut || (size_t)n > b->boyut - (size_t)ofs) {
+        upp_panik("tampon sınırı aşıldı");
+    }
+    return b;
+}
+
+static long long upp_tampon_yeni(long long boyut) {
+    long long i;
+    unsigned char* v;
+    if (boyut < 1 || boyut > 0x40000000LL) {
+        upp_panik("tampon boyutu geçersiz");
+    }
+    v = (unsigned char*)UPP_AYIR((size_t)boyut);
+    if (!v) {
+        upp_panik("tampon için bellek yetersiz");
+    }
+    memset(v, 0, (size_t)boyut);
+    for (i = 0; i < _upp_tampon_n; i++) {
+        if (!_upp_tampon[i].veri) {
+            _upp_tampon[i].veri = v;
+            _upp_tampon[i].boyut = (size_t)boyut;
+            return i + 1;
+        }
+    }
+    if (_upp_tampon_n == _upp_tampon_kap) {
+        long long yk = _upp_tampon_kap ? _upp_tampon_kap * 2 : 16;
+        _UppTampon* y = (_UppTampon*)UPP_YENIDEN(_upp_tampon, (size_t)yk * sizeof(_UppTampon));
+        if (!y) {
+            upp_panik("tampon tablosu için bellek yetersiz");
+        }
+        _upp_tampon = y;
+        _upp_tampon_kap = yk;
+    }
+    _upp_tampon[_upp_tampon_n].veri = v;
+    _upp_tampon[_upp_tampon_n].boyut = (size_t)boyut;
+    _upp_tampon_n++;
+    return _upp_tampon_n;
+}
+
+static void upp_tampon_birak(long long t) {
+    if (t < 1 || t > _upp_tampon_n || !_upp_tampon[t - 1].veri) {
+        return;
+    }
+    UPP_BIRAK(_upp_tampon[t - 1].veri);
+    _upp_tampon[t - 1].veri = NULL;
+    _upp_tampon[t - 1].boyut = 0;
+}
+
+static long long upp_tampon_boyut(long long t) {
+    return (long long)_upp_tampon_al(t, 0, 0)->boyut;
+}
+
+static unsigned char* _upp_tampon_p(long long t, long long ofs, long long n) {
+    return _upp_tampon_al(t, ofs, n)->veri + ofs;
+}
+
+static long long upp_tampon_oku8(long long t, long long ofs) {
+    return *_upp_tampon_p(t, ofs, 1);
+}
+
+static long long upp_tampon_oku16(long long t, long long ofs) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 2);
+    return (long long)p[0] | ((long long)p[1] << 8);
+}
+
+static long long upp_tampon_oku32(long long t, long long ofs) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 4);
+    return (long long)((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
+}
+
+static long long upp_tampon_oku64(long long t, long long ofs) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 8);
+    uint64_t v = 0;
+    int i;
+    for (i = 7; i >= 0; i--) {
+        v = (v << 8) | p[i];
+    }
+    return (long long)v;
+}
+
+static void upp_tampon_yaz8(long long t, long long ofs, long long v) {
+    *_upp_tampon_p(t, ofs, 1) = (unsigned char)v;
+}
+
+static void upp_tampon_yaz16(long long t, long long ofs, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 2);
+    p[0] = (unsigned char)v;
+    p[1] = (unsigned char)(v >> 8);
+}
+
+static void upp_tampon_yaz32(long long t, long long ofs, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 4);
+    p[0] = (unsigned char)v;
+    p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16);
+    p[3] = (unsigned char)(v >> 24);
+}
+
+static void upp_tampon_yaz64(long long t, long long ofs, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, 8);
+    uint64_t u = (uint64_t)v;
+    int i;
+    for (i = 0; i < 8; i++) {
+        p[i] = (unsigned char)(u >> (8 * i));
+    }
+}
+
+/* Ham baytlardan metin (UTF-8 olduğu varsayılır). */
+static char* upp_tampon_metin(long long t, long long ofs, long long n) {
+    return _upp_m_bayttan((const char*)_upp_tampon_p(t, ofs, n), (size_t)n);
+}
+
+/* Metnin UTF-8 baytlarını yazar; yazılan bayt sayısını döner. */
+static long long upp_tampon_metin_yaz(long long t, long long ofs, const char* s) {
+    size_t n = upp_metin_nbayt(s);
+    if (n) {
+        memcpy(_upp_tampon_p(t, ofs, (long long)n), s, n);
+    }
+    return (long long)n;
+}
+
+static void upp_tampon_kopyala(long long hedef, long long hofs, long long kaynak, long long kofs, long long n) {
+    unsigned char* k = _upp_tampon_p(kaynak, kofs, n);
+    unsigned char* h = _upp_tampon_p(hedef, hofs, n);
+    if (n > 0) {
+        memmove(h, k, (size_t)n);
+    }
+}
+
+static void upp_tampon_doldur(long long t, long long ofs, long long n, long long v) {
+    unsigned char* p = _upp_tampon_p(t, ofs, n);
+    if (n > 0) {
+        memset(p, (int)(v & 0xFF), (size_t)n);
+    }
+}
+
+/* CRC32C (Castagnoli, yansıtılmış 0x82F63B78); son XOR yok (ext4 biçimi). */
+static uint32_t _upp_crc32c_tablo[256];
+static int _upp_crc32c_hazir = 0;
+
+static long long upp_tampon_crc32c(long long t, long long ofs, long long n, long long baslangic) {
+    unsigned char* p = _upp_tampon_p(t, ofs, n);
+    uint32_t c = (uint32_t)baslangic;
+    long long i;
+    if (!_upp_crc32c_hazir) {
+        uint32_t k;
+        int j;
+        for (k = 0; k < 256; k++) {
+            uint32_t r = k;
+            for (j = 0; j < 8; j++) {
+                r = (r & 1u) ? (r >> 1) ^ 0x82F63B78u : r >> 1;
+            }
+            _upp_crc32c_tablo[k] = r;
+        }
+        _upp_crc32c_hazir = 1;
+    }
+    for (i = 0; i < n; i++) {
+        c = _upp_crc32c_tablo[(c ^ p[i]) & 0xFFu] ^ (c >> 8);
+    }
+    return (long long)c;
+}
+
+/* UTF-16LE → metin; en çok n kod birimi, 0x0000'da durur. */
+static char* upp_tampon_utf16_metin(long long t, long long ofs, long long n) {
+    unsigned char* p = _upp_tampon_p(t, ofs, n * 2);
+    char* s = upp_mk_bas();
+    long long i;
+    for (i = 0; i < n; i++) {
+        uint32_t c = (uint32_t)p[2 * i] | ((uint32_t)p[2 * i + 1] << 8);
+        char b[4];
+        if (c == 0) {
+            break;
+        }
+        if (c >= 0xD800 && c <= 0xDBFF && i + 1 < n) {
+            uint32_t d = (uint32_t)p[2 * i + 2] | ((uint32_t)p[2 * i + 3] << 8);
+            if (d >= 0xDC00 && d <= 0xDFFF) {
+                c = 0x10000u + ((c - 0xD800u) << 10) + (d - 0xDC00u);
+                i++;
+            }
+        }
+        _upp_m_ekle_n(&s, b, (size_t)_upp_utf8_yaz((long long)c, b), c < 128);
+    }
+    return s;
+}
+
+/* Metni UTF-16LE olarak yazar (en çok 'sinir' kod birimi); yazılan kod birimi sayısını döner. */
+static long long upp_tampon_utf16_yaz(long long t, long long ofs, const char* s, long long sinir) {
+    size_t nb = upp_metin_nbayt(s);
+    size_t i = 0;
+    long long k = 0;
+    while (i < nb) {
+        long long cp = _upp_utf8_cp_at(s, nb, i);
+        i += (size_t)_upp_utf8_adv(s, nb, i);
+        if (cp >= 0x10000) {
+            if (k + 2 > sinir) {
+                break;
+            }
+            cp -= 0x10000;
+            upp_tampon_yaz16(t, ofs + 2 * k, 0xD800 + (cp >> 10));
+            upp_tampon_yaz16(t, ofs + 2 * k + 2, 0xDC00 + (cp & 0x3FF));
+            k += 2;
+        } else {
+            if (k + 1 > sinir) {
+                break;
+            }
+            upp_tampon_yaz16(t, ofs + 2 * k, cp);
+            k += 1;
+        }
+    }
+    return k;
+}
+
 /* Türkçe kurallı harf dönüşümü: i↔İ, ı↔I, ç ğ ö ş ü ve Latin-1 harfleri. */
 static long long _upp_tr_buyuk(long long c) {
     if (c == 'i') return 0x130;
@@ -1069,7 +1321,9 @@ typedef struct UppKolHarita {
 } UppKolHarita;
 
 /* Düz (kancasız) türler için çağrı yerinde tanımlayıcı. */
-#define UPP_KT_DUZ(T) (&(const UppKolTur){ sizeof(T), NULL, NULL })
+/* Statik ömürlü: koleksiyon tanımlayıcı işaretçisini saklar; bileşik sabit
+ * (compound literal) fonksiyon dönünce geçersiz olurdu. */
+#define UPP_KT_DUZ(T) (__extension__ ({ static const UppKolTur _upp_kt_duz = { sizeof(T), NULL, NULL }; &_upp_kt_duz; }))
 
 #define UPP_KOLLEKSIYON_MAX 100000000LL
 

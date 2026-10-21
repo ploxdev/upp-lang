@@ -1,0 +1,54 @@
+// Çekirdek: Uppix işletim sistemi QEMU'da açılır, kabuk komutları seri porttan gelir.
+// @girdi: pwd
+// @girdi: mkdir -p /tmp/a/b && cd /tmp/a && pwd
+// @girdi: echo merhaba dünya > not.txt
+// @girdi: echo ikinci >> not.txt
+// @girdi: cat -n not.txt
+// @girdi: wc not.txt
+// @girdi: seq 15 | grep 1 | wc -l
+// @girdi: ls /tmp/a | tr '\n' ','
+// @girdi: cp not.txt kopya.txt && mv kopya.txt b/ && ls b
+// @girdi: X=uppix; echo "ad=$X ${X}!"
+// @girdi: false || echo yedek
+// @girdi: test -d /proc && echo proc-var
+// @girdi: ls *.txt
+// @girdi: printf-yok
+// @girdi: echo "kod=$?"
+// @girdi: cat /etc/hostname
+// @girdi: head -n 2 /proc/meminfo | cut -d : -f 1
+// @girdi: echo c a b | tr ' ' '\n' | sort -r | tr '\n' ' '
+// @girdi: sh /usr/share/ornekler/selam.sh Uppix
+// @girdi: sleep 0.2 && echo arkada-bitti &
+// @girdi: sleep 1
+// @girdi: rm -r /tmp/a && ls /tmp
+// @girdi: uname -sr
+// @girdi: ll /etc | grep passwd | cut -c 1-10
+// @girdi: poweroff
+// @icerir: /tmp/a
+// @icerir:      1	merhaba dünya
+// @icerir:      2	ikinci
+// @icerir:       2       3      22 not.txt
+// @icerir: 7
+// @icerir: b,not.txt,
+// @icerir: kopya.txt
+// @icerir: ad=uppix uppix!
+// @icerir: yedek
+// @icerir: proc-var
+// @icerir: uppsh: printf-yok: komut bulunamadı
+// @icerir: kod=127
+// @icerir: MemTotal
+// @icerir: c b a
+// @icerir: Merhaba, Uppix!
+// @icerir: Bu betik 1 argüman aldı: Uppix
+// @icerir: arkada-bitti
+// @icerir: Bitti (0)
+// @icerir: Uppix 0.2.0
+// @icerir: -rw-r--r--
+// @icerir: Sistem kapatılıyor...
+
+kullan "../../uppix/kaynak/uppix.upp";
+
+fonk ana() -> sayi {
+    uppix_baslat();
+    don 0;
+}

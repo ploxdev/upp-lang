@@ -42,6 +42,7 @@
 - [x] `secim` içindeki `dur` doğru döngüyü kırar ve doğru kapsamları bırakır. Tamsayı `/` ve `%` sıfıra bölmede ve `MIN / -1` taşmasında açık panik verir; sabit sıfır bölen derleme hatasıdır.
 - [x] Hata yönetimi: `beklenen[T, H]` / `beklenen[T]` (bayrak + union yapısı, gizli ayırma yok), `hata(e)`, `?` ile yayma, `tamam_mi/hata_mi/deger/hata/deger_yoksa`, atılan sonuç derleme hatası. `ertele` ve `hata_ertele` (Zig `defer`/`errdefer`).
 - [x] C tarzı `(T)x` dönüşümü (işaretçi dönüşümü yalnızca `guvensiz`; ondalık → tamsayı taşması panik) ve `boyut(T)` / `boyut(degisken)`.
+- [x] Üst düzey `sabit metin` değerini taşır (önceden C'de `NULL` kalıyordu). `bayt`, `u32`, `secenek`, `fonk` gibi düz türlü koleksiyonların tanımlayıcısı statik ömürlü oldu; önceden başka fonksiyonda kurulan koleksiyonda sarkıyordu. Ayrıca yeni `upp.metin.karakter` ve `upp.metin.tekrar`. Metinlerde `\uHHHH` kaçışı; bilinmeyen kaçış (eskiden sessizce harfe dönüşüyordu) artık derleme hatası.
 - [ ] Sonraki: veri taşıyan `secenek` + desen eşleme, genel (generic) fonksiyonlar, yazılabilir görünümler, yakalamalı kapanışlar.
 
 ## Faz 3 — Freestanding / çekirdek ✅
@@ -54,7 +55,13 @@
 - [x] QEMU ile önyükleme: `tests/cekirdek/` kategorisi (çıktı, istisna, seri girdi, zamanlayıcı) QEMU'da açılır. CI Linux işi QEMU kurar.
 - [x] IDT + 32 istisna (Türkçe ad, RIP, CR2), PIC yeniden eşleme, 1000 Hz PIT, PS/2 klavye (Türkçe Q), COM1 UTF-8 girdi.
 - [x] Çekirdekte `upp.giris`, `upp.zaman`, `upp.uyut`; `upp.cekirdek.tik/tus_oku/tus_bekle/kesmeler_kur`. Örnek: `ornekler/cekirdek/kabuk.upp`.
-- [ ] Sonraki: fiziksel sayfa ayırıcı (Multiboot bellek haritası), sanal bellek, görevler/zamanlama, ATA/FAT sürücüsü.
+- [x] Multiboot bellek haritası: yığın kullanılabilir RAM'e yayılır (`bellek_toplam`, `yigin_boyut`, `yigin_kullanilan`).
+- [x] İşbirlikçi görevler: `gorev_baslat(fonk(sayi) -> bos, arg, ad)`, `sira_ver`, `gorev_listesi/ad/durum/baslama/oldur`. `uyut` ve girdi beklemesi sırayı verir.
+- [x] CMOS saati (`tarih`), ACPI kapatma, 8042 yeniden başlatma, CPUID (`islemci`), `ekran_temizle`. VGA'da ANSI renk/imleç dizileri ve kutu çizgi karakterleri; klavyede Ctrl ve ok tuşları.
+- [x] **Uppix** (`uppix/`): u++ ile yazılmış Unix benzeri işletim sistemi. İçinde `uppsh` kabuğu (boru, yönlendirme, `&&`/`||`, `&`, değişkenler, joker, takma ad, betik), `/proc` ve `/dev` içeren ramfs, satır düzenleyici (geçmiş, Tab) ve 70 komut var. QEMU testi: `tests/cekirdek/08_uppix.upp`.
+- [x] Diskler: ATA PIO sürücüsü (`upp.cekirdek.disk_*`), güvenli bayt tamponları (`upp.tampon.*`: LE okuma/yazma, UTF-16, CRC32C), `uppc --disk` ve `upp.proje` içinde `diskler` / `disk_hazirla`.
+- [x] Uppix 0.2: VFS bağlama tablosu ve fonksiyon değerli sürücü arayüzü. **ext4 kök** (okuma/yazma, extent, metadata_csum), **FAT32** (LFN) ve **exFAT** okuma/yazma, MBR/GPT bölümleri. `mount`, `umount`, `lsblk`, `blkid`, gerçek `df`. Yazılan imajlar `e2fsck`, `fsck.fat` ve `fsck.exfat`'tan temiz geçer (`tests/cekirdek/09_uppix_disk.upp`, `10_uppix_kalici.upp`).
+- [ ] Sonraki: diskten önyükleme (GRUB/kendi önyükleyicimiz), ext4 günlüğü ve büyük dosyalar için extent ağacı yazımı, AHCI/virtio-blk, kesintili zamanlama (runtime kilitleri), kullanıcı modu + sistem çağrıları + ELF yükleyici, `uppc`'nin Uppix içinde çalışması (doğrudan makine kodu arka ucu).
 
 ## Faz 4 — Derleme asistanı ✅
 
@@ -63,5 +70,5 @@
 
 ## Faz 5 — Belgeler ve testler
 
-- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 112 test (QEMU çekirdek testleri dahil); Linux'ta ASan ve UBSan temiz.
+- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 120 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
 - [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.

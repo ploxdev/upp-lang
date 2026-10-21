@@ -412,6 +412,7 @@ fonk ana() -> sayi {
             upp.satir_yaz("  --windows          Windows hedefi için derle");
             upp.satir_yaz("  --linux            Linux hedefi için derle");
             upp.satir_yaz("  --hedef <h>        windows | linux | serbest (libc'siz .o) | cekirdek (x86_64 ELF + QEMU)");
+            upp.satir_yaz("  --disk <imaj>      cekirdek: ham disk imajını QEMU'ya IDE disk olarak ekle (en çok 4)");
             upp.satir_yaz("  -v, --surum        Sürüm: u++ 3.0.1");
             upp.satir_yaz("  --json             --surum ile makine-okur JSON");
             upp.satir_yaz("  -h, --yardim       Bu yardım mesajını göster");
@@ -433,6 +434,10 @@ fonk ana() -> sayi {
         yoksa eger (metin_esit(a, "--hedef")) {
             i = i + 1;
             eger (i < argn) { hedef_ad = upp.arguman(i); }
+        }
+        yoksa eger (metin_esit(a, "--disk")) {
+            i = i + 1;
+            eger (i < argn) { g_ck_diskler.ekle(upp.arguman(i)); }
         }
         yoksa eger (metin_esit(a, "--cikti") || metin_esit(a, "-o")) {
             i = i + 1;

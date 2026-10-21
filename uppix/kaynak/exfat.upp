@@ -1,0 +1,639 @@
+// Uppix — exFAT sürücüsü (okuma + yazma).
+// Okuma: FAT zinciri ve bitişik (NoFatChain) kümeler, UTF-16 adlar, birim etiketi.
+// Yazma: ayırma bitmap'i, FAT zinciri, girdi kümesi sağlaması ve büyük harf tablosuna
+// göre ad karması (name hash). Yeni dosya ve dizinler FAT zinciriyle yazılır.
+
+sinif ExFat {
+    sayi blok;
+    sayi spc;
+    sayi fat_ofs;
+    sayi heap;
+    sayi kume_say;
+    sayi kok;
+    sayi kb;
+    sayi bm;
+    liste[sayi] bm_zincir;
+    sayi bm_boy;
+    harita[sayi, sayi] buyuk;
+    sayi ft;
+    sayi ft_sektor;
+    mantik ft_kirli;
+    sayi ipucu;
+    metin etiket;
+}
+
+liste[ExFat] g_exf;
+liste[sayi] g_exf_z;
+sayi g_exf_boy = 0;
+
+sabit sayi EXF_SON = 4294967287;
+sabit sayi EXF_EOC = 4294967295;
+
+fonk exf_s(sayi no) -> sayi => g_bag[g_fs[no].bag].dno;
+
+fonk exf_lba(sayi s, sayi c) -> sayi => g_exf[s].heap + (c - 2) * g_exf[s].spc;
+
+fonk exf_bosalt(sayi s) -> bos {
+    eger (!g_exf[s].ft_kirli) { don; }
+    blok_yaz(g_exf[s].blok, g_exf[s].ft_sektor, 1, g_exf[s].ft, 0);
+    g_exf[s].ft_kirli = yanlis;
+}
+
+fonk exf_sektor_al(sayi s, sayi sektor) -> bos {
+    eger (g_exf[s].ft_sektor == sektor) { don; }
+    exf_bosalt(s);
+    blok_oku(g_exf[s].blok, sektor, 1, g_exf[s].ft, 0);
+    g_exf[s].ft_sektor = sektor;
+}
+
+fonk exf_fat(sayi s, sayi c) -> sayi {
+    exf_sektor_al(s, g_exf[s].fat_ofs + (c * 4) / 512);
+    don upp.tampon.oku32(g_exf[s].ft, (c * 4) % 512);
+}
+
+fonk exf_fat_yaz(sayi s, sayi c, sayi v) -> bos {
+    exf_sektor_al(s, g_exf[s].fat_ofs + (c * 4) / 512);
+    upp.tampon.yaz32(g_exf[s].ft, (c * 4) % 512, v);
+    g_exf[s].ft_kirli = dogru;
+}
+
+fonk exf_zincir(sayi s, sayi ilk) -> liste[sayi] {
+    liste[sayi] R;
+    sayi c = ilk;
+    iken (c >= 2 && c < EXF_SON && R.uzunluk() <= g_exf[s].kume_say) {
+        R.ekle(c);
+        c = exf_fat(s, c);
+    }
+    don R;
+}
+
+// Nesnenin kümeleri: bitişikse ilk..ilk+n-1, değilse FAT zinciri.
+fonk exf_kumeler(sayi s, sayi ilk, sayi boy, mantik bitisik) -> liste[sayi] {
+    liste[sayi] R;
+    eger (ilk < 2) { don R; }
+    eger (!bitisik) { don exf_zincir(s, ilk); }
+    sayi n = (boy + g_exf[s].kb - 1) / g_exf[s].kb;
+    dongu (sayi i = 0; i < n; i += 1) { R.ekle(ilk + i); }
+    don R;
+}
+
+fonk exf_tampon(sayi s, liste[sayi] Z) -> sayi {
+    sayi kb = g_exf[s].kb;
+    sayi n = Z.uzunluk();
+    g_exf_boy = n * kb;
+    sayi t = upp.tampon.yeni(n * kb + 1);
+    sayi i = 0;
+    iken (i < n) {
+        sayi j = i;
+        iken (j + 1 < n && Z[j + 1] == Z[j] + 1 && j - i < 120) { j += 1; }
+        blok_oku(g_exf[s].blok, exf_lba(s, Z[i]), (j - i + 1) * g_exf[s].spc, t, i * kb);
+        i = j + 1;
+    }
+    don t;
+}
+
+fonk exf_tampon_yaz(sayi s, liste[sayi] Z, sayi t) -> bos {
+    dongu (sayi i = 0; i < Z.uzunluk(); i += 1) {
+        blok_yaz(g_exf[s].blok, exf_lba(s, Z[i]), g_exf[s].spc, t, i * g_exf[s].kb);
+    }
+}
+
+// ---- bitmap ----
+fonk exf_bit(sayi s, sayi c) -> mantik => bit_var(g_exf[s].bm, c - 2);
+
+fonk exf_bit_yaz(sayi s, sayi c, mantik dolu) -> bos {
+    bit_yaz(g_exf[s].bm, c - 2, dolu);
+}
+
+fonk exf_bm_kaydet(sayi s) -> bos {
+    exf_tampon_yaz(s, g_exf[s].bm_zincir, g_exf[s].bm);
+}
+
+fonk exf_kumeler_ayir(sayi s, sayi n) -> liste[sayi] {
+    liste[sayi] R;
+    eger (n <= 0) { don R; }
+    sayi son = g_exf[s].kume_say + 2;
+    sayi c = g_exf[s].ipucu;
+    sayi taranan = 0;
+    iken (R.uzunluk() < n && taranan < g_exf[s].kume_say) {
+        eger (c >= son) { c = 2; }
+        eger (!exf_bit(s, c)) { R.ekle(c); }
+        c += 1;
+        taranan += 1;
+    }
+    eger (R.uzunluk() < n) {
+        R.temizle();
+        don R;
+    }
+    dongu (sayi i = 0; i < n; i += 1) {
+        exf_bit_yaz(s, R[i], dogru);
+        eger (i + 1 < n) { exf_fat_yaz(s, R[i], R[i + 1]); } yoksa { exf_fat_yaz(s, R[i], EXF_EOC); }
+    }
+    exf_bosalt(s);
+    exf_bm_kaydet(s);
+    g_exf[s].ipucu = c;
+    don R;
+}
+
+fonk exf_kumeler_birak(sayi s, liste[sayi] Z) -> bos {
+    eger (Z.uzunluk() == 0) { don; }
+    her (oto c in Z) {
+        exf_bit_yaz(s, c, yanlis);
+        exf_fat_yaz(s, c, 0);
+    }
+    exf_bosalt(s);
+    exf_bm_kaydet(s);
+}
+
+// ---- ad karması ve girdi kümesi sağlaması ----
+fonk exf_dondur(sayi h) -> sayi {
+    sayi r = h / 2;
+    eger (h % 2 == 1) { r += 32768; }
+    don r;
+}
+
+fonk exf_ad_karma(sayi s, metin ad) -> sayi {
+    sayi t = upp.tampon.yeni(1024);
+    sayi n = upp.tampon.utf16_yaz(t, 0, ad, 255);
+    sayi h = 0;
+    dongu (sayi i = 0; i < n; i += 1) {
+        sayi u = upp.tampon.oku16(t, i * 2);
+        eger (g_exf[s].buyuk.var_mi(u)) { u = g_exf[s].buyuk.al(u); }
+        h = (exf_dondur(h) + u % 256) % 65536;
+        h = (exf_dondur(h) + u / 256) % 65536;
+    }
+    upp.tampon.birak(t);
+    don h;
+}
+
+fonk exf_kume_csum(sayi t, sayi o, sayi girdi) -> bos {
+    sayi h = 0;
+    dongu (sayi i = 0; i < girdi * 32; i += 1) {
+        eger (i == 2 || i == 3) { devam; }
+        h = (exf_dondur(h) + upp.tampon.oku8(t, o + i)) % 65536;
+    }
+    upp.tampon.yaz16(t, o + 2, h);
+}
+
+fonk exf_zaman(sayi epoch) -> sayi => epoch_dos_tarih(epoch) * 65536 + epoch_dos_saat(epoch);
+
+// ---- bağlama ----
+fonk exf_upcase_coz(sayi s, sayi t, sayi boy) -> bos {
+    sayi cp = 0;
+    sayi i = 0;
+    iken (i + 1 < boy && cp < 65536) {
+        sayi v = upp.tampon.oku16(t, i);
+        i += 2;
+        eger (v == 65535 && i + 1 < boy) {
+            cp += upp.tampon.oku16(t, i);
+            i += 2;
+            devam;
+        }
+        eger (v != cp) { g_exf[s].buyuk.koy(cp, v); }
+        cp += 1;
+    }
+}
+
+fonk exf_bagla(sayi bag) -> mantik {
+    sayi blok = g_bag[bag].blok;
+    sayi t = upp.tampon.yeni(512);
+    eger (!blok_oku(blok, 0, 1, t, 0) || !tampon_esit(t, 3, "EXFAT   ")) {
+        upp.tampon.birak(t);
+        g_fs_hata = "exFAT önyükleme sektörü bulunamadı";
+        don yanlis;
+    }
+    sayi bps_us = upp.tampon.oku8(t, 108);
+    sayi spc_us = upp.tampon.oku8(t, 109);
+    eger (bps_us != 9) {
+        upp.tampon.birak(t);
+        g_fs_hata = "yalnızca 512 bayt sektörlü exFAT desteklenir";
+        don yanlis;
+    }
+    ExFat e;
+    e.blok = blok;
+    e.spc = 1;
+    dongu (sayi i = 0; i < spc_us; i += 1) { e.spc = e.spc * 2; }
+    e.kb = e.spc * 512;
+    e.fat_ofs = upp.tampon.oku32(t, 80);
+    e.heap = upp.tampon.oku32(t, 88);
+    e.kume_say = upp.tampon.oku32(t, 92);
+    e.kok = upp.tampon.oku32(t, 96);
+    e.ft = upp.tampon.yeni(512);
+    e.ft_sektor = -1;
+    e.ft_kirli = yanlis;
+    e.ipucu = 2;
+    e.etiket = "";
+    e.bm = 0;
+    upp.tampon.birak(t);
+    g_exf.ekle(e);
+    sayi s = g_exf.uzunluk() - 1;
+    g_bag[bag].dno = s;
+    g_fs[g_bag[bag].nokta].ino = e.kok;
+    // kök dizindeki özel girdiler: bitmap, büyük harf tablosu, etiket
+    liste[sayi] Z = exf_zincir(s, e.kok);
+    sayi d = exf_tampon(s, Z);
+    sayi n = g_exf_boy;
+    sayi o = 0;
+    iken (o + 32 <= n) {
+        sayi tur = upp.tampon.oku8(d, o);
+        eger (tur == 0) { dur; }
+        eger (tur == 129 && g_exf[s].bm == 0) {
+            sayi bk = upp.tampon.oku32(d, o + 20);
+            sayi bb = upp.tampon.oku64(d, o + 24);
+            g_exf[s].bm_zincir = exf_zincir(s, bk);
+            g_exf[s].bm = exf_tampon(s, g_exf[s].bm_zincir);
+            g_exf[s].bm_boy = bb;
+        } yoksa eger (tur == 130) {
+            sayi uk = upp.tampon.oku32(d, o + 20);
+            sayi ub = upp.tampon.oku64(d, o + 24);
+            sayi ut = exf_tampon(s, exf_zincir(s, uk));
+            exf_upcase_coz(s, ut, ub);
+            upp.tampon.birak(ut);
+        } yoksa eger (tur == 131) {
+            sayi nl = upp.tampon.oku8(d, o + 1);
+            eger (nl > 11) { nl = 11; }
+            g_exf[s].etiket = upp.tampon.utf16_metin(d, o + 2, nl);
+        }
+        o += 32;
+    }
+    upp.tampon.birak(d);
+    eger (g_exf[s].bm == 0) {
+        g_fs_hata = "exFAT ayırma bitmap'i bulunamadı";
+        don yanlis;
+    }
+    don dogru;
+}
+
+fonk exf_ayir(sayi bag) -> bos {
+    sayi s = g_bag[bag].dno;
+    eger (s >= 0) { exf_bosalt(s); }
+}
+
+// Dizinin akışını açar; kümeler g_exf_z, uzunluk g_exf_boy.
+fonk exf_dizin_oku(sayi s, sayi no) -> sayi {
+    liste[sayi] Z;
+    eger (g_fs[no].ek < 0) {
+        Z = exf_zincir(s, g_fs[no].ino);
+    } yoksa {
+        Z = exf_kumeler(s, g_fs[no].ino, g_fs[no].boyut, g_fs[no].ek2 % 2 == 1);
+    }
+    g_exf_z = Z;
+    don exf_tampon(s, Z);
+}
+
+fonk exf_yukle(sayi no) -> bos {
+    sayi s = exf_s(no);
+    sayi t = exf_dizin_oku(s, no);
+    sayi n = g_exf_boy;
+    sayi o = 0;
+    iken (o + 32 <= n) {
+        sayi tur = upp.tampon.oku8(t, o);
+        eger (tur == 0) { dur; }
+        eger (tur != 133) {
+            o += 32;
+            devam;
+        }
+        sayi ikincil = upp.tampon.oku8(t, o + 1);
+        eger (ikincil < 2 || o + 32 * (ikincil + 1) > n || upp.tampon.oku8(t, o + 32) != 192) {
+            o += 32;
+            devam;
+        }
+        sayi attr = upp.tampon.oku16(t, o + 4);
+        sayi dz = upp.tampon.oku32(t, o + 12);
+        sayi so = o + 32;
+        sayi bayrak = upp.tampon.oku8(t, so + 1);
+        sayi ad_uz = upp.tampon.oku8(t, so + 3);
+        sayi gecerli = upp.tampon.oku64(t, so + 8);
+        sayi ilk = upp.tampon.oku32(t, so + 20);
+        sayi veri_uz = upp.tampon.oku64(t, so + 24);
+        metin ad = "";
+        sayi kalan = ad_uz;
+        sayi k = 0;
+        iken (kalan > 0 && k < ikincil - 1) {
+            sayi parca = kalan;
+            eger (parca > 15) { parca = 15; }
+            ad += upp.tampon.utf16_metin(t, o + 64 + k * 32 + 2, parca);
+            kalan -= parca;
+            k += 1;
+        }
+        mantik dizin = (attr / 16) % 2 == 1;
+        sayi dtur = D_DOSYA;
+        sayi kip = 420;
+        sayi boy = gecerli;
+        eger (dizin) {
+            dtur = D_DIZIN;
+            kip = 493;
+            boy = veri_uz;
+        }
+        eger (attr % 2 == 1) { kip -= 128; }
+        sayi bitisik = (bayrak / 2) % 2;
+        fs_disk_dugum(no, ad, dtur, kip, ilk, o, bitisik + 2 * ikincil, boy, dos_zaman_epoch(dz / 65536, dz % 65536));
+        o += 32 * (ikincil + 1);
+    }
+    upp.tampon.birak(t);
+}
+
+fonk exf_oku(sayi no) -> metin {
+    sayi s = exf_s(no);
+    sayi boy = g_fs[no].boyut;
+    eger (boy == 0) { don ""; }
+    liste[sayi] Z = exf_kumeler(s, g_fs[no].ino, boy, g_fs[no].ek2 % 2 == 1);
+    sayi t = exf_tampon(s, Z);
+    eger (boy > g_exf_boy) { boy = g_exf_boy; }
+    metin m = upp.tampon.metin(t, 0, boy);
+    upp.tampon.birak(t);
+    don m;
+}
+
+// Dizinde k boş girdi bulur; gerekirse dizini bir küme büyütür. -1 = yer yok.
+fonk exf_bos_yer(sayi s, sayi dno, sayi t_ref, sayi k) -> sayi {
+    sayi t = t_ref;
+    sayi n = g_exf_boy;
+    sayi o = 0;
+    sayi bas = -1;
+    iken (o + 32 <= n) {
+        sayi tur = upp.tampon.oku8(t, o);
+        eger (tur == 0) {
+            eger (bas < 0) { bas = o; }
+            eger ((n - bas) / 32 >= k) { don bas; }
+            dur;
+        }
+        eger (tur < 128) {
+            eger (bas < 0) { bas = o; }
+            eger ((o - bas) / 32 + 1 >= k) { don bas; }
+        } yoksa {
+            bas = -1;
+        }
+        o += 32;
+    }
+    don -1;
+}
+
+// Dizini bir küme büyütür; yeni tampon döner (eskisi bırakılır). -1 = yer yok.
+fonk exf_dizin_buyut(sayi s, sayi dno, sayi t) -> sayi {
+    liste[sayi] Z = g_exf_z;
+    liste[sayi] yeni = exf_kumeler_ayir(s, 1);
+    eger (yeni.uzunluk() == 0) { don -1; }
+    sayi kb = g_exf[s].kb;
+    sayi c = yeni[0];
+    sayi son = Z[Z.uzunluk() - 1];
+    mantik bitisik = g_fs[dno].ek >= 0 && g_fs[dno].ek2 % 2 == 1;
+    eger (bitisik && c != son + 1) {
+        // bitişik dizini FAT zincirine çevir
+        dongu (sayi i = 0; i + 1 < Z.uzunluk(); i += 1) { exf_fat_yaz(s, Z[i], Z[i + 1]); }
+        bitisik = yanlis;
+    }
+    eger (!bitisik) { exf_fat_yaz(s, son, c); }
+    exf_bosalt(s);
+    sayi bos_t = upp.tampon.yeni(kb);
+    liste[sayi] tek;
+    tek.ekle(c);
+    exf_tampon_yaz(s, tek, bos_t);
+    upp.tampon.birak(bos_t);
+    sayi eski_boy = g_exf_boy;
+    sayi t2 = upp.tampon.yeni(eski_boy + kb + 1);
+    upp.tampon.kopyala(t2, 0, t, 0, eski_boy);
+    upp.tampon.birak(t);
+    Z.ekle(c);
+    g_exf_z = Z;
+    g_exf_boy = eski_boy + kb;
+    eger (g_fs[dno].ek >= 0) {
+        // üst dizindeki akış girdisini güncelle (uzunluk, bitişiklik)
+        g_fs[dno].boyut += kb;
+        eger (!bitisik && g_fs[dno].ek2 % 2 == 1) { g_fs[dno].ek2 -= 1; }
+        exf_akis_guncelle(s, dno, g_fs[dno].ino, g_fs[dno].boyut, -1);
+    }
+    don t2;
+}
+
+// Bir düğümün üst dizinindeki girdi kümesinde akış (ilk küme, uzunluk) ve zamanı yazar.
+fonk exf_akis_guncelle(sayi s, sayi no, sayi ilk, sayi boy, sayi zaman) -> bos {
+    sayi u = g_fs[no].ust;
+    liste[sayi] eski_z = g_exf_z;
+    sayi eski_boy = g_exf_boy;
+    sayi t = exf_dizin_oku(s, u);
+    liste[sayi] Z = g_exf_z;
+    sayi o = g_fs[no].ek;
+    sayi so = o + 32;
+    sayi bayrak = 1;
+    eger (g_fs[no].ek2 % 2 == 1) { bayrak = 3; }
+    upp.tampon.yaz8(t, so + 1, bayrak);
+    upp.tampon.yaz64(t, so + 8, boy);
+    upp.tampon.yaz32(t, so + 20, ilk);
+    upp.tampon.yaz64(t, so + 24, boy);
+    eger (zaman >= 0) {
+        upp.tampon.yaz32(t, o + 12, exf_zaman(zaman));
+        upp.tampon.yaz32(t, o + 16, exf_zaman(zaman));
+    }
+    exf_kume_csum(t, o, g_fs[no].ek2 / 2 + 1);
+    exf_tampon_yaz(s, Z, t);
+    upp.tampon.birak(t);
+    g_exf_z = eski_z;
+    g_exf_boy = eski_boy;
+}
+
+// Yeni girdi kümesi yazar; dönüş: kümenin konumu (-1 hata). g_exf_ikincil: ikincil sayısı.
+sayi g_exf_ikincil = 0;
+
+fonk exf_kume_ekle(sayi s, sayi dno, metin ad, sayi attr, sayi bayrak, sayi ilk, sayi gecerli, sayi veri_uz, sayi zaman) -> sayi {
+    sayi bt = upp.tampon.yeni(1024);
+    sayi birim = upp.tampon.utf16_yaz(bt, 0, ad, 255);
+    sayi ad_girdi = (birim + 14) / 15;
+    sayi ikincil = 1 + ad_girdi;
+    sayi t = exf_dizin_oku(s, dno);
+    sayi o = exf_bos_yer(s, dno, t, ikincil + 1);
+    eger (o < 0) {
+        t = exf_dizin_buyut(s, dno, t);
+        eger (t < 0) {
+            upp.tampon.birak(bt);
+            g_fs_hata = "aygıtta yer kalmadı";
+            don -1;
+        }
+        o = exf_bos_yer(s, dno, t, ikincil + 1);
+    }
+    liste[sayi] Z = g_exf_z;
+    upp.tampon.doldur(t, o, 32 * (ikincil + 1), 0);
+    sayi ts = exf_zaman(zaman);
+    upp.tampon.yaz8(t, o, 133);
+    upp.tampon.yaz8(t, o + 1, ikincil);
+    upp.tampon.yaz16(t, o + 4, attr);
+    upp.tampon.yaz32(t, o + 8, ts);
+    upp.tampon.yaz32(t, o + 12, ts);
+    upp.tampon.yaz32(t, o + 16, ts);
+    sayi so = o + 32;
+    upp.tampon.yaz8(t, so, 192);
+    upp.tampon.yaz8(t, so + 1, bayrak);
+    upp.tampon.yaz8(t, so + 3, birim);
+    upp.tampon.yaz16(t, so + 4, exf_ad_karma(s, ad));
+    upp.tampon.yaz64(t, so + 8, gecerli);
+    upp.tampon.yaz32(t, so + 20, ilk);
+    upp.tampon.yaz64(t, so + 24, veri_uz);
+    dongu (sayi k = 0; k < ad_girdi; k += 1) {
+        sayi no2 = o + 64 + k * 32;
+        upp.tampon.yaz8(t, no2, 193);
+        dongu (sayi j = 0; j < 15; j += 1) {
+            sayi idx = k * 15 + j;
+            eger (idx < birim) { upp.tampon.yaz16(t, no2 + 2 + j * 2, upp.tampon.oku16(bt, idx * 2)); }
+        }
+    }
+    upp.tampon.birak(bt);
+    exf_kume_csum(t, o, ikincil + 1);
+    exf_tampon_yaz(s, Z, t);
+    upp.tampon.birak(t);
+    g_exf_ikincil = ikincil;
+    don o;
+}
+
+fonk exf_kume_sil(sayi s, sayi dno, sayi o, sayi ikincil) -> bos {
+    sayi t = exf_dizin_oku(s, dno);
+    liste[sayi] Z = g_exf_z;
+    dongu (sayi i = 0; i <= ikincil; i += 1) {
+        sayi tur = upp.tampon.oku8(t, o + i * 32);
+        eger (tur >= 128) { upp.tampon.yaz8(t, o + i * 32, tur - 128); }
+    }
+    exf_tampon_yaz(s, Z, t);
+    upp.tampon.birak(t);
+}
+
+fonk exf_olustur(sayi ust, metin ad, mantik dizin) -> sayi {
+    sayi s = exf_s(ust);
+    eger (!fat_ad_gecerli(ad)) {
+        g_fs_hata = "exFAT: geçersiz dosya adı";
+        don -1;
+    }
+    sayi z = simdi();
+    sayi ilk = 0;
+    sayi boy = 0;
+    sayi attr = 32;
+    eger (dizin) {
+        liste[sayi] yeni = exf_kumeler_ayir(s, 1);
+        eger (yeni.uzunluk() == 0) {
+            g_fs_hata = "aygıtta yer kalmadı";
+            don -1;
+        }
+        ilk = yeni[0];
+        boy = g_exf[s].kb;
+        attr = 16;
+        sayi bos_t = upp.tampon.yeni(boy);
+        exf_tampon_yaz(s, yeni, bos_t);
+        upp.tampon.birak(bos_t);
+    }
+    sayi o = exf_kume_ekle(s, ust, ad, attr, 1, ilk, boy, boy, z);
+    eger (o < 0) {
+        eger (ilk >= 2) {
+            liste[sayi] geri;
+            geri.ekle(ilk);
+            exf_kumeler_birak(s, geri);
+        }
+        don -1;
+    }
+    sayi tur = D_DOSYA;
+    sayi kip = 420;
+    eger (dizin) {
+        tur = D_DIZIN;
+        kip = 493;
+    }
+    don fs_disk_dugum(ust, ad, tur, kip, ilk, o, 2 * g_exf_ikincil, boy, z);
+}
+
+fonk exf_yaz(sayi no, metin veri) -> mantik {
+    sayi s = exf_s(no);
+    sayi kb = g_exf[s].kb;
+    sayi boy = bayt_say(veri);
+    sayi n = (boy + kb - 1) / kb;
+    liste[sayi] Z = exf_kumeler_ayir(s, n);
+    eger (n > 0 && Z.uzunluk() == 0) {
+        g_fs_hata = "aygıtta yer kalmadı";
+        don yanlis;
+    }
+    eger (n > 0) {
+        sayi t = upp.tampon.yeni(n * kb);
+        upp.tampon.metin_yaz(t, 0, veri);
+        exf_tampon_yaz(s, Z, t);
+        upp.tampon.birak(t);
+    }
+    liste[sayi] eski = exf_kumeler(s, g_fs[no].ino, g_fs[no].boyut, g_fs[no].ek2 % 2 == 1);
+    sayi ilk = 0;
+    eger (n > 0) { ilk = Z[0]; }
+    eger (g_fs[no].ek2 % 2 == 1) { g_fs[no].ek2 -= 1; }
+    exf_akis_guncelle(s, no, ilk, boy, g_fs[no].zaman);
+    exf_kumeler_birak(s, eski);
+    g_fs[no].ino = ilk;
+    don dogru;
+}
+
+fonk exf_sil(sayi no) -> mantik {
+    sayi s = exf_s(no);
+    exf_kume_sil(s, g_fs[no].ust, g_fs[no].ek, g_fs[no].ek2 / 2);
+    exf_kumeler_birak(s, exf_kumeler(s, g_fs[no].ino, g_fs[no].boyut, g_fs[no].ek2 % 2 == 1));
+    don dogru;
+}
+
+fonk exf_tasi(sayi no, sayi yeni_ust, metin yeni_ad) -> mantik {
+    sayi s = exf_s(no);
+    eger (!fat_ad_gecerli(yeni_ad)) {
+        g_fs_hata = "exFAT: geçersiz dosya adı";
+        don yanlis;
+    }
+    sayi t = exf_dizin_oku(s, g_fs[no].ust);
+    sayi o = g_fs[no].ek;
+    sayi attr = upp.tampon.oku16(t, o + 4);
+    sayi bayrak = upp.tampon.oku8(t, o + 33);
+    sayi gecerli = upp.tampon.oku64(t, o + 40);
+    sayi veri_uz = upp.tampon.oku64(t, o + 56);
+    upp.tampon.birak(t);
+    sayi yeni_o = exf_kume_ekle(s, yeni_ust, yeni_ad, attr, bayrak, g_fs[no].ino, gecerli, veri_uz, g_fs[no].zaman);
+    eger (yeni_o < 0) { don yanlis; }
+    sayi ikincil = g_exf_ikincil;
+    exf_kume_sil(s, g_fs[no].ust, o, g_fs[no].ek2 / 2);
+    g_fs[no].ek = yeni_o;
+    g_fs[no].ek2 = g_fs[no].ek2 % 2 + 2 * ikincil;
+    don dogru;
+}
+
+fonk exf_oznitelik(sayi no) -> mantik {
+    sayi s = exf_s(no);
+    eger (g_fs[no].ek < 0) { don dogru; }
+    sayi u = g_fs[no].ust;
+    sayi t = exf_dizin_oku(s, u);
+    liste[sayi] Z = g_exf_z;
+    sayi o = g_fs[no].ek;
+    sayi attr = upp.tampon.oku16(t, o + 4);
+    mantik salt = (g_fs[no].kip / 128) % 2 == 0;
+    eger (salt && attr % 2 == 0) { attr += 1; }
+    eger (!salt && attr % 2 == 1) { attr -= 1; }
+    upp.tampon.yaz16(t, o + 4, attr);
+    upp.tampon.yaz32(t, o + 12, exf_zaman(g_fs[no].zaman));
+    exf_kume_csum(t, o, g_fs[no].ek2 / 2 + 1);
+    exf_tampon_yaz(s, Z, t);
+    upp.tampon.birak(t);
+    don dogru;
+}
+
+fonk exf_alan(sayi bag) -> liste[sayi] {
+    sayi s = g_bag[bag].dno;
+    sayi bos_k = 0;
+    dongu (sayi c = 2; c < g_exf[s].kume_say + 2; c += 1) {
+        eger (!exf_bit(s, c)) { bos_k += 1; }
+    }
+    liste[sayi] R;
+    R.ekle(g_exf[s].kume_say * g_exf[s].kb);
+    R.ekle(bos_k * g_exf[s].kb);
+    don R;
+}
+
+fonk exfat_kaydet() -> bos {
+    Surucu s;
+    s.ad = "exfat";
+    s.bagla = exf_bagla;
+    s.ayir = exf_ayir;
+    s.yukle = exf_yukle;
+    s.oku = exf_oku;
+    s.yaz = exf_yaz;
+    s.olustur = exf_olustur;
+    s.sil = exf_sil;
+    s.tasi = exf_tasi;
+    s.oznitelik = exf_oznitelik;
+    s.alan = exf_alan;
+    g_surucu.koy("exfat", s);
+}

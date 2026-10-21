@@ -1,0 +1,581 @@
+// Uppix — uppsh kabuğu.
+// Satır önce ';', '&', '&&', '||' ile bölünür (tırnaklar korunur); her boru hattı
+// çalıştırılmadan hemen önce jetonlara ayrılır ve açılır ($?, $AD, ${AD}, $1, ~, *).
+// Boru '|' aşamaları sırayla çalışır: bir aşamanın çıktısı sonrakinin girdisidir.
+
+harita[metin, fonk(liste[metin], metin) -> sayi] g_komut;
+harita[metin, metin] g_komut_aciklama;
+harita[metin, metin] g_ortam;
+harita[metin, metin] g_takma;
+sayi g_son_kod = 0;
+liste[metin] g_konum;
+mantik g_cik = yanlis;
+sayi g_cik_kod = 0;
+sayi g_betik_derinlik = 0;
+
+// arka plan işleri
+liste[liste[metin]] g_is_grup;
+liste[liste[metin]] g_is_bag;
+liste[metin] g_is_ad;
+liste[sayi] g_is_pid;
+
+// jetonlayıcı durumu
+liste[metin] g_j;
+metin g_j_cur = "";
+mantik g_j_var = yanlis;
+mantik g_j_joker = yanlis;
+metin g_acilan = "";
+
+sabit metin OP_BORU = "\x01|";
+sabit metin OP_CIKTI = "\x01>";
+sabit metin OP_EKLE = "\x01>>";
+sabit metin OP_GIRDI = "\x01<";
+sabit metin OP_HATA = "\x012>";
+sabit metin JOKER_ON = "\x02";
+
+fonk ortam(metin ad) -> metin {
+    eger (g_ortam.var_mi(ad)) { don g_ortam.al(ad); }
+    don "";
+}
+
+fonk komut_ekle(metin ad, fonk(liste[metin], metin) -> sayi f, metin aciklama) -> bos {
+    g_komut.koy(ad, f);
+    g_komut_aciklama.koy(ad, aciklama);
+}
+
+// ---- 1. aşama: satırı ve-veya listelerine böl ----
+// Dönüş: [metin0, op0, metin1, op1, ...]; op: ";", "&", "&&", "||"
+fonk satir_bol(metin s) -> liste[metin] {
+    liste[metin] R;
+    metin cur = "";
+    sayi n = uz(s);
+    sayi i = 0;
+    sayi tirnak = 0;
+    iken (i < n) {
+        sayi c = s[i];
+        eger (tirnak != 0) {
+            eger (c == 92 && tirnak == 34 && i + 1 < n) {
+                cur += kes(s, i, 2);
+                i += 2;
+                devam;
+            }
+            eger (c == tirnak) { tirnak = 0; }
+            cur += kes(s, i, 1);
+            i += 1;
+            devam;
+        }
+        eger (c == 92 && i + 1 < n) {
+            cur += kes(s, i, 2);
+            i += 2;
+            devam;
+        }
+        eger (c == 39 || c == 34) {
+            tirnak = c;
+            cur += kes(s, i, 1);
+            i += 1;
+            devam;
+        }
+        eger (c == 35 && (i == 0 || bosluk_mu(s[i - 1]))) { dur; }
+        metin op = "";
+        eger (c == 59) {
+            op = ";";
+        } yoksa eger (c == 38) {
+            eger (i + 1 < n && s[i + 1] == 38) { op = "&&"; } yoksa { op = "&"; }
+        } yoksa eger (c == 124 && i + 1 < n && s[i + 1] == 124) {
+            op = "||";
+        }
+        eger (op != "") {
+            R.ekle(cur);
+            R.ekle(op);
+            cur = "";
+            i += uz(op);
+            devam;
+        }
+        cur += kes(s, i, 1);
+        i += 1;
+    }
+    R.ekle(cur);
+    R.ekle(";");
+    don R;
+}
+
+// ---- 2. aşama: jetonlar ve açılımlar ----
+fonk j_bitir() -> bos {
+    eger (g_j_var) {
+        eger (g_j_joker) { g_j.ekle(JOKER_ON + g_j_cur); } yoksa { g_j.ekle(g_j_cur); }
+    }
+    g_j_cur = "";
+    g_j_var = yanlis;
+    g_j_joker = yanlis;
+}
+
+// s[i] == '$'; açılan değeri g_acilan'a yazar, sonraki konumu döndürür.
+fonk degisken_ac(metin s, sayi i) -> sayi {
+    sayi n = uz(s);
+    g_acilan = "";
+    eger (i + 1 >= n) {
+        g_acilan = "$";
+        don i + 1;
+    }
+    sayi c = s[i + 1];
+    eger (c == 63) {
+        g_acilan = "{g_son_kod}";
+        don i + 2;
+    }
+    eger (c == 36) {
+        g_acilan = "{upp.cekirdek.gorev_kimlik()}";
+        don i + 2;
+    }
+    eger (c == 35) {
+        sayi say = g_konum.uzunluk() - 1;
+        eger (say < 0) { say = 0; }
+        g_acilan = "{say}";
+        don i + 2;
+    }
+    eger (c == 64 || c == 42) {
+        liste[metin] L;
+        dongu (sayi k = 1; k < g_konum.uzunluk(); k += 1) { L.ekle(g_konum[k]); }
+        g_acilan = upp.metin.birlestir(L, " ");
+        don i + 2;
+    }
+    eger (rakam_mi(c)) {
+        sayi idx = c - 48;
+        eger (idx < g_konum.uzunluk()) { g_acilan = g_konum[idx]; }
+        don i + 2;
+    }
+    eger (c == 123) {
+        sayi j = i + 2;
+        iken (j < n && s[j] != 125) { j += 1; }
+        g_acilan = ortam(kes(s, i + 2, j - i - 2));
+        don j + 1;
+    }
+    eger (harf_mi(c)) {
+        sayi j = i + 1;
+        iken (j < n && (harf_mi(s[j]) || rakam_mi(s[j]))) { j += 1; }
+        g_acilan = ortam(kes(s, i + 1, j - i - 1));
+        don j;
+    }
+    g_acilan = "$";
+    don i + 1;
+}
+
+fonk jetonla(metin s) -> liste[metin] {
+    g_j.temizle();
+    g_j_cur = "";
+    g_j_var = yanlis;
+    g_j_joker = yanlis;
+    sayi n = uz(s);
+    sayi i = 0;
+    iken (i < n) {
+        sayi c = s[i];
+        eger (bosluk_mu(c)) {
+            j_bitir();
+            i += 1;
+            devam;
+        }
+        eger (c == 124) {
+            j_bitir();
+            g_j.ekle(OP_BORU);
+            i += 1;
+            devam;
+        }
+        eger (c == 62) {
+            j_bitir();
+            eger (i + 1 < n && s[i + 1] == 62) {
+                g_j.ekle(OP_EKLE);
+                i += 2;
+            } yoksa {
+                g_j.ekle(OP_CIKTI);
+                i += 1;
+            }
+            devam;
+        }
+        eger (c == 60) {
+            j_bitir();
+            g_j.ekle(OP_GIRDI);
+            i += 1;
+            devam;
+        }
+        eger (c == 50 && !g_j_var && i + 1 < n && s[i + 1] == 62) {
+            j_bitir();
+            g_j.ekle(OP_HATA);
+            i += 2;
+            devam;
+        }
+        eger (c == 39) {
+            g_j_var = dogru;
+            i += 1;
+            iken (i < n && s[i] != 39) {
+                g_j_cur += kes(s, i, 1);
+                i += 1;
+            }
+            i += 1;
+            devam;
+        }
+        eger (c == 34) {
+            g_j_var = dogru;
+            i += 1;
+            iken (i < n && s[i] != 34) {
+                sayi d = s[i];
+                eger (d == 92 && i + 1 < n && (s[i + 1] == 34 || s[i + 1] == 92 || s[i + 1] == 36)) {
+                    g_j_cur += kes(s, i + 1, 1);
+                    i += 2;
+                    devam;
+                }
+                eger (d == 36) {
+                    i = degisken_ac(s, i);
+                    g_j_cur += g_acilan;
+                    devam;
+                }
+                g_j_cur += kes(s, i, 1);
+                i += 1;
+            }
+            i += 1;
+            devam;
+        }
+        eger (c == 92) {
+            g_j_var = dogru;
+            eger (i + 1 < n) { g_j_cur += kes(s, i + 1, 1); }
+            i += 2;
+            devam;
+        }
+        eger (c == 36) {
+            i = degisken_ac(s, i);
+            g_j_cur += g_acilan;
+            eger (g_acilan != "") { g_j_var = dogru; }
+            devam;
+        }
+        eger (c == 126 && !g_j_var && (i + 1 >= n || s[i + 1] == 47 || bosluk_mu(s[i + 1]))) {
+            g_j_cur += ortam("HOME");
+            g_j_var = dogru;
+            i += 1;
+            devam;
+        }
+        eger (c == 42 || c == 63) { g_j_joker = dogru; }
+        g_j_cur += kes(s, i, 1);
+        g_j_var = dogru;
+        i += 1;
+    }
+    j_bitir();
+    liste[metin] R = g_j;
+    don R;
+}
+
+fonk op_mu(metin t) -> mantik => upp.metin.baslar(t, "\x01");
+
+fonk joker_mu(metin t) -> mantik => upp.metin.baslar(t, JOKER_ON);
+
+fonk jeton_metin(metin t) -> metin {
+    eger (joker_mu(t)) { don kes_son(t, 1); }
+    don t;
+}
+
+// "dizin/des*en" → eşleşen yollar (sıralı); eşleşme yoksa desenin kendisi.
+fonk joker_ac(metin desen) -> liste[metin] {
+    liste[metin] R;
+    sayi son_bolu = -1;
+    dongu (sayi i = 0; i < uz(desen); i += 1) {
+        eger (desen[i] == 47) { son_bolu = i; }
+    }
+    metin dizin_kismi = kes(desen, 0, son_bolu + 1);
+    metin ad_deseni = kes_son(desen, son_bolu + 1);
+    metin dz = dizin_kismi;
+    eger (dz == "") { dz = "."; }
+    sayi d = fs_coz(dz);
+    eger (fs_dizin_mi(d)) {
+        liste[metin] adlar;
+        her (oto c in fs_cocuklar(d)) {
+            metin ad = g_fs[c].ad;
+            eger (upp.metin.baslar(ad, ".") && !upp.metin.baslar(ad_deseni, ".")) { devam; }
+            eger (eslesir(ad_deseni, ad)) { adlar.ekle(ad); }
+        }
+        her (oto a in adlari_sirala(adlar)) { R.ekle(dizin_kismi + a); }
+    }
+    eger (R.uzunluk() == 0) { R.ekle(desen); }
+    don R;
+}
+
+// ---- dosyaya yazma (yönlendirme) ----
+fonk dosyaya_yaz(metin yol, metin veri, mantik ekle) -> mantik {
+    sayi no = fs_dosya_ac(yol);
+    eger (no < 0) {
+        metin neden = "böyle bir dosya ya da dizin yok";
+        eger (g_fs_hata != "") { neden = g_fs_hata; }
+        hata_bildir("uppsh: {yol}: " + neden);
+        don yanlis;
+    }
+    eger (g_fs[no].tur == D_DIZIN) {
+        hata_bildir("uppsh: {yol}: bir dizin");
+        don yanlis;
+    }
+    eger (g_fs[no].tur == D_SANAL) {
+        hata_bildir("uppsh: {yol}: salt okunur dosya sistemi");
+        don yanlis;
+    }
+    eger (!fs_yaz(no, veri, ekle)) {
+        hata_bildir("uppsh: {yol}: " + g_fs_hata);
+        don yanlis;
+    }
+    don dogru;
+}
+
+// ---- komut çalıştırma ----
+fonk yerlesik_ad(metin icerik) -> metin {
+    metin on = "#!/yerlesik/";
+    eger (!upp.metin.baslar(icerik, on)) { don ""; }
+    don upp.metin.kirp(satirlar(kes_son(icerik, uz(on)))[0]);
+}
+
+fonk betik_calistir(metin icerik, liste[metin] a) -> sayi {
+    liste[metin] eski = g_konum;
+    g_konum = a;
+    g_betik_derinlik += 1;
+    sayi kod = 0;
+    her (oto l in satirlar(icerik)) {
+        metin t = upp.metin.kirp(l);
+        eger (t == "" || upp.metin.baslar(t, "#")) { devam; }
+        kod = satir_calistir(t);
+        eger (g_cik) { dur; }
+    }
+    eger (g_cik) {
+        kod = g_cik_kod;
+        g_cik = yanlis;
+    }
+    g_betik_derinlik -= 1;
+    g_konum = eski;
+    g_son_kod = kod;
+    don kod;
+}
+
+fonk dosya_calistir(sayi no, liste[metin] a, metin girdi) -> sayi {
+    metin ad = a[0];
+    eger (g_fs[no].tur == D_DIZIN) {
+        hata_bildir("uppsh: {ad}: bir dizin");
+        don 126;
+    }
+    eger (!calistirilabilir_mi(no)) {
+        hata_bildir("uppsh: {ad}: izin reddedildi");
+        don 126;
+    }
+    metin icerik = fs_oku(no);
+    metin y = yerlesik_ad(icerik);
+    eger (y != "" && g_komut.var_mi(y)) {
+        don g_komut.al(y)(a, girdi);
+    }
+    don betik_calistir(icerik, a);
+}
+
+fonk komut_calistir(liste[metin] a, metin girdi) -> sayi {
+    eger (a.uzunluk() == 0) { don 0; }
+    metin ad = a[0];
+    sayi esit = upp.metin.bul(ad, "=");
+    eger (esit > 0 && a.uzunluk() == 1 && upp.metin.bul(ad, "/") < 0) {
+        g_ortam.koy(kes(ad, 0, esit), kes_son(ad, esit + 1));
+        don 0;
+    }
+    eger (g_komut.var_mi(ad)) {
+        don g_komut.al(ad)(a, girdi);
+    }
+    eger (upp.metin.bul(ad, "/") >= 0) {
+        sayi no = fs_coz(ad);
+        eger (no < 0) {
+            hata_bildir("uppsh: {ad}: böyle bir dosya ya da dizin yok");
+            don 127;
+        }
+        don dosya_calistir(no, a, girdi);
+    }
+    her (oto d in upp.metin.bol(ortam("PATH"), ":")) {
+        eger (d == "") { devam; }
+        sayi pno = fs_coz(yol_birlestir(d, ad));
+        eger (pno >= 0 && g_fs[pno].tur != D_DIZIN) {
+            don dosya_calistir(pno, a, girdi);
+        }
+    }
+    hata_bildir("uppsh: {ad}: komut bulunamadı");
+    don 127;
+}
+
+fonk takma_ac(liste[metin] a) -> liste[metin] {
+    eger (a.uzunluk() == 0 || !g_takma.var_mi(a[0])) { don a; }
+    liste[metin] R;
+    her (oto t in jetonla(g_takma.al(a[0]))) {
+        eger (!op_mu(t)) { R.ekle(jeton_metin(t)); }
+    }
+    dongu (sayi i = 1; i < a.uzunluk(); i += 1) { R.ekle(a[i]); }
+    don R;
+}
+
+fonk boru_calistir(metin boru) -> sayi {
+    liste[metin] J = jetonla(boru);
+    eger (J.uzunluk() == 0) { don g_son_kod; }
+    liste[liste[metin]] asamalar;
+    liste[metin] cur;
+    her (oto t in J) {
+        eger (t == OP_BORU) {
+            asamalar.ekle(cur);
+            cur.temizle();
+        } yoksa {
+            cur.ekle(t);
+        }
+    }
+    asamalar.ekle(cur);
+    metin girdi = yok;
+    sayi kod = 0;
+    sayi n = asamalar.uzunluk();
+    dongu (sayi k = 0; k < n; k += 1) {
+        liste[metin] parca = asamalar[k];
+        liste[metin] arg;
+        metin cikti_yol = "";
+        mantik ekle = yanlis;
+        metin girdi_yol = "";
+        mantik sustur = yanlis;
+        mantik sozdizimi = yanlis;
+        sayi j = 0;
+        iken (j < parca.uzunluk()) {
+            metin t = parca[j];
+            eger (t == OP_CIKTI || t == OP_EKLE || t == OP_GIRDI || t == OP_HATA) {
+                eger (j + 1 >= parca.uzunluk() || op_mu(parca[j + 1])) {
+                    sozdizimi = dogru;
+                    dur;
+                }
+                metin hedef = jeton_metin(parca[j + 1]);
+                eger (t == OP_GIRDI) {
+                    girdi_yol = hedef;
+                } yoksa eger (t == OP_HATA) {
+                    sustur = dogru;
+                } yoksa {
+                    cikti_yol = hedef;
+                    ekle = t == OP_EKLE;
+                }
+                j += 2;
+                devam;
+            }
+            eger (joker_mu(t)) {
+                her (oto g in joker_ac(jeton_metin(t))) { arg.ekle(g); }
+            } yoksa {
+                arg.ekle(t);
+            }
+            j += 1;
+        }
+        eger (sozdizimi || (arg.uzunluk() == 0 && n > 1)) {
+            hata_bildir("uppsh: sözdizimi hatası");
+            don 2;
+        }
+        arg = takma_ac(arg);
+        eger (girdi_yol != "") {
+            sayi gno = fs_coz(girdi_yol);
+            eger (gno < 0 || g_fs[gno].tur == D_DIZIN) {
+                hata_bildir("uppsh: {girdi_yol}: böyle bir dosya ya da dizin yok");
+                don 1;
+            }
+            girdi = fs_oku(gno);
+        }
+        mantik son = k == n - 1;
+        mantik yakala = !son || cikti_yol != "";
+        mantik eski_sustur = g_hata_sustur;
+        eger (sustur) { g_hata_sustur = dogru; }
+        eger (yakala) { yakala_basla(); }
+        kod = komut_calistir(arg, girdi);
+        g_hata_sustur = eski_sustur;
+        eger (yakala) {
+            metin cikan = yakala_bitir();
+            eger (son) {
+                eger (!dosyaya_yaz(cikti_yol, cikan, ekle)) { kod = 1; }
+            } yoksa {
+                girdi = cikan;
+            }
+        }
+        eger (g_cik) { dur; }
+    }
+    don kod;
+}
+
+// ve-veya listesi: grup[k] çalıştıktan sonra bag[k] bir sonrakinin koşuludur.
+fonk vey_calistir(liste[metin] grup, liste[metin] bag) -> sayi {
+    sayi kod = boru_calistir(grup[0]);
+    dongu (sayi k = 1; k < grup.uzunluk(); k += 1) {
+        eger (g_cik) { dur; }
+        metin kosul = bag[k - 1];
+        eger ((kosul == "&&" && kod == 0) || (kosul == "||" && kod != 0)) {
+            kod = boru_calistir(grup[k]);
+        }
+    }
+    don kod;
+}
+
+fonk is_gorevi(sayi no) -> bos {
+    sayi kod = vey_calistir(g_is_grup[no], g_is_bag[no]);
+    upp.satir_yaz("[{no + 1}]+  Bitti ({kod})  {g_is_ad[no]}");
+}
+
+fonk arkaplan_baslat(liste[metin] grup, liste[metin] bag) -> bos {
+    sayi no = g_is_grup.uzunluk();
+    metin ad = "";
+    dongu (sayi k = 0; k < grup.uzunluk(); k += 1) {
+        ad += upp.metin.kirp(grup[k]);
+        eger (k < grup.uzunluk() - 1) { ad += " " + bag[k] + " "; }
+    }
+    g_is_grup.ekle(grup);
+    g_is_bag.ekle(bag);
+    g_is_ad.ekle(ad);
+    sayi pid = upp.cekirdek.gorev_baslat(is_gorevi, no, ad);
+    g_is_pid.ekle(pid);
+    eger (pid < 0) {
+        hata_bildir("uppsh: görev tablosu dolu");
+        g_son_kod = 1;
+        don;
+    }
+    satir("[{no + 1}] {pid}");
+    g_son_kod = 0;
+}
+
+fonk satir_calistir(metin s) -> sayi {
+    liste[metin] P = satir_bol(s);
+    liste[metin] grup;
+    liste[metin] bag;
+    sayi i = 0;
+    iken (i + 1 < P.uzunluk() && !g_cik) {
+        metin parca = P[i];
+        metin op = P[i + 1];
+        i += 2;
+        eger (op == "&&" || op == "||") {
+            grup.ekle(parca);
+            bag.ekle(op);
+            devam;
+        }
+        grup.ekle(parca);
+        bag.ekle(op);
+        mantik bos_mu = grup.uzunluk() == 1 && upp.metin.kirp(parca) == "";
+        eger (!bos_mu) {
+            eger (op == "&") {
+                arkaplan_baslat(grup, bag);
+            } yoksa {
+                g_son_kod = vey_calistir(grup, bag);
+            }
+        }
+        grup.temizle();
+        bag.temizle();
+    }
+    don g_son_kod;
+}
+
+fonk istem_uret() -> metin {
+    metin yol = fs_yol(g_cwd);
+    metin ev = ortam("HOME");
+    eger (ev != "" && (yol == ev || upp.metin.baslar(yol, ev + "/"))) { yol = "~" + kes_son(yol, uz(ev)); }
+    don "\e[1;32m" + ortam("USER") + "@" + ortam("HOSTNAME") + "\e[0m:\e[1;34m" + yol + "\e[0m# ";
+}
+
+fonk kabuk_dongu() -> bos {
+    iken (!g_cik) {
+        metin s = satir_oku(istem_uret());
+        eger (g_satir_eof) {
+            upp.satir_yaz("exit");
+            dur;
+        }
+        metin t = upp.metin.kirp(s);
+        eger (t == "") { devam; }
+        gecmis_ekle(t);
+        satir_calistir(t);
+    }
+}
