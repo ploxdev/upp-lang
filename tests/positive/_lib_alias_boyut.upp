@@ -1,0 +1,6 @@
+// 48_dil_duzeltmeleri.upp için: takma adlı modülde boyut(T) ve (T)x kendi türüyle.
+sinif Ikili { sayi a; sayi b; }
+secenek Kip { Okuma = 4, Yazma = 2 }
+fonk olcu() -> sayi => boyut(Ikili);
+fonk kip_degeri(Kip k) -> sayi => (sayi)k;
+fonk kipten(sayi n) -> Kip => (Kip)n;

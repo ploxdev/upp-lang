@@ -258,6 +258,14 @@ Bilinmeyen nitelik, aynı niteliğin iki kez yazılması ve uygun olmayan bildir
 | `sinif`, `secenek` | `struct`, `enum` | Kullanıcı tanımlı yapı ve numaralandırma türleri |
 | `sirali` | `enum` ya da etiketli `struct` | Veri taşıyabilen numaralandırma (etiketli birleşim) |
 
+**Tür ve ad kuralları:**
+- **Metin karşılaştırma:** `==` / `!=` içerik eşitliğidir; `<`, `>`, `<=`, `>=` sözlük sırasıdır ve Unicode kod noktası sırasını izler (`"armut" < "elma"`; `ş` (U+015F), `z`'den sonra gelir). Metin yalnızca metinle karşılaştırılır; metinlerle `+` dışında aritmetik yoktur.
+- **Seçenek değerleri:** `secenek Kod { A = 10, B = 0xFF, C = -3, D }` — açık değerler onluk, onaltılık ya da eksi olabilir; değersiz üye bir öncekinin bir fazlasıdır. Aynı üye adı iki kez yazılamaz.
+- **Sınıf sırası:** Bir sınıf, kendisinden sonra tanımlanan bir sınıfı alan olarak içerebilir; derleyici yapıları bağımlılık sırasıyla üretir. Sınıflar birbirini değer olarak döngüsel içeremez (sonsuz boyut); döngü `liste[T]` ile kırılır.
+- **C'de ayrılmış adlar:** Adlar C'ye olduğu gibi geçtiğinden C anahtar sözcükleri ve makroları (`int`, `char`, `errno`, `stdout`, `min`, `max`…) hiçbir yerde ad olamaz; libc/POSIX fonksiyon adları (`abs`, `exit`, `log`, `read`…) üst düzey fonksiyon ya da küresel değişken adı olamaz. Dosyayı `kullan ... olarak m` ile katmak adları `m_` önekiyle ayırır.
+- **Gölgeleme:** Yerel değişkenler ve parametreler aynı adlı modül takma adını, sınıf ve seçenek adlarını gölgeler. İç kapsamda aynı adla yeni bir değişken bildirilebilir; dıştaki sahipli değer erken `don`/`dur`/`devam`'da da doğru bırakılır.
+- Derleyici geçersiz C üretirse (bir derleyici hatası) `[GCC DERLEME HATASI]` ile birlikte GCC'nin hata satırları da gösterilir.
+
 ### Açık Tür Dönüşümü `(T)x` ve `boyut(T)`
 C dilindeki dönüşüm sözdizimiyle yazılır:
 ```upp

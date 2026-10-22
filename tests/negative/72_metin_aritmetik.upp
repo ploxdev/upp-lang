@@ -1,0 +1,10 @@
+// Negatif: metinlerle aritmetik yapılmaz.
+// @icerir: [u++ HATA]
+// @icerir: Metinlerle '-' işlemi yapılamaz
+
+fonk ana() -> sayi {
+    metin a = "elma";
+    metin b = "armut";
+    sayi f = a - b;
+    don f;
+}

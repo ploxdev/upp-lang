@@ -135,6 +135,10 @@ fonk alias_cevir(sayi n) -> bos {
             dugum_yaz_a(a, al);
         }
     }
+    // boyut(T) ve (T)x türü düğümün sayı alanındadır
+    eger ((t == DugumTur.D_BOYUT || t == DugumTur.D_DONUSUM) && dugum_sayi(n) != 0) {
+        alias_cevir(dugum_sayi(n));
+    }
     alias_cevir(dugum_a(n));
     alias_cevir(dugum_b(n));
     alias_cevir(dugum_c(n));
@@ -159,6 +163,25 @@ fonk alias_birim_cevir(sayi decls, metin alias) -> bos {
     her (sayi i in 0..liste_uzunluk(decls)) {
         sayi d = liste_al(decls, i);
         eger (dugum_tur(d) != DugumTur.D_KULLAN) { alias_cevir(d); }
+    }
+}
+
+// GCC çıktısının hata satırları (en çok 10); hiç yoksa ilk 15 satır.
+fonk gcc_hata_ozeti_yaz(metin cikti) -> bos {
+    eger (cikti == yok || metin_esit(cikti, "")) { don; }
+    liste[metin] L = upp.metin.bol(cikti, "\n");
+    sayi yazilan = 0;
+    her (oto s in L) {
+        eger (yazilan >= 10) { dur; }
+        eger (upp.metin.bul(s, "error") >= 0 || upp.metin.bul(s, "hata") >= 0) {
+            upp.satir_yaz("  " + s);
+            yazilan += 1;
+        }
+    }
+    eger (yazilan > 0) { don; }
+    her (sayi i in 0..L.uzunluk()) {
+        eger (i >= 15) { dur; }
+        upp.satir_yaz("  " + L[i]);
     }
 }
 
@@ -763,7 +786,8 @@ fonk ana() -> sayi {
                 hata_json_yaz(1, 1, "gcc", gcc_mesaj);
             }
         } yoksa {
-            upp.satir_yaz("[GCC DERLEME HATASI]");
+            upp.satir_yaz("[GCC DERLEME HATASI] u++ bu programdan geçersiz C üretti; bu bir derleyici hatasıdır. GCC iletisi:");
+            gcc_hata_ozeti_yaz(os_gcc_cikti());
         }
         don 1;
     }

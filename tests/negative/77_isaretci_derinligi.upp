@@ -1,0 +1,12 @@
+// Negatif: işaretçi derinliği atamada denetlenir.
+// @icerir: [u++ HATA]
+// @icerir: Atama türü uyumsuz: 'sayi**' beklenir, 'sayi*' verildi.
+
+fonk ana() -> sayi {
+    guvensiz {
+        sayi x = 5;
+        sayi* p = &x;
+        sayi** pp = p;
+    }
+    don 0;
+}

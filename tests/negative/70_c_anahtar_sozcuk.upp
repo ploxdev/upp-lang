@@ -1,0 +1,8 @@
+// Negatif: C anahtar sözcükleri ad olamaz (C'ye olduğu gibi geçer).
+// @icerir: [u++ HATA]
+// @icerir: 'int' C'de ayrılmış bir addır
+
+fonk ana() -> sayi {
+    sayi int = 3;
+    don int;
+}

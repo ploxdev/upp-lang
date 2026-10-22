@@ -1143,6 +1143,9 @@ fonk kapsam_yerel_var(metin ad) -> mantik {
 }
 
 fonk drop_sifirla() -> bos {
+    golge_i.temizle();
+    golge_eski.temizle();
+    golge_cer.temizle();
     drop_n = 0;
     drop_cer_cur = 0;
     drop_dongu_n = 0;
@@ -1208,7 +1211,28 @@ fonk drop_ad_var(metin ad) -> mantik {
     don yanlis;
 }
 
+// Gölgeleme: iç kapsamda aynı adla yeni bir değişken bildirilince dıştaki
+// sahipli değişkenin bırakma kaydı, o kapsam boyunca bir işaretçi takma adına
+// ('(*_upp_gN)') yönlendirilir; kapsam kapanınca eski adına döner.
+liste[sayi] golge_i;
+liste[metin] golge_eski;
+liste[sayi] golge_cer;
+
+fonk drop_golge_yonlendir(sayi i, metin yeni) -> bos {
+    golge_i.ekle(i);
+    golge_eski.ekle(drop_ad.al(i));
+    golge_cer.ekle(drop_cer_cur);
+    drop_ad.yaz(i, intern(yeni));
+}
+
 fonk drop_cerceve_pop() -> bos {
+    iken (golge_cer.uzunluk() > 0 && golge_cer.al(golge_cer.uzunluk() - 1) == drop_cer_cur) {
+        sayi k = golge_cer.uzunluk() - 1;
+        drop_ad.yaz(golge_i.al(k), golge_eski.al(k));
+        golge_i.sil(k);
+        golge_eski.sil(k);
+        golge_cer.sil(k);
+    }
     iken (drop_n > 0 && drop_cer.al(drop_n - 1) == drop_cer_cur) {
         drop_n = drop_n - 1;
     }

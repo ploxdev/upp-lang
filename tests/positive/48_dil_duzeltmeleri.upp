@@ -1,0 +1,127 @@
+// Pozitif: derleyici düzeltmeleri — seçenek açık değerleri (onluk, onaltılık,
+// eksi), dongu adımında interpolasyon (her turda, devam dahil), sınıfların
+// bildirim sırasından bağımsız gömülmesi, dizi sabiti üzerinde her, metin
+// sözlük sırası, ertele içinde 'don'lu anonim fonksiyon, arkaplan'da
+// interpolasyon ifadesinin yakaladığı değişken, takma adlı modülde boyut/(T)x,
+// gölgelenen metnin erken dönüşte sızmaması (ASan ile).
+// @bayrak: --guvenlik-denetimi
+// @stdout
+// kod: 10 255 16 -3 -2 7
+// sirali: 12 13
+// adım: 2,3,4,
+// devam: 0,2,4,6,
+// çizgi: 4 9
+// dizi: 6 xyz
+// sıra: dogru yanlis dogru dogru yanlis
+// sırala: armut elma zeytin şeftali
+// ertele: 6
+// arkaplan: 49
+// modül: 16 4 2
+// gölge: 15
+
+kullan "_lib_alias_boyut.upp" olarak m;
+
+secenek Kod { A = 10, B = 255, C = 0x10, D = -3, E, F = 7 }
+sirali Sr { X = 12, Y }
+
+sinif Cizgi {
+    Nokta bas;
+    Nokta son;
+}
+sinif Nokta {
+    sayi x;
+    sayi y;
+}
+
+fonk kare(sayi x) -> sayi => x * x;
+
+fonk golge(mantik erken) -> sayi {
+    metin s = "dış {erken}";
+    liste[metin] L;
+    L.ekle("x{erken}");
+    eger (erken) {
+        metin s = "iç {erken}";
+        sayi L = 4;
+        her (sayi i in 0..3) {
+            metin s = "döngü {i}";
+            eger (i == 1) { don L + upp.uzunluk(s) - 6; }
+        }
+        don 1;
+    }
+    her (metin s in L) {
+        eger (upp.uzunluk(s) > 0) { dur; }
+    }
+    don 0;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("kod: {(sayi)Kod.A} {(sayi)Kod.B} {(sayi)Kod.C} {(sayi)Kod.D} {(sayi)Kod.E} {(sayi)Kod.F}");
+    upp.satir_yaz("sirali: {(sayi)Sr.X} {(sayi)Sr.Y}");
+
+    metin s = "";
+    dongu (sayi i = 1; i <= 3; s += "{i},") { i += 1; }
+    upp.satir_yaz("adım: " + s);
+    metin d = "";
+    dongu (sayi i = 0; i < 6; d += "{i - 1},") {
+        i += 1;
+        eger (i % 2 == 0) { i += 1; devam; }
+    }
+    upp.satir_yaz("devam: " + d);
+
+    Cizgi c;
+    c.son.x = 4;
+    c.son.y = 9;
+    upp.satir_yaz("çizgi: {c.son.x} {c.son.y}");
+
+    sayi t = 0;
+    her (sayi x in [1, 2, 3]) { t += x; }
+    metin harfler = "";
+    her (metin h in ["x", "y", "z"]) { harfler += h; }
+    upp.satir_yaz("dizi: {t} {harfler}");
+
+    metin ar = "armut";
+    metin el = "elma";
+    metin aa = "a";
+    metin ab = "ab";
+    metin se = "şeftali";
+    metin ze = "zeytin";
+    upp.satir_yaz("sıra: {ar < el} {el < ar} {aa <= aa} {ab > aa} {se < ze}");
+    liste[metin] meyve;
+    meyve.ekle("zeytin");
+    meyve.ekle("elma");
+    meyve.ekle("şeftali");
+    meyve.ekle("armut");
+    // basit sıralama: metin karşılaştırmasıyla
+    her (sayi i in 0..meyve.uzunluk()) {
+        her (sayi j in 0..meyve.uzunluk() - 1) {
+            eger (meyve[j] > meyve[j + 1]) {
+                metin g = meyve[j];
+                meyve[j] = meyve[j + 1];
+                meyve[j + 1] = g;
+            }
+        }
+    }
+    upp.satir_yaz("sırala: {meyve[0]} {meyve[1]} {meyve[2]} {meyve[3]}");
+
+    sayi e = 0;
+    {
+        ertele {
+            oto f = fonk(sayi x) -> sayi { don x * 2; };
+            e = f(3);
+        }
+    }
+    upp.satir_yaz("ertele: {e}");
+
+    sayi a = 7;
+    ArkaplanIs is = arkaplan {
+        upp.satir_yaz("arkaplan: {kare(a)}");
+    };
+    is.bekle();
+
+    upp.satir_yaz("modül: {m.olcu()} {m.kip_degeri(m.Kip.Okuma)} {m.kip_degeri(m.kipten(2))}");
+
+    sayi toplam = 0;
+    her (sayi i in 0..3) { toplam += golge(dogru) + golge(yanlis); }
+    upp.satir_yaz("gölge: {toplam}");
+    don 0;
+}

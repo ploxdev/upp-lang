@@ -1,0 +1,9 @@
+// Negatif: harita anahtar türü denetlenir.
+// @icerir: [u++ HATA]
+// @icerir: harita.al anahtar türü uyumsuz: 'metin' bekleniyor.
+
+fonk ana() -> sayi {
+    harita[metin, sayi] h;
+    sayi k = 5;
+    don h.al(k);
+}

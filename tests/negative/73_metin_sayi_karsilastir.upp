@@ -1,0 +1,9 @@
+// Negatif: metin yalnızca metinle karşılaştırılır.
+// @icerir: [u++ HATA]
+// @icerir: Metin yalnızca metinle karşılaştırılır
+
+fonk ana() -> sayi {
+    metin a = "5";
+    eger (a < 7) { don 1; }
+    don 0;
+}

@@ -1,0 +1,10 @@
+// Negatif: 'oto' değer üretmeyen ifadeden tür çıkaramaz.
+// @icerir: [u++ HATA]
+// @icerir: 'oto x' türünü çıkaramaz
+
+fonk hic() -> bos { }
+
+fonk ana() -> sayi {
+    oto x = hic();
+    don 0;
+}

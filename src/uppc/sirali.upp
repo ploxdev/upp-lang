@@ -208,8 +208,7 @@ fonk ayristir_sirali(sayi decls) -> bos {
         g_sv_parantez.ekle(parantez);
         sayi deger = sonraki;
         eger (esles_tur(JetonTur.J_ATAMA)) {
-            sayi num = beklenen_tur(JetonTur.J_SAYI, "tam sayı");
-            deger = hex_deger(jeton_deger(num));
+            deger = secenek_deger_oku();
             acik_deger = dogru;
         }
         degerler.ekle(deger);

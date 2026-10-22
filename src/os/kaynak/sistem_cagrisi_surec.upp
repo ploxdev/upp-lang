@@ -327,20 +327,20 @@ fonk sc_prlimit(sayi s, sayi pid, sayi kaynak, sayi yeni, sayi eski) -> sayi {
     eger (kaynak < 0 || kaynak >= RLIM_SAYI) { don -EINVAL; }
     eger (pid != 0 && pid != g_surec[s].pid) { don -ESRCH; }
     sayi y = (s * RLIM_SAYI + kaynak) * 2;
-    sayi cur = 0;
-    sayi max = 0;
+    sayi simdiki = 0;
+    sayi azami = 0;
     eger (yeni != 0) {
         sayi t = upp.tampon.yeni(16);
         eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, yeni, t, 0, 16)) {
             upp.tampon.birak(t);
             don -EFAULT;
         }
-        cur = upp.tampon.oku64(t, 0);
-        max = upp.tampon.oku64(t, 8);
+        simdiki = upp.tampon.oku64(t, 0);
+        azami = upp.tampon.oku64(t, 8);
         upp.tampon.birak(t);
-        eger (rlim_buyuk(cur, max)) { don -EINVAL; }
+        eger (rlim_buyuk(simdiki, azami)) { don -EINVAL; }
         // tanımlayıcı tablosu sabittir (nr_open)
-        eger (kaynak == 7 && rlim_buyuk(max, FD_MAX)) { don -EPERM; }
+        eger (kaynak == 7 && rlim_buyuk(azami, FD_MAX)) { don -EPERM; }
     }
     eger (eski != 0) {
         sayi t = upp.tampon.yeni(16);
@@ -350,8 +350,8 @@ fonk sc_prlimit(sayi s, sayi pid, sayi kaynak, sayi yeni, sayi eski) -> sayi {
         eger (r < 0) { don r; }
     }
     eger (yeni != 0) {
-        g_rlim.yaz(y, cur);
-        g_rlim.yaz(y + 1, max);
+        g_rlim.yaz(y, simdiki);
+        g_rlim.yaz(y + 1, azami);
     }
     don 0;
 }

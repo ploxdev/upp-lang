@@ -122,15 +122,15 @@ fonk tur_aciklama(sayi t) -> metin {
     eger (t == 0) {
         don "bos";
     }
-    hata_fmt_basla();
-    hata_fmt_yaz(dugum_ad(t));
+    // ortak hata tamponunu kullanmaz: hata iletisi yazılırken çağrılabilir
+    metin s = dugum_ad(t);
     dongu (i = 0; i < dugum_ptrd(t); i = i + 1) {
-        hata_fmt_yaz("*");
+        s += "*";
     }
     dongu (i = 0; i < dugum_dims(t); i = i + 1) {
-        hata_fmt_yaz("[]");
+        s += "[]";
     }
-    don intern(hata_fmt_al());
+    don intern(s);
 }
 
 fonk sabit_sayi(sayi satir, sayi sutun, sayi v) -> sayi {

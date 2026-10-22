@@ -445,6 +445,31 @@ fonk sahip_kopya(sayi k) -> metin {
     don sinif_kopya_fn(k);
 }
 
+harita[sayi, mantik] g_sy_gorulen;
+liste[sayi] g_sy_sira;
+
+fonk sinif_yazim_dfs(sayi cls) -> bos {
+    g_sy_gorulen.koy(cls, dogru);
+    sayi F = dugum_liste(cls);
+    her (sayi i in 0..liste_uzunluk(F)) {
+        sayi c2 = alan_gomulu_sinif(liste_al(F, i));
+        eger (c2 != 0 && !g_sy_gorulen.var_mi(c2)) { sinif_yazim_dfs(c2); }
+    }
+    g_sy_sira.ekle(cls);
+}
+
+// Sınıflar, değer olarak gömdükleri sınıflardan sonra gelecek sırada
+// (tür denetimi döngüleri reddettiğinden sıra her zaman vardır).
+fonk sinif_yazim_sirasi(sayi decls) -> liste[sayi] {
+    g_sy_gorulen.temizle();
+    g_sy_sira.temizle();
+    her (sayi i in 0..liste_uzunluk(decls)) {
+        sayi d = liste_al(decls, i);
+        eger (dugum_tur(d) == DugumTur.D_SINIF && !g_sy_gorulen.var_mi(d)) { sinif_yazim_dfs(d); }
+    }
+    don g_sy_sira;
+}
+
 fonk sinif_sahipli_mi(sayi cls) -> mantik {
     eger (cls == 0) { don yanlis; }
     sayi F = dugum_liste(cls);
@@ -1229,6 +1254,44 @@ fonk uret_gecici_alici_cagri(sayi e, metin alici, metin fn, metin arglar, sayi m
     don kat5(bas, kat5(uret_ctur(dugum_a(method)), " ", rn, " = ", cagri), "; ", birak, kat3(" ", rn, "; })"));
 }
 
+// dongu adım ifadesi her turda (devam dahil) çalışmalıdır: ürettiği ara kod
+// (interpolasyon, geçici metinler) ayrı bir tampona alınır ve GNU deyim ifadesi
+// olarak for başlığına konur; geçiciler orada bırakılır.
+fonk uret_adim_ifadesi(sayi e) -> metin {
+    mantik bg = g_emit_hedef == 1;
+    metin kayit = "";
+    eger (bg) {
+        kayit = g_bg;
+        g_bg = metin_kopya_yeni("");
+    } yoksa {
+        kayit = g_tampon;
+        g_tampon = metin_kopya_yeni("");
+    }
+    sayi eski_ind = g_indent;
+    g_indent = 0;
+    sayi eski_h = hoist_izin_al();
+    hoist_izin_yaz(1);
+    drop_cerceve_ac();
+    oto ifade = uret_ifade(e);
+    mantik ara_kod = yanlis;
+    eger (bg) { ara_kod = !metin_esit(g_bg, ""); } yoksa { ara_kod = !metin_esit(g_tampon, ""); }
+    emit(kat(ifade, ";"));
+    emit_drop_cerceve();
+    drop_cerceve_pop();
+    hoist_izin_yaz(eski_h);
+    g_indent = eski_ind;
+    metin yakalanan = "";
+    eger (bg) {
+        yakalanan = g_bg;
+        g_bg = kayit;
+    } yoksa {
+        yakalanan = g_tampon;
+        g_tampon = kayit;
+    }
+    eger (!ara_kod && metin_esit(yakalanan, kat(ifade, ";\n"))) { don ifade; }
+    don kat3("({ ", upp.metin.degistir(yakalanan, "\n", " "), "})");
+}
+
 fonk uret_dizi_idx(sayi arr_t, sayi idx_e) -> metin {
     oto idx = uret_ifade(idx_e);
     eger (arr_t != 0 && dugum_dims(arr_t) > 0 && dugum_sayi(arr_t) > 0) {
@@ -1465,6 +1528,9 @@ fonk uret_ifade(sayi e) -> metin {
             oto eq = kat4("upp_metin_esit(", uret_metin_ptr(dugum_a(e)), ", ", kat(uret_metin_ptr(dugum_b(e)), ")"));
             eger (metin_esit(dugum_ad(e), "!=")) { don kat3("(!", eq, ")"); }
             don eq;
+        }
+        eger (sira_op_mu(dugum_ad(e)) && tip_metin_karsilastir_mi(lt) && tip_metin_karsilastir_mi(rt)) {
+            don kat5("(upp_metin_karsilastir(", uret_metin_ptr(dugum_a(e)), ", ", uret_metin_ptr(dugum_b(e)), kat3(") ", dugum_ad(e), " 0)"));
         }
         eger (metin_esit(dugum_ad(e), "&&") || metin_esit(dugum_ad(e), "||")) {
             don uret_kosul(e);
@@ -1927,7 +1993,23 @@ fonk kuresel_metin_hazirda(sayi d) -> mantik {
     don !kuresel_sabit_metin_duz(d);
 }
 
+// ad dış bir kapsamdaki sahipli değişkeni gölgeleyecekse, onun bırakma kaydı
+// (don/dur/devam'da yazılan) bir işaretçi takma adına yönlendirilir.
+fonk golge_ayir(metin ad) -> bos {
+    sayi cur = drop_cer_cur_al();
+    sayi i = drop_n_al() - 1;
+    iken (i >= 0) {
+        eger (drop_cer_al(i) < cur && metin_esit(drop_ad_al(i), ad)) {
+            oto g = kat("_upp_g", sayi_metin(tmp_yeni()));
+            emit(kat5("__typeof__(", ad, ") *", g, kat3(" = &(", ad, ");")));
+            drop_golge_yonlendir(i, kat3("(*", g, ")"));
+        }
+        i = i - 1;
+    }
+}
+
 fonk uret_var(sayi d, mantik kuresel) -> bos {
+    eger (!kuresel) { golge_ayir(dugum_ad(d)); }
     sayi ty = dugum_a(d);
     metin s = uret_ctur(ty);
     mantik sabit_metin = tip_metin_mi(ty) && dugum_ptrd(ty) == 0 && (dugum_bayrak(d) & 16) != 0;
@@ -2095,10 +2177,7 @@ fonk uret_cumle(sayi stmt) -> bos {
         }
         metin incr_s = "";
         eger (dugum_c(stmt) != 0) {
-            sayi eski_d = hoist_izin_al();
-            hoist_izin_yaz(0);
-            incr_s = uret_ifade(dugum_c(stmt));
-            hoist_izin_yaz(eski_d);
+            incr_s = uret_adim_ifadesi(dugum_c(stmt));
         }
         eger (!metin_esit(incr_s, "")) {
             emit(kat3("for (;; ", incr_s, ") {"));
@@ -2228,6 +2307,7 @@ fonk uret_cumle(sayi stmt) -> bos {
         drop_cerceve_ac();
         drop_dongu_it(drop_cer_cur_al());
         emit(kat5("long long ", ix, " = (long long)(", uret_ifade(dugum_b(stmt)), ");"));
+        golge_ayir(dugum_ad(stmt));
         emit(kat5("long long ", sx, " = (long long)(", uret_ifade(dugum_d(stmt)), ");"));
         emit(kat5("for (; ", ix, " < ", sx, kat3("; ", ix, "++) {")));
         indent_ekle(1);
@@ -2256,6 +2336,14 @@ fonk uret_cumle(sayi stmt) -> bos {
         emit("{");
         indent_ekle(1);
         drop_cerceve_ac();
+        golge_ayir(dugum_ad(stmt));
+        eger (dugum_tur(dugum_b(stmt)) == DugumTur.D_DIZI_SABIT) {
+            // dizi sabiti: önce adlı bir diziye konur (sizeof ve indeks için)
+            oto dn = kat("_upp_d", sayi_metin(tmp_yeni()));
+            sayi et = tur_dugum(dugum_satir(stmt), dugum_sutun(stmt), dugum_ad(it_t), dugum_ptrd(it_t), 0);
+            emit(kat5(uret_ctur(et), " ", dn, "[] = ", kat(arr, ";")));
+            arr = dn;
+        }
         drop_dongu_it(drop_cer_cur_al());
         emit(kat3("long long ", ix, ";"));
         metin s = "";
@@ -2785,9 +2873,11 @@ fonk uret_program(sayi program) -> bos {
     }
     emit(ft_havuz_isaret());
     emit("");
+    // değer olarak gömülen sınıflar önce tanımlanır (C eksik türü gömemez)
+    liste[sayi] sinif_sira = sinif_yazim_sirasi(decls);
     i = 0;
-    iken (i < liste_uzunluk(decls)) {
-        sayi d = liste_al(decls, i);
+    iken (i < sinif_sira.uzunluk()) {
+        sayi d = sinif_sira[i];
         eger (dugum_tur(d) == DugumTur.D_SINIF) {
             hata_fmt_basla();
             hata_fmt_yaz("struct ");

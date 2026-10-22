@@ -259,6 +259,14 @@ An unknown attribute, a repeated attribute, or an attribute applied to an unsupp
 | `sinif`, `secenek` | `struct`, `enum` | User-defined structure and enumeration types |
 | `sirali` | `enum` or tagged `struct` | Data-carrying enumeration (tagged union) |
 
+**Type and name rules:**
+- **String comparison:** `==` / `!=` compare content; `<`, `>`, `<=`, `>=` are lexicographic in Unicode code point order (`"armut" < "elma"`; `ş` (U+015F) sorts after `z`). A `metin` is compared only with another `metin`; strings support no arithmetic except `+`.
+- **Enum values:** `secenek Kod { A = 10, B = 0xFF, C = -3, D }` — explicit values may be decimal, hexadecimal or negative; a member without a value is the previous one plus one. A member name cannot repeat.
+- **Class order:** A class may embed a class declared after it; the compiler emits structs in dependency order. Classes cannot contain each other by value in a cycle (infinite size); break the cycle with `liste[T]`.
+- **Names reserved by C:** Names pass through to C unchanged, so C keywords and macros (`int`, `char`, `errno`, `stdout`, `min`, `max`…) cannot be used as names anywhere, and libc/POSIX function names (`abs`, `exit`, `log`, `read`…) cannot name top-level functions or globals. Including a file with `kullan ... olarak m` prefixes its names with `m_`.
+- **Shadowing:** Locals and parameters shadow a module alias, class or enum of the same name. An inner scope may declare a variable with an outer name; the outer owned value is still released correctly on early `don`/`dur`/`devam`.
+- If the compiler emits invalid C (a compiler bug), `[GCC DERLEME HATASI]` is followed by GCC's error lines.
+
 ### Explicit Type Casts `(T)x` and `boyut(T)`
 Uses standard C-style prefix cast syntax:
 ```upp

@@ -1,0 +1,7 @@
+// Negatif: libc fonksiyon adları üst düzey fonksiyon adı olamaz.
+// @icerir: [u++ HATA]
+// @icerir: 'abs' C standart kütüphanesinde tanımlı
+
+fonk abs(sayi x) -> sayi => x;
+
+fonk ana() -> sayi => abs(0);

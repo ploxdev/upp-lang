@@ -1,0 +1,10 @@
+// Negatif: liste indeksi tamsayı olmalı.
+// @icerir: [u++ HATA]
+// @icerir: liste.al indeksi tamsayı olmalı (verilen: metin).
+
+fonk ana() -> sayi {
+    liste[sayi] L;
+    L.ekle(1);
+    metin x = "0";
+    don L.al(x);
+}

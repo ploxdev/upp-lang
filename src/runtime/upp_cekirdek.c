@@ -527,6 +527,19 @@ static int upp_metin_esit(const char* a, const char* b) {
     return memcmp(a, b, na) == 0;
 }
 
+/* Sözlük sırası (metin < metin): UTF-8 baytları karşılaştırılır; bu, kod noktası
+ * sırasıyla aynıdır. Dönüş -1, 0, 1. */
+static int upp_metin_karsilastir(const char* a, const char* b) {
+    size_t na = a ? upp_metin_nbayt(a) : 0u;
+    size_t nb = b ? upp_metin_nbayt(b) : 0u;
+    size_t n = na < nb ? na : nb;
+    int r = n ? memcmp(a, b, n) : 0;
+    if (r != 0) {
+        return r < 0 ? -1 : 1;
+    }
+    return na < nb ? -1 : (na > nb ? 1 : 0);
+}
+
 static void upp_metin_ata(char** dst, const char* src) {
     char* yeni;
     if (!dst) {

@@ -1,0 +1,7 @@
+// Negatif: seçenek üyesi iki kez tanımlanamaz.
+// @icerir: [u++ HATA]
+// @icerir: 'A' seçenekte birden fazla kez tanımlandı.
+
+secenek R { A, B, A }
+
+fonk ana() -> sayi { don 0; }

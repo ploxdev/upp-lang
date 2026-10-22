@@ -1,0 +1,8 @@
+// Negatif: sınıflar birbirini değer olarak döngüsel içeremez.
+// @icerir: [u++ HATA]
+// @icerir: sınıfı kendini (dolaylı olarak) değer olarak içeriyor
+
+sinif A { B b; }
+sinif B { sayi n; A a; }
+
+fonk ana() -> sayi { don 0; }

@@ -1,0 +1,10 @@
+// Negatif: 'her' değişkeninin türü elemanlarla uyumlu olmalı.
+// @icerir: [u++ HATA]
+// @icerir: 'her' değişkeni 's' metin türünde, elemanlar ise sayi
+
+fonk ana() -> sayi {
+    liste[sayi] L;
+    L.ekle(1);
+    her (metin s in L) { upp.satir_yaz(s); }
+    don 0;
+}

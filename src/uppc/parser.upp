@@ -1566,7 +1566,17 @@ fonk ayristir_anonim_fonk() -> sayi {
     sayi kw = beklenen_kw("fonk");
     g_anon_n = g_anon_n + 1;
     oto ad = intern(kat("_upp_anon_", sayi_metin(g_anon_n)));
+    // anonim fonksiyon kendi gövdesidir: dıştaki ertele/döngü/secim bağlamı geçmez
+    sayi eski_ertele = g_ertele_derin;
+    sayi eski_dongu = loop_al();
+    sayi eski_secim = switch_al();
+    g_ertele_derin = 0;
+    loop_yaz(0);
+    switch_yaz(0);
     sayi fn = ayristir_fonk_govde(kw, ad, jeton_satir(kw), jeton_sutun(kw), "", dogru);
+    g_ertele_derin = eski_ertele;
+    loop_yaz(eski_dongu);
+    switch_yaz(eski_secim);
     eger (hata_var()) { don 0; }
     g_anon.ekle(fn);
     sayi n = kimlik_dugum(jeton_satir(kw), jeton_sutun(kw), ad);
@@ -1732,6 +1742,16 @@ fonk ayristir_sinif() -> sayi {
     don n;
 }
 
+// Seçenek üyesinin açık değeri: [-]tamsayı. Jeton değeri onluk yazımdır
+// (sözcükleyici 0x.. ve 0b.. yazımlarını onluğa çevirir; sonek '#' ile ayrılır).
+fonk secenek_deger_oku() -> sayi {
+    mantik eksi = esles_tur(JetonTur.J_EKSI);
+    sayi num = beklenen_tur(JetonTur.J_SAYI, "tam sayı");
+    sayi v = sayi_oku(jeton_deger(num));
+    eger (eksi) { don 0 - v; }
+    don v;
+}
+
 fonk ayristir_secenek() -> sayi {
     sayi kw = beklenen_kw("secenek");
     sayi nm = beklenen_kimlik(yanlis);
@@ -1749,9 +1769,20 @@ fonk ayristir_secenek() -> sayi {
     iken (bak_tur() != JetonTur.J_SLUS_KAPA && bak_tur() != JetonTur.J_EOF && !hata_var()) {
         sayi ident = beklenen_kimlik(yanlis);
         sayi value = next_val;
+        sayi k = 0;
+        iken (k < liste_uzunluk(L)) {
+            eger (metin_esit(dugum_ad(liste_al(L, k)), jeton_deger(ident))) {
+                hata_fmt_basla();
+                hata_fmt_yaz("'");
+                hata_fmt_yaz(jeton_deger(ident));
+                hata_fmt_yaz("' seçenekte birden fazla kez tanımlandı.");
+                hata_fmt_ver(jeton_satir(ident), jeton_sutun(ident));
+                don 0;
+            }
+            k = k + 1;
+        }
         eger (esles_tur(JetonTur.J_ATAMA)) {
-            sayi num = beklenen_tur(JetonTur.J_SAYI, "tam sayı");
-            value = hex_deger(jeton_deger(num));
+            value = secenek_deger_oku();
         }
         sayi v = dugum_yeni(DugumTur.D_SECENEK_UYE, jeton_satir(ident), jeton_sutun(ident));
         dugum_yaz_ad(v, jeton_deger(ident));
