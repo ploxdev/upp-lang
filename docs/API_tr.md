@@ -587,11 +587,13 @@ Mekanizma çekirdekte (C), politika işletim sisteminde (u++) durur: süreç tab
 | `kullanici_esleme_kaldir(ka, adres, uzunluk)` | `(sayi, sayi, sayi) -> bos` | Sayfaları kaldırır ve süreçin çerçevelerini bırakır |
 | `kullanici_koruma(ka, adres, uzunluk, koruma, birlestir)` | `(sayi, sayi, sayi, sayi, mantik) -> bos` | İzinleri ayarlar (mprotect mekanizması); `birlestir` yalnızca ekler |
 | `kullanici_bos_mu(ka, adres, uzunluk)` | `(sayi, sayi, sayi) -> mantik` | Aralıkta eşli sayfa yoksa `dogru` |
+| `kullanici_esli_mi(ka, adres, uzunluk)` | `(sayi, sayi, sayi) -> mantik` | Aralıktaki her sayfa eşliyse `dogru` (mprotect/madvise `ENOMEM` denetimi) |
 | `kullanici_fiziksel_esle(ka, adres, fiziksel, uzunluk, koruma)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Aygıt belleğini (ör. çerçeve tamponu) write-combining eşler. *`guvensiz` gerektirir* |
 | `kullanici_oku(ka, adres, tampon, ofs, n)` / `kullanici_yaz(...)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Kullanıcı belleği ↔ `upp.tampon`. Her sayfanın izni denetlenir; hatalı adreste `yanlis` (EFAULT) |
 | `kullanici_metin(ka, adres, en_cok)` | `(sayi, sayi, sayi) -> metin` | NUL ile biten kullanıcı dizgisi; hatalı adreste ya da sınırda `yok` |
 | `kullanici_calistir(ka, giris, yigin)` | `(sayi, sayi, sayi) -> sayi` | Süreci bu görevde ring 3'te çalıştırır; bitince çıkış kodunu döndürür (sinyalde 128 + sinyal) |
 | `kullanici_cikis_iste(kod)` | `(sayi) -> bos` | Sistem çağrısı işleyicisi dönünce süreç `kod` ile biter (exit) |
+| `kullanici_tls_ayarla(segment, taban)` / `kullanici_tls(segment)` | `(sayi, sayi) -> mantik` / `(sayi) -> sayi` | Şimdiki sürecin FS (`0`) ya da GS (`1`) tabanı (arch_prctl, TLS); görev geçişinde geri yüklenir. Taban kullanıcı alanında değilse `yanlis` |
 | `kullanici_on_plan(v)` | `(mantik) -> bos` | Süreç ön planda mı (Ctrl-C SIGINT ile sonlandırır) |
 | `kullanici_son_hata()` | `() -> metin` | Son sonlanmanın nedeni (`"Bölümleme hatası (SIGSEGV): ..."`, `"^C"`; normal çıkışta `""`) |
 | `sistem_cagrisi_kur(f)` | `(fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi) -> bos` | `SYSCALL` işleyicisi: `f(no, a1, ..., a6)`; dönüş rax'a yazılır (hata: `-errno`) |

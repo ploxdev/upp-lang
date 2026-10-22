@@ -1,0 +1,421 @@
+// Uppix — süreç, zaman, TLS ve sinyal sistem çağrıları (Linux x86_64).
+// arch_prctl, uname, clock_gettime/getres, gettimeofday, time, clock_nanosleep,
+// getrandom, mprotect, madvise, rt_sigaction, rt_sigprocmask, sigaltstack,
+// prlimit64/getrlimit/setrlimit, umask, futex, kill/tkill/tgkill, sysinfo.
+// Süreçler tek iş parçacıklıdır; sinyaller teslim edilmez, yalnızca öldürür
+// (eylemler ve maske Linux'taki gibi saklanır ve geri okunur).
+
+sabit sayi ARCH_SET_GS = 4097;
+sabit sayi ARCH_SET_FS = 4098;
+sabit sayi ARCH_GET_FS = 4099;
+sabit sayi ARCH_GET_GS = 4100;
+sabit sayi ARCH_GET_CPUID = 4113;
+sabit sayi ARCH_SET_CPUID = 4114;
+sabit sayi TIMER_ABSTIME = 1;
+
+// ---- arch_prctl: FS/GS tabanı (glibc/musl TLS için FS) ----
+fonk sc_arch_prctl(sayi s, sayi kod, sayi adres) -> sayi {
+    eger (kod == ARCH_SET_FS || kod == ARCH_SET_GS) {
+        sayi segment = 0;
+        eger (kod == ARCH_SET_GS) { segment = 1; }
+        eger (!upp.cekirdek.kullanici_tls_ayarla(segment, adres)) { don -EPERM; }
+        don 0;
+    }
+    eger (kod == ARCH_GET_FS || kod == ARCH_GET_GS) {
+        sayi segment = 0;
+        eger (kod == ARCH_GET_GS) { segment = 1; }
+        sayi t = upp.tampon.yeni(8);
+        upp.tampon.yaz64(t, 0, upp.cekirdek.kullanici_tls(segment));
+        don sc_yapi_ver(s, adres, t, 8);
+    }
+    eger (kod == ARCH_GET_CPUID) { don 1; }        // CPUID her zaman açık
+    eger (kod == ARCH_SET_CPUID) { don -ENODEV; }  // CPUID tuzağı desteklenmiyor
+    don -EINVAL;
+}
+
+// ---- uname: struct utsname, 6 alan × 65 bayt ----
+// sysname "Linux": Uppix Linux ABI'si sunar (FreeBSD linuxulator gibi); glibc
+// ve araçlar çekirdek sürümünü bu alanlardan okur.
+fonk sc_uname(sayi s, sayi adres) -> sayi {
+    liste[metin] alan;
+    alan.ekle("Linux");
+    alan.ekle(ortam("HOSTNAME"));
+    alan.ekle("6.1.0-uppix");
+    alan.ekle("#1 Uppix {UPPIX_SURUM} (u++)");
+    alan.ekle("x86_64");
+    alan.ekle("(none)");
+    sayi t = upp.tampon.yeni(390);
+    upp.tampon.doldur(t, 0, 390, 0);
+    her (sayi i in 0..6) {
+        // alan en çok 64 bayt + NUL
+        sayi k = bayt_say(alan[i]);
+        sayi a = upp.tampon.yeni(k + 1);
+        upp.tampon.metin_yaz(a, 0, alan[i]);
+        eger (k > 64) { k = 64; }
+        upp.tampon.kopyala(t, i * 65, a, 0, k);
+        upp.tampon.birak(a);
+    }
+    don sc_yapi_ver(s, adres, t, 390);
+}
+
+// ---- saatler ----
+// CLOCK_REALTIME 0, MONOTONIC 1, PROCESS_CPUTIME_ID 2, THREAD_CPUTIME_ID 3,
+// MONOTONIC_RAW 4, REALTIME_COARSE 5, MONOTONIC_COARSE 6, BOOTTIME 7,
+// REALTIME_ALARM 8, BOOTTIME_ALARM 9, TAI 11. Çözünürlük 1 ms (PIT).
+fonk saat_gecerli(sayi saat) -> mantik => saat >= 0 && saat <= 11 && saat != 10;
+
+// Saatin değeri, milisaniye.
+fonk saat_ms(sayi saat) -> sayi {
+    eger (saat == 0 || saat == 5 || saat == 8) { don g_acilis_epoch * 1000 + upp.zaman(); }
+    eger (saat == 11) { don (g_acilis_epoch + 37) * 1000 + upp.zaman(); } // TAI = UTC + 37 s
+    don upp.zaman();
+}
+
+fonk sc_timespec_yaz(sayi s, sayi adres, sayi ms) -> sayi {
+    sayi t = upp.tampon.yeni(16);
+    upp.tampon.yaz64(t, 0, ms / 1000);
+    upp.tampon.yaz64(t, 8, ms % 1000 * 1000000);
+    don sc_yapi_ver(s, adres, t, 16);
+}
+
+// cozunurluk: dogru ise clock_getres (adres NULL olabilir)
+fonk sc_clock_gettime(sayi s, sayi saat, sayi adres, mantik cozunurluk) -> sayi {
+    eger (!saat_gecerli(saat)) { don -EINVAL; }
+    eger (cozunurluk) {
+        eger (adres == 0) { don 0; }
+        sayi t = upp.tampon.yeni(16);
+        upp.tampon.yaz64(t, 0, 0);
+        upp.tampon.yaz64(t, 8, 1000000);
+        don sc_yapi_ver(s, adres, t, 16);
+    }
+    don sc_timespec_yaz(s, adres, saat_ms(saat));
+}
+
+fonk sc_gettimeofday(sayi s, sayi adres) -> sayi {
+    eger (adres == 0) { don 0; }
+    sayi ms = saat_ms(0);
+    sayi t = upp.tampon.yeni(16);
+    upp.tampon.yaz64(t, 0, ms / 1000);
+    upp.tampon.yaz64(t, 8, ms % 1000 * 1000);
+    don sc_yapi_ver(s, adres, t, 16);
+}
+
+fonk sc_time(sayi s, sayi adres) -> sayi {
+    sayi sn = saat_ms(0) / 1000;
+    eger (adres != 0) {
+        sayi t = upp.tampon.yeni(8);
+        upp.tampon.yaz64(t, 0, sn);
+        sayi r = sc_yapi_ver(s, adres, t, 8);
+        eger (r < 0) { don r; }
+    }
+    don sn;
+}
+
+fonk sc_clock_nanosleep(sayi s, sayi saat, sayi bayrak, sayi istek, sayi kalan) -> sayi {
+    // denetim sırası Linux'taki gibi: saat, uyku desteği, adres, değer
+    eger (!saat_gecerli(saat)) { don -EINVAL; }
+    eger (saat >= 3 && saat <= 6) { don -EOPNOTSUPP; } // uyku desteği olmayan saatler
+    sayi t = upp.tampon.yeni(16);
+    eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, istek, t, 0, 16)) {
+        upp.tampon.birak(t);
+        don -EFAULT;
+    }
+    sayi sn = upp.tampon.oku64(t, 0);
+    sayi ns = upp.tampon.oku64(t, 8);
+    upp.tampon.birak(t);
+    eger (sn < 0 || ns < 0 || ns >= 1000000000) { don -EINVAL; }
+    sayi istek_ms = sn * 1000 + (ns + 999999) / 1000000;
+    mantik mutlak = (bayrak & TIMER_ABSTIME) != 0;
+    sayi bitis = upp.zaman() + istek_ms;
+    eger (mutlak) { bitis = upp.zaman() + (istek_ms - saat_ms(saat)); }
+    iken (upp.zaman() < bitis) {
+        sayi k = bitis - upp.zaman();
+        eger (k > 20) { k = 20; }
+        upp.uyut(k);
+        eger (sc_on_planda(s) && kesme_istendi_mi()) {
+            // mutlak uykuda kalan süre yazılmaz
+            eger (kalan != 0 && !mutlak) {
+                sayi kms = bitis - upp.zaman();
+                eger (kms < 0) { kms = 0; }
+                sc_timespec_yaz(s, kalan, kms);
+            }
+            don sc_kesme(s);
+        }
+    }
+    don 0;
+}
+
+// ---- getrandom (GRND_NONBLOCK 1, GRND_RANDOM 2, GRND_INSECURE 4) ----
+fonk sc_getrandom(sayi s, sayi adres, sayi n, sayi bayrak) -> sayi {
+    eger ((bayrak & -8) != 0 || (bayrak & 6) == 6) { don -EINVAL; }
+    eger (n < 0) { don -EINVAL; }
+    eger (n > 33554431) { n = 33554431; }
+    sayi verilen = 0;
+    iken (verilen < n) {
+        sayi k = n - verilen;
+        eger (k > 4096) { k = 4096; }
+        sayi t = upp.tampon.yeni(k);
+        her (sayi i in 0..k) { upp.tampon.yaz8(t, i, rastgele() % 256); }
+        mantik ok = upp.cekirdek.kullanici_yaz(g_surec[s].ka, adres + verilen, t, 0, k);
+        upp.tampon.birak(t);
+        eger (!ok) {
+            eger (verilen == 0) { don -EFAULT; }
+            don verilen;
+        }
+        verilen += k;
+    }
+    don verilen;
+}
+
+// ---- mprotect / madvise ----
+sabit sayi PROT_GROWSDOWN = 16777216;
+sabit sayi PROT_GROWSUP = 33554432;
+
+fonk sc_mprotect(sayi s, sayi adres, sayi uzunluk, sayi koruma) -> sayi {
+    eger (adres % SAYFA != 0 || adres < 0) { don -EINVAL; }
+    eger ((koruma & (-1 - 7 - PROT_GROWSDOWN - PROT_GROWSUP)) != 0) { don -EINVAL; }
+    eger ((koruma & PROT_GROWSDOWN) != 0 && (koruma & PROT_GROWSUP) != 0) { don -EINVAL; }
+    eger (uzunluk < 0) { don -EINVAL; }
+    eger (uzunluk == 0) { don 0; }
+    sayi n = sayfa_yukari(uzunluk);
+    eger (adres + n > YIGIN_UST || adres + n < adres) { don -ENOMEM; }
+    sayi ka = g_surec[s].ka;
+    eger (!upp.cekirdek.kullanici_esli_mi(ka, adres, n)) { don -ENOMEM; }
+    upp.cekirdek.kullanici_koruma(ka, adres, n, koruma & 7, yanlis);
+    don 0;
+}
+
+// Tavsiyeler yok sayılır; MADV_DONTNEED (4) anonim sayfayı sıfırlamalıdır ama
+// eşlemeyi bilmediğimiz için Linux'un dosya eşlemesi davranışına güveniriz.
+fonk sc_madvise(sayi s, sayi adres, sayi uzunluk, sayi tavsiye) -> sayi {
+    eger (adres % SAYFA != 0 || adres < 0 || uzunluk < 0) { don -EINVAL; }
+    eger (tavsiye < 0 || (tavsiye > 25 && tavsiye != 100 && tavsiye != 101)) { don -EINVAL; }
+    eger (uzunluk == 0) { don 0; }
+    sayi n = sayfa_yukari(uzunluk);
+    eger (!upp.cekirdek.kullanici_esli_mi(g_surec[s].ka, adres, n)) { don -ENOMEM; }
+    eger (tavsiye == 4) {
+        // MADV_DONTNEED: özel anonim eşleme bir sonraki erişimde sıfır okunur
+        sayi t = upp.tampon.yeni(SAYFA);
+        upp.tampon.doldur(t, 0, SAYFA, 0);
+        sayi a = adres;
+        iken (a < adres + n) {
+            upp.cekirdek.kullanici_yaz(g_surec[s].ka, a, t, 0, SAYFA);
+            a += SAYFA;
+        }
+        upp.tampon.birak(t);
+    }
+    don 0;
+}
+
+// ---- sinyaller ----
+// struct kernel_sigaction { handler; flags; restorer; mask } = 32 bayt
+fonk sc_rt_sigaction(sayi s, sayi sig, sayi eylem, sayi eski, sayi boy) -> sayi {
+    eger (boy != 8) { don -EINVAL; }
+    eger (sig < 1 || sig > 64) { don -EINVAL; }
+    eger (eylem != 0 && (sig == 9 || sig == 19)) { don -EINVAL; }
+    sayi y = s * 64 + sig - 1;
+    metin yeni = yok;
+    eger (eylem != 0) {
+        yeni = sc_oku_metin(s, eylem, 32);
+        eger (yeni == yok) { don -EFAULT; }
+    }
+    eger (eski != 0) {
+        sayi t = upp.tampon.yeni(32);
+        upp.tampon.doldur(t, 0, 32, 0);
+        eger (g_sig_eylem[y] != "") { upp.tampon.metin_yaz(t, 0, g_sig_eylem[y]); }
+        sayi r = sc_yapi_ver(s, eski, t, 32);
+        eger (r < 0) { don r; }
+    }
+    eger (yeni != yok) {
+        // SIGKILL/SIGSTOP maskelenemez
+        sayi t = upp.tampon.yeni(32);
+        upp.tampon.metin_yaz(t, 0, yeni);
+        sayi maske = upp.tampon.oku64(t, 24);
+        upp.tampon.yaz64(t, 24, maske - (maske & SIG_ENGELLENEMEZ));
+        g_sig_eylem.yaz(y, upp.tampon.metin(t, 0, 32));
+        upp.tampon.birak(t);
+    }
+    don 0;
+}
+
+sabit sayi SIG_ENGELLENEMEZ = 262400; // SIGKILL (bit 8) | SIGSTOP (bit 18)
+
+// SIG_BLOCK 0, SIG_UNBLOCK 1, SIG_SETMASK 2
+fonk sc_rt_sigprocmask(sayi s, sayi nasil, sayi kume, sayi eski, sayi boy) -> sayi {
+    eger (boy != 8) { don -EINVAL; }
+    sayi yeni = 0;
+    eger (kume != 0) {
+        eger (nasil < 0 || nasil > 2) { don -EINVAL; }
+        sayi t = upp.tampon.yeni(8);
+        eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, kume, t, 0, 8)) {
+            upp.tampon.birak(t);
+            don -EFAULT;
+        }
+        yeni = upp.tampon.oku64(t, 0);
+        upp.tampon.birak(t);
+    }
+    eger (eski != 0) {
+        sayi t = upp.tampon.yeni(8);
+        upp.tampon.yaz64(t, 0, g_surec[s].sig_maske);
+        sayi r = sc_yapi_ver(s, eski, t, 8);
+        eger (r < 0) { don r; }
+    }
+    eger (kume != 0) {
+        sayi m = g_surec[s].sig_maske;
+        eger (nasil == 0) { m = m | yeni; }
+        eger (nasil == 1) { m = m - (m & yeni); }
+        eger (nasil == 2) { m = yeni; }
+        g_surec[s].sig_maske = m - (m & SIG_ENGELLENEMEZ);
+    }
+    don 0;
+}
+
+// stack_t { ss_sp; ss_flags (int); ss_size } = 24 bayt. Sinyal teslim edilmediği
+// için alternatif yığın hiç kullanılmaz; eski değer hep SS_DISABLE (2).
+fonk sc_sigaltstack(sayi s, sayi yeni, sayi eski) -> sayi {
+    eger (yeni != 0) {
+        sayi t = upp.tampon.yeni(24);
+        eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, yeni, t, 0, 24)) {
+            upp.tampon.birak(t);
+            don -EFAULT;
+        }
+        sayi bayrak = upp.tampon.oku32(t, 8);
+        sayi boy = upp.tampon.oku64(t, 16);
+        upp.tampon.birak(t);
+        eger (bayrak != 0 && bayrak != 2 && bayrak != -2147483648) { don -EINVAL; }
+        eger (bayrak != 2 && boy < 2048) { don -ENOMEM; } // MINSIGSTKSZ
+    }
+    eger (eski != 0) {
+        sayi t = upp.tampon.yeni(24);
+        upp.tampon.doldur(t, 0, 24, 0);
+        upp.tampon.yaz32(t, 8, 2);
+        don sc_yapi_ver(s, eski, t, 24);
+    }
+    don 0;
+}
+
+// kill: yalnızca sürecin kendisi (ve 0: süreç grubu = kendisi) hedeflenebilir.
+fonk sc_kill(sayi s, sayi pid, sayi sig) -> sayi {
+    eger (sig < 0 || sig > 64) { don -EINVAL; }
+    eger (pid != g_surec[s].pid && pid != 0 && pid != -1) { don -ESRCH; }
+    eger (sig == 0) { don 0; }
+    // engellenmiş ya da yok sayılan (SIG_IGN = 1) sinyal etkisizdir
+    metin e = g_sig_eylem[s * 64 + sig - 1];
+    eger (e != "") {
+        sayi t = upp.tampon.yeni(32);
+        upp.tampon.metin_yaz(t, 0, e);
+        sayi isleyici = upp.tampon.oku64(t, 0);
+        upp.tampon.birak(t);
+        eger (isleyici == 1 && sig != 9 && sig != 19) { don 0; }
+    }
+    // varsayılan eylemi yok sayılan sinyaller: SIGCHLD, SIGURG, SIGWINCH, SIGCONT
+    eger (sig == 17 || sig == 23 || sig == 28 || sig == 18) { don 0; }
+    upp.cekirdek.kullanici_cikis_iste(128 + sig);
+    don 0;
+}
+
+// ---- kaynak sınırları ----
+// RLIM_INFINITY (-1) en büyük işaretsiz değerdir.
+fonk rlim_buyuk(sayi a, sayi b) -> mantik {
+    eger (a == b) { don yanlis; }
+    eger (a == -1) { don dogru; }
+    eger (b == -1) { don yanlis; }
+    don a > b;
+}
+
+fonk sc_prlimit(sayi s, sayi pid, sayi kaynak, sayi yeni, sayi eski) -> sayi {
+    eger (kaynak < 0 || kaynak >= RLIM_SAYI) { don -EINVAL; }
+    eger (pid != 0 && pid != g_surec[s].pid) { don -ESRCH; }
+    sayi y = (s * RLIM_SAYI + kaynak) * 2;
+    sayi cur = 0;
+    sayi max = 0;
+    eger (yeni != 0) {
+        sayi t = upp.tampon.yeni(16);
+        eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, yeni, t, 0, 16)) {
+            upp.tampon.birak(t);
+            don -EFAULT;
+        }
+        cur = upp.tampon.oku64(t, 0);
+        max = upp.tampon.oku64(t, 8);
+        upp.tampon.birak(t);
+        eger (rlim_buyuk(cur, max)) { don -EINVAL; }
+        // tanımlayıcı tablosu sabittir (nr_open)
+        eger (kaynak == 7 && rlim_buyuk(max, FD_MAX)) { don -EPERM; }
+    }
+    eger (eski != 0) {
+        sayi t = upp.tampon.yeni(16);
+        upp.tampon.yaz64(t, 0, g_rlim[y]);
+        upp.tampon.yaz64(t, 8, g_rlim[y + 1]);
+        sayi r = sc_yapi_ver(s, eski, t, 16);
+        eger (r < 0) { don r; }
+    }
+    eger (yeni != 0) {
+        g_rlim.yaz(y, cur);
+        g_rlim.yaz(y + 1, max);
+    }
+    don 0;
+}
+
+fonk sc_umask(sayi s, sayi yeni) -> sayi {
+    sayi eski = g_surec[s].umask;
+    g_surec[s].umask = yeni & 511;
+    don eski;
+}
+
+// ---- futex: tek iş parçacığı; WAIT yalnızca zaman aşımı ya da Ctrl-C ile biter ----
+fonk sc_futex(sayi s, sayi adres, sayi islem, sayi deger, sayi zaman) -> sayi {
+    sayi kod = islem & 127;   // FUTEX_PRIVATE_FLAG 128, FUTEX_CLOCK_REALTIME 256
+    eger (kod == 1) {         // FUTEX_WAKE
+        eger (adres % 4 != 0) { don -EINVAL; }
+        don 0;
+    }
+    eger (kod != 0 && kod != 9) { don -ENOSYS; } // FUTEX_WAIT, FUTEX_WAIT_BITSET
+    eger (adres % 4 != 0) { don -EINVAL; }
+    sayi t = upp.tampon.yeni(16);
+    eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, adres, t, 0, 4)) {
+        upp.tampon.birak(t);
+        don -EFAULT;
+    }
+    sayi mevcut = upp.tampon.oku32(t, 0);
+    eger ((mevcut & 4294967295) != (deger & 4294967295)) {
+        upp.tampon.birak(t);
+        don -EAGAIN;
+    }
+    sayi bitis = -1;
+    eger (zaman != 0) {
+        eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, zaman, t, 0, 16)) {
+            upp.tampon.birak(t);
+            don -EFAULT;
+        }
+        sayi ms = upp.tampon.oku64(t, 0) * 1000 + (upp.tampon.oku64(t, 8) + 999999) / 1000000;
+        // FUTEX_WAIT göreli, FUTEX_WAIT_BITSET mutlak zaman alır
+        eger (kod == 9) {
+            sayi saat = 1;
+            eger ((islem & 256) != 0) { saat = 0; }
+            ms -= saat_ms(saat);
+        }
+        bitis = upp.zaman() + ms;
+    }
+    upp.tampon.birak(t);
+    iken (bitis < 0 || upp.zaman() < bitis) {
+        upp.uyut(20);
+        eger (sc_on_planda(s) && kesme_istendi_mi()) { don sc_kesme(s); }
+    }
+    don -ETIMEDOUT;
+}
+
+// ---- sysinfo: struct sysinfo (112 bayt, mem_unit 1) ----
+fonk sc_sysinfo(sayi s, sayi adres) -> sayi {
+    sayi surec_sayisi = 0;
+    her (oto p in g_surec) {
+        eger (p.pid != 0) { surec_sayisi += 1; }
+    }
+    sayi t = upp.tampon.yeni(112);
+    upp.tampon.doldur(t, 0, 112, 0);
+    upp.tampon.yaz64(t, 0, upp.zaman() / 1000);                  // uptime
+    upp.tampon.yaz64(t, 32, upp.cekirdek.bellek_toplam());       // totalram
+    upp.tampon.yaz64(t, 40, upp.cekirdek.cerceve_bilgi(2));      // freeram
+    upp.tampon.yaz16(t, 80, surec_sayisi + 1);                   // procs (+ kabuk)
+    upp.tampon.yaz32(t, 104, 1);                                 // mem_unit
+    don sc_yapi_ver(s, adres, t, 112);
+}

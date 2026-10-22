@@ -1,0 +1,46 @@
+// Çekirdek: Uppix araçları — hexdump (util-linux biçimleri), nano ve vi.
+// Düzenleyicilere tuşlar seri porttan gelir (@girdi_kacis: \e ESC, \xNN denetim
+// tuşları); sonuç dosyaları cat ile denetlenir.
+//   nano 1: yaz, yukarı ok, ^K kes, ^X → "e" → Enter (adı onayla, kaydet)
+//   nano 2: ^W ara, ^K kes, ^U yapıştır, ^S kaydet, ^X
+//   vi 1:   i ekle, Esc, yy p, :wq
+//   vi 2:   gg dd, :%s/i/I/g, :q (değişiklik var: E37), :wq
+// @girdi: echo Hello > /tmp/h1; echo -n abc > /tmp/h2
+// @girdi: hexdump -C /tmp/h1 /tmp/h2
+// @girdi: hexdump /tmp/h2
+// @girdi: echo boru | hd
+// @girdi: hexdump -C -s 0x2 -n 3 /tmp/h1
+// @girdi: nano /tmp/n.txt
+// @girdi_kacis: bir\riki\rüç\e[A\x0b\x18e
+// @girdi: cat /tmp/n.txt | tr '\n' ','; echo
+// @girdi: nano /tmp/n.txt
+// @girdi_kacis: \x17üç\r\x0b\e[A\x15\x13\x18
+// @girdi: cat /tmp/n.txt | tr '\n' ','; echo
+// @girdi: vi /tmp/v.txt
+// @girdi_kacis: ibir\riki\eyyp:wq
+// @girdi: cat /tmp/v.txt | tr '\n' ','; echo
+// @girdi: vi /tmp/v.txt
+// @girdi_kacis: ggdd:%s/i/I/g\r:q\r:wq
+// @girdi: cat /tmp/v.txt | tr '\n' ','; echo
+// @girdi: poweroff
+// @icerir: 00000000  48 65 6c 6c 6f 0a 61 62  63                       |Hello.abc|
+// @icerir: 00000009
+// @icerir: 0000000 6261 0063
+// @icerir: 00000000  62 6f 72 75 0a                                    |boru.|
+// @icerir: 00000002  6c 6c 6f                                          |llo|
+// @icerir: Uppix nano
+// @icerir: 2 satır okundu
+// @icerir: bir,üç,
+// @icerir: üç,bir,
+// @icerir: -- EKLE --
+// @icerir: bir,iki,iki,
+// @icerir: E37: Son değişiklikten sonra yazılmadı
+// @icerir: IkI,IkI,
+// @icerir: Sistem kapatılıyor...
+
+kullan "../../src/os/kaynak/uppix.upp";
+
+fonk ana() -> sayi {
+    uppix_baslat();
+    don 0;
+}

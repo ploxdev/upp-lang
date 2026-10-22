@@ -453,6 +453,11 @@ static int _upp_ekr_g = 80;
 static int _upp_ekr_y = 25;
 static int _upp_ekr_x = 0;
 static int _upp_ekr_s = 0;
+/* Ertelenmiş satır sarma (VT100): son sütuna yazınca imleç orada kalır; satır
+ * ancak sonraki yazdırılabilir karakterde sarılır. Böylece sağ alt hücreye
+ * yazmak ekranı kaydırmaz ve tam genişlikte satırın ardından gelen \n boş satır
+ * bırakmaz. İmleci taşıyan her işlem bekleyen sarmayı iptal eder. */
+static int _upp_ekr_sarma = 0;
 
 /* çerçeve tamponu */
 static int _upp_fb_aktif = 0;
@@ -599,10 +604,18 @@ static void _upp_ekr_temizle(void) {
     }
     _upp_ekr_x = 0;
     _upp_ekr_s = 0;
+    _upp_ekr_sarma = 0;
     _upp_fb_imlec_x = -1;
 }
 
 static void _upp_ekr_karakter(long long cp, uint8_t renk) {
+    if (cp != '\n' && cp != '\r' && cp != 8 && _upp_ekr_sarma) {
+        _upp_ekr_x = 0;
+        if (++_upp_ekr_s >= _upp_ekr_y) {
+            _upp_ekr_kaydir();
+        }
+    }
+    _upp_ekr_sarma = 0;
     if (cp == '\n') {
         _upp_ekr_x = 0;
         if (++_upp_ekr_s >= _upp_ekr_y) {
@@ -627,11 +640,10 @@ static void _upp_ekr_karakter(long long cp, uint8_t renk) {
         return;
     }
     _upp_ekr_hucre(_upp_ekr_x, _upp_ekr_s, cp, renk);
-    if (++_upp_ekr_x >= _upp_ekr_g) {
-        _upp_ekr_x = 0;
-        if (++_upp_ekr_s >= _upp_ekr_y) {
-            _upp_ekr_kaydir();
-        }
+    if (_upp_ekr_x + 1 >= _upp_ekr_g) {
+        _upp_ekr_sarma = 1;
+    } else {
+        _upp_ekr_x++;
     }
 }
 
@@ -736,13 +748,15 @@ static unsigned char _upp_cp437(long long cp) {
     }
 }
 
-/* Küçük ANSI çözümleyici (ekran için): ESC[...m (renk), ESC[2J, ESC[H, ESC[K, ESC[nC/D.
+/* Küçük ANSI çözümleyici (ekran için): ESC[...m (renk, 7 ters, 40-47/100-107 arka plan),
+ * ESC[2J, ESC[H, ESC[K, ESC[nA/B/C/D.
  * Seri terminal aynı baytları kendisi yorumlar. */
 static int _upp_ansi_durum = 0;
 static int _upp_ansi_p[4];
 static int _upp_ansi_n = 0;
 static int _upp_ansi_ozel = 0; /* '?' ile başlayan özel dizi (\e[?25l) */
 static int _upp_vga_renk = -1;
+static int _upp_ansi_ters = 0; /* SGR 7: ön ve arka plan yer değiştirir */
 static const uint8_t _upp_ansi_vga[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 
 static void _upp_vga_temizle(void) {
@@ -755,17 +769,35 @@ static void _upp_ansi_uygula(long long son) {
         if (_upp_ansi_n == 0) {
             _upp_vga_renk = -1;
         }
+        if (_upp_ansi_n == 0) {
+            _upp_ansi_ters = 0;
+        }
         for (i = 0; i < _upp_ansi_n; i++) {
             int v = _upp_ansi_p[i];
             int r = _upp_vga_renk < 0 ? 0x07 : _upp_vga_renk;
             if (v == 0) {
                 _upp_vga_renk = -1;
+                _upp_ansi_ters = 0;
             } else if (v == 1) {
                 _upp_vga_renk = r | 0x08;
+            } else if (v == 22) {
+                _upp_vga_renk = r & ~0x08;
+            } else if (v == 7) {
+                _upp_ansi_ters = 1;
+            } else if (v == 27) {
+                _upp_ansi_ters = 0;
             } else if (v >= 30 && v <= 37) {
                 _upp_vga_renk = (r & 0xF8) | _upp_ansi_vga[v - 30];
+            } else if (v == 39) {
+                _upp_vga_renk = (r & 0xF0) | 0x07;
+            } else if (v >= 40 && v <= 47) {
+                _upp_vga_renk = (r & 0x0F) | (_upp_ansi_vga[v - 40] << 4);
+            } else if (v == 49) {
+                _upp_vga_renk = r & 0x0F;
             } else if (v >= 90 && v <= 97) {
                 _upp_vga_renk = (r & 0xF0) | 0x08 | _upp_ansi_vga[v - 90];
+            } else if (v >= 100 && v <= 107) {
+                _upp_vga_renk = (r & 0x0F) | ((0x08 | _upp_ansi_vga[v - 100]) << 4);
             }
         }
     } else if (_upp_ansi_ozel) {
@@ -775,17 +807,25 @@ static void _upp_ansi_uygula(long long son) {
         }
     } else if (son == 'J') {
         _upp_ekr_temizle();
+    } else if (son == 'A' || son == 'B') {
+        int n = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
+        _upp_ekr_s += son == 'B' ? n : -n;
+        if (_upp_ekr_s < 0) _upp_ekr_s = 0;
+        if (_upp_ekr_s >= _upp_ekr_y) _upp_ekr_s = _upp_ekr_y - 1;
+        _upp_ekr_sarma = 0;
     } else if (son == 'H' || son == 'f') {
         /* \e[satır;sütunH, 1 tabanlı; eksik parametre 1 sayılır. */
         int s = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
         int x = _upp_ansi_n > 1 && _upp_ansi_p[1] > 0 ? _upp_ansi_p[1] : 1;
         _upp_ekr_s = s > _upp_ekr_y ? _upp_ekr_y - 1 : s - 1;
         _upp_ekr_x = x > _upp_ekr_g ? _upp_ekr_g - 1 : x - 1;
+        _upp_ekr_sarma = 0;
     } else if (son == 'C' || son == 'D') {
         int n = _upp_ansi_n > 0 && _upp_ansi_p[0] > 0 ? _upp_ansi_p[0] : 1;
         _upp_ekr_x += son == 'C' ? n : -n;
         if (_upp_ekr_x < 0) _upp_ekr_x = 0;
         if (_upp_ekr_x >= _upp_ekr_g) _upp_ekr_x = _upp_ekr_g - 1;
+        _upp_ekr_sarma = 0;
     } else if (son == 'K') {
         for (i = _upp_ekr_x; i < _upp_ekr_g; i++) {
             _upp_ekr_hucre(i, _upp_ekr_s, ' ', 0x07);
@@ -851,7 +891,16 @@ static void _upp_akis_bayt(int akis, const char* p, size_t n, int nl) {
             _upp_seri_bayt((unsigned char)p[i + k]);
         }
         if (!_upp_ansi_isle(cp)) {
-            _upp_ekr_karakter(cp, _upp_vga_renk >= 0 && akis != 2 ? (uint8_t)_upp_vga_renk : renk);
+            uint8_t r = renk;
+            if (akis != 2) {
+                if (_upp_vga_renk >= 0) {
+                    r = (uint8_t)_upp_vga_renk;
+                }
+                if (_upp_ansi_ters) {
+                    r = (uint8_t)(((r & 0x0F) << 4) | ((r >> 4) & 0x0F));
+                }
+            }
+            _upp_ekr_karakter(cp, r);
         }
         i += a;
     }
@@ -1119,6 +1168,9 @@ static void _upp_klavye(void) {
         case 0x47: _upp_tus_dizi('H'); break;
         case 0x4F: _upp_tus_dizi('F'); break;
         case 0x53: _upp_tus_dizi('3'); _upp_tus_koy('~'); break;
+        case 0x52: _upp_tus_dizi('2'); _upp_tus_koy('~'); break; /* Insert */
+        case 0x49: _upp_tus_dizi('5'); _upp_tus_koy('~'); break; /* Page Up */
+        case 0x51: _upp_tus_dizi('6'); _upp_tus_koy('~'); break; /* Page Down */
         case 0x1C: _upp_tus_koy('\n'); break;
         default: break;
         }
@@ -1760,6 +1812,8 @@ typedef struct {
     uint64_t ka;          /* adres alanı: PML4'ün fiziksel adresi; 0 = çekirdek görevi */
     uint64_t kul_kayit;   /* ring 3'e girerken kaydedilen çekirdek yığını (çıkış, TSS.rsp0) */
     uint64_t kul_dilim;   /* zaman diliminin başladığı tik */
+    uint64_t kul_fs;      /* FS/GS tabanı (arch_prctl; TLS). Çekirdek FS/GS kullanmaz. */
+    uint64_t kul_gs;
     int kul_on_plan;      /* Ctrl-C bu süreci sonlandırır */
     int kul_cikis;        /* sistem çağrısı dönerken süreci bitir */
     long long kul_kod;
@@ -1908,6 +1962,8 @@ static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, 
     g->kul_kayit = 0;
     g->kul_on_plan = 0;
     g->kul_cikis = 0;
+    g->kul_fs = 0;
+    g->kul_gs = 0;
     g->kul_hata[0] = 0;
     g->durum = _UPP_G_HAZIR;
     return g->kimlik;

@@ -8,12 +8,16 @@
 // errno
 sabit sayi EPERM = 1;
 sabit sayi ENOENT = 2;
+sabit sayi ESRCH = 3;
 sabit sayi EINTR = 4;
 sabit sayi EIO = 5;
 sabit sayi EBADF = 9;
+sabit sayi ECHILD = 10;
+sabit sayi EAGAIN = 11;
 sabit sayi ENOMEM = 12;
 sabit sayi EACCES = 13;
 sabit sayi EFAULT = 14;
+sabit sayi EBUSY = 16;
 sabit sayi EEXIST = 17;
 sabit sayi ENODEV = 19;
 sabit sayi ENOTDIR = 20;
@@ -23,8 +27,12 @@ sabit sayi EMFILE = 24;
 sabit sayi ENOTTY = 25;
 sabit sayi ESPIPE = 29;
 sabit sayi EROFS = 30;
+sabit sayi ERANGE = 34;
 sabit sayi ENAMETOOLONG = 36;
 sabit sayi ENOSYS = 38;
+sabit sayi ENOTEMPTY = 39;
+sabit sayi EOPNOTSUPP = 95;
+sabit sayi ETIMEDOUT = 110;
 
 // open bayrakları
 sabit sayi O_ERISIM = 3;      // O_RDONLY 0, O_WRONLY 1, O_RDWR 2
@@ -56,31 +64,94 @@ fonk sistem_cagrilari_kur() -> bos {
     }
 }
 
+// Linux x86_64 numaraları. Kategoriler: G/Ç ve bellek bu dosyada, dosya sistemi
+// ve tanımlayıcılar sistem_cagrisi_dosya.upp'ta, süreç/zaman/TLS
+// sistem_cagrisi_surec.upp'tadır.
 fonk sistem_cagrisi(sayi no, sayi a1, sayi a2, sayi a3, sayi a4, sayi a5, sayi a6) -> sayi {
     sayi s = surec_simdi();
     eger (s < 0) { don -ENOSYS; }
+    // G/Ç
     eger (no == 0) { don sc_read(s, a1, a2, a3); }
     eger (no == 1) { don sc_write(s, a1, a2, a3); }
-    eger (no == 2) { don sc_open(s, a1, a2, a3); }
-    eger (no == 3) { don sc_close(s, a1); }
-    eger (no == 4 || no == 6) { don sc_stat(s, a1, a2); }
-    eger (no == 5) { don sc_fstat(s, a1, a2); }
+    eger (no == 17) { don sc_pread(s, a1, a2, a3, a4, yanlis); }
+    eger (no == 18) { don sc_pread(s, a1, a2, a3, a4, dogru); }
+    eger (no == 19) { don sc_vektor(s, a1, a2, a3, yanlis); }
+    eger (no == 20) { don sc_vektor(s, a1, a2, a3, dogru); }
     eger (no == 8) { don sc_lseek(s, a1, a2, a3); }
+    eger (no == 16) { don sc_ioctl(s, a1, a2, a3); }
+    // tanımlayıcılar ve dosya sistemi
+    eger (no == 2) { don sc_open(s, AT_FDCWD, a1, a2, a3); }
+    eger (no == 257) { don sc_open(s, a1, a2, a3, a4); }
+    eger (no == 3) { don sc_close(s, a1); }
+    eger (no == 4 || no == 6) { don sc_stat(s, AT_FDCWD, a1, a2, 0); }
+    eger (no == 5) { don sc_fstat(s, a1, a2); }
+    eger (no == 262) { don sc_stat(s, a1, a2, a3, a4); }
+    eger (no == 32) { don sc_dup(s, a1, -1, 0); }
+    eger (no == 33) { don sc_dup(s, a1, a2, 0); }
+    eger (no == 292) { don sc_dup(s, a1, a2, a3 + 1); }
+    eger (no == 72) { don sc_fcntl(s, a1, a2, a3); }
+    eger (no == 217) { don sc_getdents64(s, a1, a2, a3); }
+    eger (no == 21) { don sc_access(s, AT_FDCWD, a1, a2); }
+    eger (no == 269 || no == 439) { don sc_access(s, a1, a2, a3); }
+    eger (no == 79) { don sc_getcwd(s, a1, a2); }
+    eger (no == 80) { don sc_chdir(s, a1, -1); }
+    eger (no == 81) { don sc_chdir(s, 0, a1); }
+    eger (no == 83) { don sc_mkdir(s, AT_FDCWD, a1, a2); }
+    eger (no == 258) { don sc_mkdir(s, a1, a2, a3); }
+    eger (no == 84) { don sc_unlink(s, AT_FDCWD, a1, AT_REMOVEDIR); }
+    eger (no == 87) { don sc_unlink(s, AT_FDCWD, a1, 0); }
+    eger (no == 263) { don sc_unlink(s, a1, a2, a3); }
+    eger (no == 82) { don sc_rename(s, AT_FDCWD, a1, AT_FDCWD, a2); }
+    eger (no == 264 || no == 316) { don sc_rename(s, a1, a2, a3, a4); }
+    eger (no == 89) { don sc_readlink(s, AT_FDCWD, a1, a2, a3); }
+    eger (no == 267) { don sc_readlink(s, a1, a2, a3, a4); }
+    // bellek
     eger (no == 9) { don sc_mmap(s, a1, a2, a3, a4, a5, a6); }
+    eger (no == 10) { don sc_mprotect(s, a1, a2, a3); }
     eger (no == 11) { don sc_munmap(s, a1, a2); }
     eger (no == 12) { don sc_brk(s, a1); }
-    eger (no == 16) { don sc_ioctl(s, a1, a2, a3); }
-    eger (no == 35) { don sc_nanosleep(s, a1, a2); }
+    // süreç, zaman, TLS
     eger (no == 60 || no == 231) {
         // exit / exit_group (tek iş parçacıklı süreçte aynıdır)
         upp.cekirdek.kullanici_cikis_iste(a1 % 256);
         don 0;
     }
-    eger (no == 257) {
-        // openat(AT_FDCWD, ...): libc'lerin open() karşılığı
-        eger (a1 != AT_FDCWD) { don -EINVAL; }
-        don sc_open(s, a2, a3, a4);
+    eger (no == 39 || no == 186) { don g_surec[s].pid; }      // getpid, gettid
+    eger (no == 110) { don 1; }                               // getppid: kabuk
+    eger (no == 102 || no == 104 || no == 107 || no == 108) { don 0; } // root
+    eger (no == 218) { don g_surec[s].pid; }                  // set_tid_address
+    eger (no == 273) { don 0; }                               // set_robust_list
+    eger (no == 158) { don sc_arch_prctl(s, a1, a2); }
+    eger (no == 63) { don sc_uname(s, a1); }
+    eger (no == 228) { don sc_clock_gettime(s, a1, a2, yanlis); }
+    eger (no == 229) { don sc_clock_gettime(s, a1, a2, dogru); }
+    eger (no == 96) { don sc_gettimeofday(s, a1); }
+    eger (no == 201) { don sc_time(s, a1); }
+    eger (no == 35) { don sc_nanosleep(s, a1, a2); }
+    eger (no == 230) { don sc_clock_nanosleep(s, a1, a2, a3, a4); }
+    eger (no == 24) {
+        upp.cekirdek.sira_ver();                              // sched_yield
+        don 0;
     }
+    eger (no == 318) { don sc_getrandom(s, a1, a2, a3); }
+    eger (no == 13) { don sc_rt_sigaction(s, a1, a2, a3, a4); }
+    eger (no == 14) { don sc_rt_sigprocmask(s, a1, a2, a3, a4); }
+    eger (no == 97) { don sc_prlimit(s, 0, a1, 0, a2); }
+    eger (no == 302) { don sc_prlimit(s, a1, a2, a3, a4); }
+    eger (no == 160) { don sc_prlimit(s, 0, a1, a2, 0); }     // setrlimit
+    eger (no == 95) { don sc_umask(s, a1); }
+    eger (no == 28) { don sc_madvise(s, a1, a2, a3); }
+    eger (no == 131) { don sc_sigaltstack(s, a1, a2); }
+    eger (no == 202) { don sc_futex(s, a1, a2, a3, a4); }
+    eger (no == 62) { don sc_kill(s, a1, a2); }
+    eger (no == 200) { don sc_kill(s, g_surec[s].pid, a2); } // tkill
+    eger (no == 234) {                                        // tgkill
+        eger (a1 != g_surec[s].pid) { don -ESRCH; }
+        don sc_kill(s, a2, a3);
+    }
+    eger (no == 61) { don -ECHILD; }                          // wait4: çocuk yok
+    eger (no == 111 || no == 121 || no == 124) { don g_surec[s].pid; } // getpgrp, getpgid, getsid
+    eger (no == 99) { don sc_sysinfo(s, a1); }
     eger (!g_sc_bildirildi.var_mi(no)) {
         g_sc_bildirildi.koy(no, dogru);
         klog_sessiz("sistem çağrısı desteklenmiyor: {no} (süreç {g_surec[s].pid} {g_surec[s].ad})");
@@ -91,6 +162,44 @@ fonk sistem_cagrisi(sayi no, sayi a1, sayi a2, sayi a3, sayi a4, sayi a5, sayi a
 // ---- yardımcılar ----
 
 fonk sc_yol(sayi s, sayi adres) -> metin => upp.cekirdek.kullanici_metin(g_surec[s].ka, adres, 4096);
+
+// *at çağrılarının yolu: mutlak yol olduğu gibi; göreli yol dirfd'nin dizinine
+// (AT_FDCWD: sürecin çalışma dizini) bağlanır. Hatada yok döner, g_sc_hata -errno.
+sabit sayi AT_EMPTY_PATH = 4096;
+sabit sayi AT_REMOVEDIR = 512;
+sayi g_sc_hata = 0;
+
+fonk sc_yol_at(sayi s, sayi dirfd, sayi adres, mantik bos_olabilir) -> metin {
+    metin yol = sc_yol(s, adres);
+    eger (yol == yok) {
+        g_sc_hata = -EFAULT;
+        don yok;
+    }
+    eger (yol == "" && !bos_olabilir) {
+        g_sc_hata = -ENOENT;
+        don yok;
+    }
+    eger (bayt_say(yol) >= 4096) {
+        g_sc_hata = -ENAMETOOLONG;
+        don yok;
+    }
+    eger (upp.metin.baslar(yol, "/")) { don yol; }
+    sayi taban = g_surec[s].cwd;
+    eger (dirfd != AT_FDCWD) {
+        eger (!fd_gecerli(s, dirfd)) {
+            g_sc_hata = -EBADF;
+            don yok;
+        }
+        sayi y = fd_yer(s, dirfd);
+        eger (g_fd_tur[y] != FD_DIZIN) {
+            g_sc_hata = -ENOTDIR;
+            don yok;
+        }
+        taban = g_fd_no[y];
+    }
+    eger (yol == "") { don fs_yol(taban); }
+    don yol_birlestir(fs_yol(taban), yol);
+}
 
 // Kullanıcı belleğinden n bayt metin (bayt korunur); hatalı adreste yok.
 fonk sc_oku_metin(sayi s, sayi adres, sayi n) -> metin {
@@ -119,6 +228,9 @@ fonk sc_yapi_ver(sayi s, sayi adres, sayi t, sayi n) -> sayi {
     eger (!ok) { don -EFAULT; }
     don 0;
 }
+
+// Oluşturma kipi: izin bitleri, sürecin umask'ı düşülür.
+fonk sc_kip(sayi s, sayi kip) -> sayi => (kip & 4095) - (kip & g_surec[s].umask & 4095);
 
 fonk sc_on_planda(sayi s) -> mantik => g_surec[s].gorev == 1;
 
@@ -263,10 +375,9 @@ fonk sc_write(sayi s, sayi fd, sayi buf, sayi n) -> sayi {
 
 // ---- open / close ----
 
-fonk sc_open(sayi s, sayi yol_adr, sayi bayrak, sayi kip) -> sayi {
-    metin yol = sc_yol(s, yol_adr);
-    eger (yol == yok) { don -EFAULT; }
-    eger (yol == "") { don -ENOENT; }
+fonk sc_open(sayi s, sayi dirfd, sayi yol_adr, sayi bayrak, sayi kip) -> sayi {
+    metin yol = sc_yol_at(s, dirfd, yol_adr, yanlis);
+    eger (yol == yok) { don g_sc_hata; }
     sayi erisim = bayrak % 4;
     eger (erisim == 3) { don -EINVAL; }
     sayi no = fs_coz(yol);
@@ -277,7 +388,7 @@ fonk sc_open(sayi s, sayi yol_adr, sayi bayrak, sayi kip) -> sayi {
         eger (!fs_dizin_mi(ust)) { don -ENOTDIR; }
         metin ad = yol_ad(yol);
         eger (bayt_say(ad) > 255) { don -ENAMETOOLONG; }
-        no = fs_yeni(ust, ad, D_DOSYA, kip & 4077); // kip & 07755 (umask 022)
+        no = fs_yeni(ust, ad, D_DOSYA, sc_kip(s, kip));
         eger (no < 0) {
             eger (fs_salt_okunur(ust)) { don -EROFS; }
             don -EACCES;
@@ -356,10 +467,16 @@ fonk sc_dugum_stat(sayi no) -> sayi {
     don sc_stat_tampon(mod, ino, g_fs[no].bag + 1, nlink, uzunluk, g_fs[no].zaman);
 }
 
-fonk sc_stat(sayi s, sayi yol_adr, sayi buf) -> sayi {
-    metin yol = sc_yol(s, yol_adr);
-    eger (yol == yok) { don -EFAULT; }
-    eger (yol == "") { don -ENOENT; }
+fonk sc_stat(sayi s, sayi dirfd, sayi yol_adr, sayi buf, sayi bayrak) -> sayi {
+    mantik bos_yol = (bayrak & AT_EMPTY_PATH) != 0;
+    metin ham = sc_yol(s, yol_adr);
+    eger (ham == yok) { don -EFAULT; }
+    eger (ham == "" && bos_yol) {
+        eger (dirfd == AT_FDCWD) { don sc_yapi_ver(s, buf, sc_dugum_stat(g_surec[s].cwd), 144); }
+        don sc_fstat(s, dirfd, buf);
+    }
+    metin yol = sc_yol_at(s, dirfd, yol_adr, yanlis);
+    eger (yol == yok) { don g_sc_hata; }
     sayi no = fs_coz(yol);
     eger (no < 0) { don -ENOENT; }
     don sc_yapi_ver(s, buf, sc_dugum_stat(no), 144);

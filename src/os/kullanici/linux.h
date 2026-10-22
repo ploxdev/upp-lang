@@ -21,6 +21,50 @@ typedef long ssize_t;
 #define SYS_ioctl 16
 #define SYS_nanosleep 35
 #define SYS_exit 60
+#define SYS_rt_sigaction 13
+#define SYS_rt_sigprocmask 14
+#define SYS_pread64 17
+#define SYS_pwrite64 18
+#define SYS_readv 19
+#define SYS_writev 20
+#define SYS_access 21
+#define SYS_madvise 28
+#define SYS_dup 32
+#define SYS_dup2 33
+#define SYS_getpid 39
+#define SYS_kill 62
+#define SYS_uname 63
+#define SYS_fcntl 72
+#define SYS_getcwd 79
+#define SYS_chdir 80
+#define SYS_fchdir 81
+#define SYS_rename 82
+#define SYS_mkdir 83
+#define SYS_rmdir 84
+#define SYS_unlink 87
+#define SYS_readlink 89
+#define SYS_umask 95
+#define SYS_gettimeofday 96
+#define SYS_getrlimit 97
+#define SYS_mprotect 10
+#define SYS_sigaltstack 131
+#define SYS_arch_prctl 158
+#define SYS_time 201
+#define SYS_futex 202
+#define SYS_getdents64 217
+#define SYS_clock_gettime 228
+#define SYS_clock_getres 229
+#define SYS_clock_nanosleep 230
+#define SYS_exit_group 231
+#define SYS_openat 257
+#define SYS_mkdirat 258
+#define SYS_newfstatat 262
+#define SYS_unlinkat 263
+#define SYS_renameat 264
+#define SYS_faccessat 269
+#define SYS_dup3 292
+#define SYS_prlimit64 302
+#define SYS_getrandom 318
 
 #define O_RDONLY 0
 #define O_WRONLY 1
@@ -30,6 +74,11 @@ typedef long ssize_t;
 #define O_TRUNC 01000
 #define O_APPEND 02000
 #define O_DIRECTORY 0200000
+
+#define O_CLOEXEC 02000000
+#define AT_FDCWD (-100)
+#define AT_REMOVEDIR 0x200
+#define AT_EMPTY_PATH 0x1000
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -63,6 +112,23 @@ struct stat {
 
 struct timespec {
     long tv_sec, tv_nsec;
+};
+
+struct iovec {
+    void* iov_base;
+    size_t iov_len;
+};
+
+struct utsname {
+    char sysname[65], nodename[65], release[65], version[65], machine[65], domainname[65];
+};
+
+struct rlimit {
+    unsigned long rlim_cur, rlim_max;
+};
+
+struct timeval {
+    long tv_sec, tv_usec;
 };
 
 struct winsize {

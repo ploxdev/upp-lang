@@ -213,12 +213,15 @@ fonk yerlesik_kur() -> bos {
     yk("cekirdek.kullanici_esleme_kaldir", "sayi,sayi,sayi", "bos", "upp_cekirdek_kullanici_esleme_kaldir", 64);
     yk("cekirdek.kullanici_koruma", "sayi,sayi,sayi,sayi,mantik", "bos", "upp_cekirdek_kullanici_koruma", 64);
     yk("cekirdek.kullanici_bos_mu", "sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_bos_mu", 64);
+    yk("cekirdek.kullanici_esli_mi", "sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_esli_mi", 64);
     yk("cekirdek.kullanici_fiziksel_esle", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_fiziksel_esle", 65);
     yk("cekirdek.kullanici_oku", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_oku", 64);
     yk("cekirdek.kullanici_yaz", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_yaz", 64);
     yk("cekirdek.kullanici_metin", "sayi,sayi,sayi", "metin", "upp_cekirdek_kullanici_metin", 64);
     yk("cekirdek.kullanici_calistir", "sayi,sayi,sayi", "sayi", "upp_cekirdek_kullanici_calistir", 64);
     yk("cekirdek.kullanici_cikis_iste", "sayi", "bos", "upp_cekirdek_kullanici_cikis_iste", 64);
+    yk("cekirdek.kullanici_tls_ayarla", "sayi,sayi", "mantik", "upp_cekirdek_kullanici_tls_ayarla", 64);
+    yk("cekirdek.kullanici_tls", "sayi", "sayi", "upp_cekirdek_kullanici_tls", 64);
     yk("cekirdek.kullanici_on_plan", "mantik", "bos", "upp_cekirdek_kullanici_on_plan", 64);
     yk("cekirdek.kullanici_son_hata", "", "metin", "upp_cekirdek_kullanici_son_hata", 64);
     yk("cekirdek.sistem_cagrisi_kur", "fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi", "bos", "upp_cekirdek_sistem_cagrisi_kur", 64);

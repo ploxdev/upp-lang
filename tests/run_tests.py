@@ -16,6 +16,7 @@ Kaynak yorumları:
   derleme/  yalnızca C üretimi başarılı olmalı (serbest/çekirdek hedefleri için)
   cekirdek/ --hedef cekirdek ile derlenip QEMU'da açılır; QEMU yoksa atlanır
   // @girdi: METİN    cekirdek/ testlerinde seri porta gönderilecek satır
+  // @girdi_kacis: M  aynısı; \\e (ESC), \\xNN, \\r, \\t kaçışları çözülür
   // @gerek: araç...  cekirdek/: bu komutlar POSIX kabukta yoksa test atlanır
   // @hazirla: KOMUT  cekirdek/: derlemeden önce POSIX kabukta çalışır (ör. disk imajı)
   // @denetle: KOMUT  cekirdek/: QEMU kapandıktan sonra çalışır; 0 dışı çıkış = başarısız
@@ -141,6 +142,12 @@ def meta_oku(kaynak: str, yol: str) -> Meta:
             parca = s.split(":", 1)[1].strip()
             if parca:
                 meta.icerir.append(parca)
+            continue
+        if s.startswith("// @girdi_kacis:"):
+            # \e ESC, \xNN, \r, \t kaçışları çözülür (düzenleyici tuşları için)
+            ham = s.split(":", 1)[1].strip()
+            ham = ham.replace("\\e", "\\x1b")
+            meta.girdi.append(ham.encode("latin1", "backslashreplace").decode("unicode_escape"))
             continue
         if s.startswith("// @girdi:"):
             stdout_mod = False

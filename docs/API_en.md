@@ -587,11 +587,13 @@ The mechanism lives in the kernel (C) and the policy in the operating system (u+
 | `kullanici_esleme_kaldir(ka, addr, len)` | `(sayi, sayi, sayi) -> bos` | Unmaps pages and releases the process's frames |
 | `kullanici_koruma(ka, addr, len, prot, merge)` | `(sayi, sayi, sayi, sayi, mantik) -> bos` | Sets permissions (the mprotect mechanism); `merge` only adds |
 | `kullanici_bos_mu(ka, addr, len)` | `(sayi, sayi, sayi) -> mantik` | `dogru` if no page in the range is mapped |
+| `kullanici_esli_mi(ka, addr, len)` | `(sayi, sayi, sayi) -> mantik` | `dogru` if every page in the range is mapped (mprotect/madvise `ENOMEM` check) |
 | `kullanici_fiziksel_esle(ka, addr, phys, len, prot)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Maps device memory (e.g. the framebuffer) write-combining. *Requires `guvensiz`* |
 | `kullanici_oku(ka, addr, buf, ofs, n)` / `kullanici_yaz(...)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | User memory ↔ `upp.tampon`. Every page's permissions are checked; `yanlis` on a bad address (EFAULT) |
 | `kullanici_metin(ka, addr, max)` | `(sayi, sayi, sayi) -> metin` | NUL-terminated user string; `yok` on a bad address or at the limit |
 | `kullanici_calistir(ka, entry, stack)` | `(sayi, sayi, sayi) -> sayi` | Runs the process in ring 3 on this task; returns its exit code (128 + signal when killed) |
 | `kullanici_cikis_iste(code)` | `(sayi) -> bos` | The process exits with `code` when the system call handler returns (exit) |
+| `kullanici_tls_ayarla(segment, base)` / `kullanici_tls(segment)` | `(sayi, sayi) -> mantik` / `(sayi) -> sayi` | FS (`0`) or GS (`1`) base of the current process (arch_prctl, TLS); restored on task switch. `yanlis` if the base is not in user space |
 | `kullanici_on_plan(v)` | `(mantik) -> bos` | Whether the process is in the foreground (Ctrl-C kills it with SIGINT) |
 | `kullanici_son_hata()` | `() -> metin` | Why the last process ended (`"Bölümleme hatası (SIGSEGV): ..."`, `"^C"`; `""` on a normal exit) |
 | `sistem_cagrisi_kur(f)` | `(fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi) -> bos` | `SYSCALL` handler: `f(no, a1, ..., a6)`; the result goes to rax (errors: `-errno`) |

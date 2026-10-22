@@ -341,6 +341,12 @@ static int _upp_kul_kopya(uint64_t ka, uint64_t va, unsigned char* p, size_t n, 
 
 /* ---- görev geçişi, istisna ve kesme kancaları (upp_serbest.c çağırır) ---- */
 
+/* FS_BASE / GS_BASE (MSR 0xC0000100 / 0xC0000101): sürecin TLS tabanı. */
+static void _upp_kul_tls_yukle(const UppGorev* g) {
+    _upp_msr_yaz(0xC0000100u, g->kul_fs);
+    _upp_msr_yaz(0xC0000101u, g->kul_gs);
+}
+
 static void _upp_kul_gecis_hazirla(int k) {
     UppGorev* g = &_upp_gorev[k];
     if (!g->ka) {
@@ -349,6 +355,7 @@ static void _upp_kul_gecis_hazirla(int k) {
     if (_upp_cr3_oku() != g->ka) {
         _upp_cr3_yaz(g->ka);
     }
+    _upp_kul_tls_yukle(g);
     _upp_tss.rsp0 = g->kul_kayit;
     _upp_sc_cek_rsp = g->kul_kayit;
     g->kul_dilim = _upp_tik;
@@ -589,6 +596,21 @@ static bool upp_cekirdek_kullanici_bos_mu(long long ka, long long adres, long lo
     return true;
 }
 
+/* Aralıktaki her sayfa eşliyse dogru (mprotect/madvise ENOMEM denetimi). */
+static bool upp_cekirdek_kullanici_esli_mi(long long ka, long long adres, long long uzunluk) {
+    uint64_t va, son;
+    if (!ka || !_upp_kul_aralik(adres, uzunluk, &va, &son)) {
+        return false;
+    }
+    for (; va < son; va += 4096u) {
+        uint64_t* pte = _upp_kul_pte((uint64_t)ka, va, 0);
+        if (!pte || !(*pte & _UPP_SY_P)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* Aygıt belleğini (çerçeve tamponu) kullanıcıya write-combining (PAT PA1) eşler. Çerçeveler
  * sürecin değildir: kaldırılınca bırakılmaz. Hedef aralık boş olmalı. */
 static bool upp_cekirdek_kullanici_fiziksel_esle(long long ka, long long adres, long long fiziksel, long long uzunluk, long long koruma) {
@@ -664,6 +686,9 @@ static long long upp_cekirdek_kullanici_calistir(long long ka, long long giris, 
     g->kul_cikis = 0;
     g->kul_hata[0] = 0;
     g->kul_dilim = _upp_tik;
+    g->kul_fs = 0;
+    g->kul_gs = 0;
+    _upp_kul_tls_yukle(g);
     _upp_cr3_yaz((uint64_t)ka);
     kod = _upp_kul_gir(&g->kul_kayit, (uint64_t)giris, (uint64_t)yigin);
     g = &_upp_gorev[_upp_gorev_cur];
@@ -673,6 +698,27 @@ static long long upp_cekirdek_kullanici_calistir(long long ka, long long giris, 
     _upp_cr3_yaz(_upp_cekirdek_cr3);
     __asm__ volatile("sti");
     return kod;
+}
+
+/* arch_prctl mekanizması: segment 0 = FS, 1 = GS. Taban kullanıcı alanında
+ * olmalı (kanonik olmayan bir taban çekirdekte #GP üretirdi). */
+static bool upp_cekirdek_kullanici_tls_ayarla(long long segment, long long taban) {
+    UppGorev* g = &_upp_gorev[_upp_gorev_cur];
+    if (!g->ka || taban < 0 || (uint64_t)taban >= _UPP_KUL_UST || (segment != 0 && segment != 1)) {
+        return false;
+    }
+    if (segment == 0) {
+        g->kul_fs = (uint64_t)taban;
+    } else {
+        g->kul_gs = (uint64_t)taban;
+    }
+    _upp_kul_tls_yukle(g);
+    return true;
+}
+
+static long long upp_cekirdek_kullanici_tls(long long segment) {
+    UppGorev* g = &_upp_gorev[_upp_gorev_cur];
+    return (long long)(segment == 0 ? g->kul_fs : g->kul_gs);
 }
 
 /* Sistem çağrısı işleyicisi dönünce süreç kod ile biter (exit, exit_group). */

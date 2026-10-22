@@ -16,6 +16,7 @@ __pycache__/
 !bootstrap/uppc.c
 !src/os/onyukleyici/limine/limine.c
 !src/os/kullanici/*.c
+!src/os/kullanici/glibc/*.c
 *.o
 *.obj
 *.exe

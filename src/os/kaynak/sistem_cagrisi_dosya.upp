@@ -1,0 +1,322 @@
+// Uppix — dosya sistemi ve tanımlayıcı sistem çağrıları (Linux x86_64).
+// pread/pwrite, readv/writev, dup/dup2/dup3, fcntl, getdents64, access/faccessat,
+// getcwd/chdir/fchdir, mkdir(at), unlink/rmdir/unlinkat, rename(at),
+// readlink(at). Göreli yollar sürecin çalışma dizinine göre çözülür.
+// Bilinen fark: dup'lanan tanımlayıcılar ofseti paylaşmaz (kopyası alınır).
+
+sabit sayi F_DUPFD = 0;
+sabit sayi F_GETFD = 1;
+sabit sayi F_SETFD = 2;
+sabit sayi F_GETFL = 3;
+sabit sayi F_SETFL = 4;
+sabit sayi F_DUPFD_CLOEXEC = 1030;
+sabit sayi O_NOCTTY = 256;
+sabit sayi O_NONBLOCK = 2048;
+sabit sayi O_LARGEFILE = 32768;
+sabit sayi O_CLOEXEC = 524288;
+
+// ---- pread64 / pwrite64: konumu değiştirmeden ofsetten okuma/yazma ----
+fonk sc_pread(sayi s, sayi fd, sayi buf, sayi n, sayi ofs, mantik yaz) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    sayi y = fd_yer(s, fd);
+    sayi tur = g_fd_tur[y];
+    eger (tur == FD_DIZIN) { don -EISDIR; }
+    eger (tur != FD_DOSYA && tur != FD_NULL) { don -ESPIPE; }
+    eger (ofs < 0) { don -EINVAL; }
+    sayi eski = g_fd_konum[y];
+    g_fd_konum.yaz(y, ofs);
+    sayi r = 0;
+    eger (yaz) { r = sc_write(s, fd, buf, n); } yoksa { r = sc_read(s, fd, buf, n); }
+    g_fd_konum.yaz(y, eski);
+    don r;
+}
+
+// ---- readv / writev: struct iovec { void* base; size_t len; } dizisi ----
+fonk sc_vektor(sayi s, sayi fd, sayi iov, sayi adet, mantik yaz) -> sayi {
+    eger (adet < 0 || adet > 1024) { don -EINVAL; }
+    eger (adet == 0) { don 0; }
+    sayi t = upp.tampon.yeni(adet * 16);
+    eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, iov, t, 0, adet * 16)) {
+        upp.tampon.birak(t);
+        don -EFAULT;
+    }
+    sayi toplam = 0;
+    her (sayi i in 0..adet) {
+        sayi taban = upp.tampon.oku64(t, i * 16);
+        sayi n = upp.tampon.oku64(t, i * 16 + 8);
+        eger (n < 0) {
+            upp.tampon.birak(t);
+            don -EINVAL;
+        }
+        eger (n == 0) { devam; }
+        sayi r = 0;
+        eger (yaz) { r = sc_write(s, fd, taban, n); } yoksa { r = sc_read(s, fd, taban, n); }
+        eger (r < 0) {
+            upp.tampon.birak(t);
+            eger (toplam == 0) { don r; }
+            don toplam;
+        }
+        toplam += r;
+        eger (r < n) { dur; }
+    }
+    upp.tampon.birak(t);
+    don toplam;
+}
+
+// ---- dup / dup2 / dup3 / fcntl ----
+// O_CLOEXEC tanımlayıcıya aittir: kopyada temizlenir (dup3 / F_DUPFD_CLOEXEC hariç).
+fonk fd_kopyala(sayi s, sayi eski, sayi yeni, mantik cloexec) -> bos {
+    sayi a = fd_yer(s, eski);
+    sayi b = fd_yer(s, yeni);
+    sayi bayrak = g_fd_bayrak[a] - (g_fd_bayrak[a] & O_CLOEXEC);
+    eger (cloexec) { bayrak += O_CLOEXEC; }
+    g_fd_tur.yaz(b, g_fd_tur[a]);
+    g_fd_no.yaz(b, g_fd_no[a]);
+    g_fd_konum.yaz(b, g_fd_konum[a]);
+    g_fd_bayrak.yaz(b, bayrak);
+}
+
+// dup3_bayrak: 0 dup/dup2; dup3 için 1 + bayrak (0 ya da O_CLOEXEC)
+fonk sc_dup(sayi s, sayi eski, sayi yeni, sayi dup3_bayrak) -> sayi {
+    sayi bayrak = 0;
+    eger (dup3_bayrak > 0) {
+        bayrak = dup3_bayrak - 1;
+        eger (bayrak != 0 && bayrak != O_CLOEXEC) { don -EINVAL; }
+    }
+    eger (!fd_gecerli(s, eski)) { don -EBADF; }
+    eger (yeni == -1) {
+        sayi fd = fd_ayir(s);
+        eger (fd < 0) { don -EMFILE; }
+        fd_kopyala(s, eski, fd, yanlis);
+        don fd;
+    }
+    eger (yeni < 0 || yeni >= FD_MAX) { don -EBADF; }
+    eger (eski == yeni) {
+        eger (dup3_bayrak > 0) { don -EINVAL; }
+        don yeni;
+    }
+    fd_kopyala(s, eski, yeni, bayrak != 0);
+    don yeni;
+}
+
+fonk sc_fcntl(sayi s, sayi fd, sayi komut, sayi arg) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    sayi y = fd_yer(s, fd);
+    sayi bayrak = g_fd_bayrak[y];
+    eger (komut == F_DUPFD || komut == F_DUPFD_CLOEXEC) {
+        eger (arg < 0 || arg >= FD_MAX) { don -EINVAL; }
+        her (sayi k in arg..FD_MAX) {
+            eger (g_fd_tur[fd_yer(s, k)] == FD_KAPALI) {
+                fd_kopyala(s, fd, k, komut == F_DUPFD_CLOEXEC);
+                don k;
+            }
+        }
+        don -EMFILE;
+    }
+    eger (komut == F_GETFD) {
+        eger ((bayrak & O_CLOEXEC) != 0) { don 1; }
+        don 0;
+    }
+    eger (komut == F_SETFD) {
+        bayrak -= bayrak & O_CLOEXEC;
+        eger ((arg & 1) != 0) { bayrak += O_CLOEXEC; }
+        g_fd_bayrak.yaz(y, bayrak);
+        don 0;
+    }
+    eger (komut == F_GETFL) {
+        // açılışta tüketilen bayraklar görünmez; 64 bitte O_LARGEFILE hep açıktır
+        sayi tuketilen = O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC | O_CLOEXEC;
+        don (bayrak - (bayrak & tuketilen)) | O_LARGEFILE;
+    }
+    eger (komut == F_SETFL) {
+        // yalnızca O_APPEND ve O_NONBLOCK değişebilir
+        sayi degisen = O_APPEND | O_NONBLOCK;
+        g_fd_bayrak.yaz(y, (bayrak - (bayrak & degisen)) | (arg & degisen));
+        don 0;
+    }
+    don -EINVAL;
+}
+
+// ---- getdents64: struct linux_dirent64 { u64 ino; s64 off; u16 reclen; u8 type; char name[]; } ----
+fonk dirent_tur(sayi no) -> sayi {
+    sayi t = g_fs[no].tur;
+    eger (t == D_DIZIN) { don 4; }  // DT_DIR
+    eger (t == D_AYGIT) { don 2; }  // DT_CHR
+    don 8;                          // DT_REG
+}
+
+fonk dirent_ino(sayi no) -> sayi {
+    eger (g_fs[no].ino > 0) { don g_fs[no].ino; }
+    don no + 1;
+}
+
+fonk sc_getdents64(sayi s, sayi fd, sayi buf, sayi n) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    sayi y = fd_yer(s, fd);
+    eger (g_fd_tur[y] != FD_DIZIN) { don -ENOTDIR; }
+    eger (n <= 0) { don -EINVAL; }
+    sayi no = g_fd_no[y];
+    fs_yukle(no);
+    liste[sayi] cocuk = fs_cocuklar(no);
+    sayi toplam_giris = cocuk.uzunluk() + 2;
+    sayi t = upp.tampon.yeni(n);
+    upp.tampon.doldur(t, 0, n, 0);
+    sayi o = 0;
+    sayi i = g_fd_konum[y];
+    iken (i < toplam_giris) {
+        metin ad = ".";
+        sayi hedef = no;
+        eger (i == 1) {
+            ad = "..";
+            hedef = g_fs[no].ust;
+        } yoksa eger (i >= 2) {
+            hedef = cocuk[i - 2];
+            ad = g_fs[hedef].ad;
+        }
+        sayi kayit = (19 + bayt_say(ad) + 1 + 7) / 8 * 8;
+        eger (o + kayit > n) {
+            eger (o == 0) {
+                upp.tampon.birak(t);
+                don -EINVAL;
+            }
+            dur;
+        }
+        upp.tampon.yaz64(t, o, dirent_ino(hedef));
+        upp.tampon.yaz64(t, o + 8, i + 1);
+        upp.tampon.yaz16(t, o + 16, kayit);
+        upp.tampon.yaz8(t, o + 18, dirent_tur(hedef));
+        upp.tampon.metin_yaz(t, o + 19, ad);
+        o += kayit;
+        i += 1;
+    }
+    eger (o > 0 && !upp.cekirdek.kullanici_yaz(g_surec[s].ka, buf, t, 0, o)) {
+        upp.tampon.birak(t);
+        don -EFAULT;
+    }
+    upp.tampon.birak(t);
+    g_fd_konum.yaz(y, i);
+    don o;
+}
+
+// ---- access / faccessat (R_OK 4, W_OK 2, X_OK 1; root) ----
+fonk sc_access(sayi s, sayi dirfd, sayi yol_adr, sayi kip) -> sayi {
+    metin yol = sc_yol_at(s, dirfd, yol_adr, yanlis);
+    eger (yol == yok) { don g_sc_hata; }
+    eger (kip < 0 || kip > 7) { don -EINVAL; }
+    sayi no = fs_coz(yol);
+    eger (no < 0) { don -ENOENT; }
+    eger ((kip & 2) != 0 && fs_salt_okunur(no)) { don -EROFS; }
+    eger ((kip & 1) != 0 && g_fs[no].tur != D_DIZIN && (g_fs[no].kip & 73) == 0) { don -EACCES; }
+    don 0;
+}
+
+// ---- getcwd / chdir / fchdir ----
+fonk sc_getcwd(sayi s, sayi buf, sayi n) -> sayi {
+    metin yol = fs_yol(g_surec[s].cwd);
+    sayi uz = bayt_say(yol) + 1;
+    eger (n < uz) { don -ERANGE; }
+    eger (!sc_yaz_metin(s, buf, yol + "\x00", 0, uz)) { don -EFAULT; }
+    don uz;
+}
+
+fonk sc_chdir(sayi s, sayi yol_adr, sayi fd) -> sayi {
+    sayi no = -1;
+    eger (fd >= 0) {
+        eger (!fd_gecerli(s, fd)) { don -EBADF; }
+        sayi y = fd_yer(s, fd);
+        eger (g_fd_tur[y] != FD_DIZIN) { don -ENOTDIR; }
+        no = g_fd_no[y];
+    } yoksa {
+        metin yol = sc_yol_at(s, AT_FDCWD, yol_adr, yanlis);
+        eger (yol == yok) { don g_sc_hata; }
+        no = fs_coz(yol);
+        eger (no < 0) { don -ENOENT; }
+        eger (g_fs[no].tur != D_DIZIN) { don -ENOTDIR; }
+    }
+    g_surec[s].cwd = no;
+    don 0;
+}
+
+// ---- mkdir / mkdirat ----
+fonk sc_mkdir(sayi s, sayi dirfd, sayi yol_adr, sayi kip) -> sayi {
+    metin yol = sc_yol_at(s, dirfd, yol_adr, yanlis);
+    eger (yol == yok) { don g_sc_hata; }
+    eger (fs_coz(yol) >= 0) { don -EEXIST; }
+    sayi ust = fs_coz(yol_dizin(yol));
+    eger (ust < 0) { don -ENOENT; }
+    eger (!fs_dizin_mi(ust)) { don -ENOTDIR; }
+    metin ad = yol_ad(yol);
+    eger (bayt_say(ad) > 255) { don -ENAMETOOLONG; }
+    eger (fs_yeni(ust, ad, D_DIZIN, sc_kip(s, kip)) < 0) {
+        eger (fs_salt_okunur(ust)) { don -EROFS; }
+        don -EACCES;
+    }
+    don 0;
+}
+
+// ---- unlink / rmdir / unlinkat (AT_REMOVEDIR) ----
+fonk sc_unlink(sayi s, sayi dirfd, sayi yol_adr, sayi bayrak) -> sayi {
+    metin yol = sc_yol_at(s, dirfd, yol_adr, yanlis);
+    eger (yol == yok) { don g_sc_hata; }
+    sayi no = fs_coz(yol);
+    eger (no < 0) { don -ENOENT; }
+    mantik dizin = g_fs[no].tur == D_DIZIN;
+    eger ((bayrak & AT_REMOVEDIR) != 0) {
+        eger (!dizin) { don -ENOTDIR; }
+        eger (no == 0 || fs_baglama_noktasi_mi(no)) { don -EBUSY; }
+        fs_yukle(no);
+        eger (fs_cocuklar(no).uzunluk() > 0) { don -ENOTEMPTY; }
+    } yoksa eger (dizin) {
+        don -EISDIR;
+    }
+    eger (fs_salt_okunur(no)) { don -EROFS; }
+    eger (!fs_sil(no)) { don -EBUSY; }
+    don 0;
+}
+
+// ---- rename / renameat ----
+fonk sc_rename(sayi s, sayi eski_dirfd, sayi eski_adr, sayi yeni_dirfd, sayi yeni_adr) -> sayi {
+    metin eski = sc_yol_at(s, eski_dirfd, eski_adr, yanlis);
+    eger (eski == yok) { don g_sc_hata; }
+    metin yeni = sc_yol_at(s, yeni_dirfd, yeni_adr, yanlis);
+    eger (yeni == yok) { don g_sc_hata; }
+    sayi no = fs_coz(eski);
+    eger (no < 0) { don -ENOENT; }
+    sayi ust = fs_coz(yol_dizin(yeni));
+    eger (ust < 0) { don -ENOENT; }
+    eger (!fs_dizin_mi(ust)) { don -ENOTDIR; }
+    eger (no == 0 || fs_baglama_noktasi_mi(no)) { don -EBUSY; }
+    eger (g_fs[no].tur == D_DIZIN && (ust == no || fs_ata_mi(no, ust))) { don -EINVAL; }
+    sayi hedef = fs_coz(yeni);
+    eger (hedef == no) { don 0; }
+    eger (hedef >= 0) {
+        mantik h_dizin = g_fs[hedef].tur == D_DIZIN;
+        mantik k_dizin = g_fs[no].tur == D_DIZIN;
+        eger (h_dizin && !k_dizin) { don -EISDIR; }
+        eger (!h_dizin && k_dizin) { don -ENOTDIR; }
+        eger (h_dizin) {
+            fs_yukle(hedef);
+            eger (fs_cocuklar(hedef).uzunluk() > 0) { don -ENOTEMPTY; }
+        }
+        eger (!fs_sil(hedef)) { don -EBUSY; }
+    }
+    eger (fs_salt_okunur(no) || fs_salt_okunur(ust)) { don -EROFS; }
+    eger (!fs_tasi(no, ust, yol_ad(yeni))) { don -EIO; }
+    don 0;
+}
+
+// ---- readlink / readlinkat: sembolik bağ yok; /proc/self/exe sürecin yolu ----
+fonk sc_readlink(sayi s, sayi dirfd, sayi yol_adr, sayi buf, sayi n) -> sayi {
+    metin yol = sc_yol_at(s, dirfd, yol_adr, yanlis);
+    eger (yol == yok) { don g_sc_hata; }
+    eger (n <= 0) { don -EINVAL; }
+    eger (yol == "/proc/self/exe") {
+        metin hedef = g_surec[s].yol;
+        sayi k = bayt_say(hedef);
+        eger (k > n) { k = n; }
+        eger (!sc_yaz_metin(s, buf, hedef, 0, k)) { don -EFAULT; }
+        don k;
+    }
+    eger (fs_coz(yol) < 0) { don -ENOENT; }
+    don -EINVAL; // sembolik bağ değil
+}

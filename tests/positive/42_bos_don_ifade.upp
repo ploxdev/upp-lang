@@ -1,0 +1,32 @@
+// Pozitif: bos dönen fonksiyonda ifade gövdesi (=> f()) ve "don f();".
+// Çağrı yapılır, değer döndürülmez (C'de void değişken üretilmemeli).
+// @stdout
+// yaz: bir
+// yaz: iki
+// say: 3
+// metin: üç
+
+sayi g_say = 0;
+
+fonk yaz_bir(metin s) -> bos {
+    upp.satir_yaz("yaz: " + s);
+    g_say += 1;
+}
+
+fonk ifade_govde() -> bos => yaz_bir("bir");
+
+fonk don_ile(mantik erken) -> bos {
+    eger (erken) { don yaz_bir("iki"); }
+    upp.satir_yaz("buraya gelinmez");
+}
+
+fonk metin_arg() -> bos => upp.satir_yaz("metin: " + "ü" + "ç");
+
+fonk ana() -> sayi {
+    ifade_govde();
+    don_ile(dogru);
+    g_say += 1;
+    upp.satir_yaz("say: {g_say}");
+    metin_arg();
+    don 0;
+}

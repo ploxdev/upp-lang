@@ -1,0 +1,267 @@
+// Uppix — hexdump: util-linux hexdump'ıyla aynı biçimler.
+//   (seçeneksiz)  16 bitlik küçük-sonlu sözcükler, onaltılık    0000000 6548 6c6c
+//   -C            kanonik: onaltılık baytlar + ASCII              00000000  48 65 ... |He..|
+//   -b -c -d -o -x  sekizlik bayt, karakter, ondalık/sekizlik/onaltılık sözcük
+//   -n N          yalnızca N bayt;  -s N  baştan N bayt atla (0x.., 0.., k/m/b eki)
+//   -v            yinelenen satırları '*' ile kısaltma
+// Birden çok dosya tek akış gibi okunur; dosya yoksa girdi (boru) okunur.
+
+sabit sayi HD_VARSAYILAN = 0;
+sabit sayi HD_KANONIK = 1;
+sabit sayi HD_SEKIZLIK_BAYT = 2;
+sabit sayi HD_KARAKTER = 3;
+sabit sayi HD_ONDALIK = 4;
+sabit sayi HD_SEKIZLIK = 5;
+sabit sayi HD_ONALTILIK = 6;
+
+// v'yi tabanda, en az gen haneyle (soldan sıfırla) yazar.
+fonk tabanda(sayi v, sayi taban, sayi gen) -> metin {
+    metin h = "0123456789abcdef";
+    metin s = "";
+    iken (v > 0) {
+        s = upp.metin.kes(h, v % taban, 1) + s;
+        v = v / taban;
+    }
+    iken (bayt_say(s) < gen) { s = "0" + s; }
+    don s;
+}
+
+fonk bosluk(sayi n) -> metin {
+    metin s = "";
+    her (sayi i in 0..n) { s += " "; }
+    don s;
+}
+
+// "-s"/"-n" sayısı: 0x onaltılık, 0 ile başlayan sekizlik; b (512), k (1024), m eki.
+fonk hd_sayi(metin s) -> sayi {
+    eger (s == "") { don -1; }
+    sayi carpan = 1;
+    metin son = kes_son(s, uz(s) - 1);
+    eger (son == "b") { carpan = 512; }
+    eger (son == "k" || son == "K") { carpan = 1024; }
+    eger (son == "m" || son == "M") { carpan = 1048576; }
+    eger (carpan > 1) { s = kes(s, 0, uz(s) - 1); }
+    sayi taban = 10;
+    eger (upp.metin.baslar(s, "0x") || upp.metin.baslar(s, "0X")) {
+        taban = 16;
+        s = kes_son(s, 2);
+    } yoksa eger (uz(s) > 1 && upp.metin.baslar(s, "0")) {
+        taban = 8;
+        s = kes_son(s, 1);
+    }
+    eger (s == "") { don -1; }
+    sayi v = 0;
+    her (sayi i in 0..uz(s)) {
+        sayi c = upp.metin.bul("0123456789abcdef", upp.metin.ingkucuk(kes(s, i, 1)));
+        eger (c < 0 || c >= taban) { don -1; }
+        v = v * taban + c;
+    }
+    don v * carpan;
+}
+
+// -c: yazdırılabilirse kendisi, bilinen kaçışlar, yoksa üç haneli sekizlik.
+fonk hd_karakter(sayi b) -> metin {
+    eger (b == 0) { don " \\0"; }
+    eger (b == 7) { don " \\a"; }
+    eger (b == 8) { don " \\b"; }
+    eger (b == 9) { don " \\t"; }
+    eger (b == 10) { don " \\n"; }
+    eger (b == 11) { don " \\v"; }
+    eger (b == 12) { don " \\f"; }
+    eger (b == 13) { don " \\r"; }
+    eger (b >= 32 && b < 127) { don "  " + upp.metin.karakter(b); }
+    don tabanda(b, 8, 3);
+}
+
+// Bir 16 baytlık bloğun tek biçimdeki satırı. t: veri tamponu, o: bloğun başı,
+// n: bloktaki bayt sayısı (1..16), adres: gösterilecek ofset.
+fonk hd_satir(sayi bicim, sayi t, sayi o, sayi n, sayi adres) -> metin {
+    eger (bicim == HD_KANONIK) {
+        metin r = tabanda(adres, 16, 8) + " ";
+        metin asc = "";
+        her (sayi i in 0..16) {
+            eger (i == 8) { r += " "; }
+            eger (i < n) {
+                sayi b = upp.tampon.oku8(t, o + i);
+                r += " " + tabanda(b, 16, 2);
+                eger (b >= 32 && b < 127) { asc += upp.metin.karakter(b); } yoksa { asc += "."; }
+            } yoksa {
+                r += "   ";
+            }
+        }
+        don r + "  |" + asc + "|";
+    }
+    metin r = tabanda(adres, 16, 7);
+    eger (bicim == HD_SEKIZLIK_BAYT || bicim == HD_KARAKTER) {
+        // 16 birim, 3 karakter genişliğinde
+        her (sayi i in 0..16) {
+            r += " ";
+            eger (i >= n) {
+                r += "   ";
+            } yoksa eger (bicim == HD_KARAKTER) {
+                r += hd_karakter(upp.tampon.oku8(t, o + i));
+            } yoksa {
+                r += tabanda(upp.tampon.oku8(t, o + i), 8, 3);
+            }
+        }
+        don r;
+    }
+    // 8 adet 16 bitlik küçük-sonlu sözcük; tek kalan bayt sıfırla genişler
+    her (sayi i in 0..8) {
+        sayi k = 2 * i;
+        mantik var_mi = k < n;
+        sayi w = 0;
+        eger (var_mi) {
+            w = upp.tampon.oku8(t, o + k);
+            eger (k + 1 < n) { w += upp.tampon.oku8(t, o + k + 1) * 256; }
+        }
+        eger (bicim == HD_VARSAYILAN) {
+            r += " ";
+            eger (var_mi) { r += tabanda(w, 16, 4); } yoksa { r += "    "; }
+        } yoksa eger (bicim == HD_ONDALIK) {
+            eger (var_mi) { r += "   " + tabanda(w, 10, 5); } yoksa { r += bosluk(8); }
+        } yoksa eger (bicim == HD_SEKIZLIK) {
+            eger (var_mi) { r += "  " + tabanda(w, 8, 6); } yoksa { r += bosluk(8); }
+        } yoksa {
+            eger (var_mi) { r += "    " + tabanda(w, 16, 4); } yoksa { r += bosluk(8); }
+        }
+    }
+    don r;
+}
+
+fonk k_hexdump(liste[metin] a, metin girdi) -> sayi {
+    liste[sayi] bicimler;
+    liste[metin] dosyalar;
+    sayi atla = 0;
+    sayi sinir = -1;
+    mantik hepsi = yanlis;
+    sayi i = 1;
+    iken (i < a.uzunluk()) {
+        metin x = a[i];
+        i += 1;
+        eger (x == "--") {
+            iken (i < a.uzunluk()) {
+                dosyalar.ekle(a[i]);
+                i += 1;
+            }
+            dur;
+        }
+        eger (uz(x) < 2 || !upp.metin.baslar(x, "-")) {
+            dosyalar.ekle(x);
+            devam;
+        }
+        sayi j = 1;
+        iken (j < uz(x)) {
+            metin h = kes(x, j, 1);
+            j += 1;
+            eger (h == "n" || h == "s") {
+                // değer bitişik (-n16) ya da sonraki argüman
+                metin d = kes_son(x, j);
+                j = uz(x);
+                eger (d == "") {
+                    eger (i >= a.uzunluk()) {
+                        hata_bildir("hexdump: -{h} seçeneği bir değer ister");
+                        don 1;
+                    }
+                    d = a[i];
+                    i += 1;
+                }
+                sayi v = hd_sayi(d);
+                eger (v < 0) {
+                    hata_bildir("hexdump: geçersiz sayı: '{d}'");
+                    don 1;
+                }
+                eger (h == "n") { sinir = v; } yoksa { atla = v; }
+            } yoksa eger (h == "C") {
+                bicimler.ekle(HD_KANONIK);
+            } yoksa eger (h == "b") {
+                bicimler.ekle(HD_SEKIZLIK_BAYT);
+            } yoksa eger (h == "c") {
+                bicimler.ekle(HD_KARAKTER);
+            } yoksa eger (h == "d") {
+                bicimler.ekle(HD_ONDALIK);
+            } yoksa eger (h == "o") {
+                bicimler.ekle(HD_SEKIZLIK);
+            } yoksa eger (h == "x") {
+                bicimler.ekle(HD_ONALTILIK);
+            } yoksa eger (h == "v") {
+                hepsi = dogru;
+            } yoksa {
+                hata_bildir("hexdump: geçersiz seçenek -- '{h}'");
+                hata_bildir("kullanım: hexdump [-bcCdovx] [-n uzunluk] [-s atla] [dosya...]");
+                don 1;
+            }
+        }
+    }
+    eger (bicimler.uzunluk() == 0) { bicimler.ekle(HD_VARSAYILAN); }
+
+    // veri: dosyalar art arda (hatalı olanlar atlanır) ya da girdi
+    metin veri = "";
+    sayi kod = 0;
+    eger (dosyalar.uzunluk() == 0) {
+        veri = girdi_oku(girdi);
+    } yoksa {
+        sayi hatali = 0;
+        her (oto y in dosyalar) {
+            metin m = dosya_icerik("hexdump", y);
+            eger (m == yok) {
+                hatali += 1;
+                devam;
+            }
+            veri += m;
+        }
+        eger (hatali > 0) { kod = 1; }
+        eger (hatali == dosyalar.uzunluk()) {
+            hata_bildir("hexdump: hiçbir girdi dosyası okunamadı");
+            don 1;
+        }
+    }
+    sayi toplam = bayt_say(veri);
+    eger (atla > toplam) { atla = toplam; }
+    sayi n = toplam - atla;
+    eger (sinir >= 0 && sinir < n) { n = sinir; }
+    eger (sinir == 0 || atla + n == 0) { don kod; }
+
+    sayi t = upp.tampon.yeni(toplam + 1);
+    upp.tampon.metin_yaz(t, 0, veri);
+    sayi o = 0;
+    mantik yildiz = yanlis;
+    iken (o < n) {
+        sayi k = n - o;
+        eger (k > 16) { k = 16; }
+        // aynı tam satır önceki satırı yineliyorsa tek '*'
+        mantik ayni = !hepsi && o >= 16 && k == 16;
+        eger (ayni) {
+            her (sayi m in 0..16) {
+                eger (upp.tampon.oku8(t, atla + o + m) != upp.tampon.oku8(t, atla + o - 16 + m)) {
+                    ayni = yanlis;
+                    dur;
+                }
+            }
+        }
+        eger (ayni) {
+            eger (!yildiz) { satir("*"); }
+            yildiz = dogru;
+        } yoksa {
+            yildiz = yanlis;
+            her (oto b in bicimler) { satir(hd_satir(b, t, atla + o, k, atla + o)); }
+        }
+        o += k;
+    }
+    upp.tampon.birak(t);
+    eger (bicimler[0] == HD_KANONIK) {
+        satir(tabanda(atla + n, 16, 8));
+    } yoksa {
+        satir(tabanda(atla + n, 16, 7));
+    }
+    don kod;
+}
+
+// hd: hexdump -C
+fonk k_hd(liste[metin] a, metin girdi) -> sayi {
+    liste[metin] b;
+    b.ekle("hd");
+    b.ekle("-C");
+    her (sayi i in 1..a.uzunluk()) { b.ekle(a[i]); }
+    don k_hexdump(b, girdi);
+}

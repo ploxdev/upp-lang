@@ -42,6 +42,10 @@ sinif Surec {
     metin girdi;
     sayi girdi_konum;
     metin satir_artik; // terminalden okunmuş, henüz verilmemiş baytlar
+    sayi cwd;          // çalışma dizini (VFS düğümü); kabuğunkinden bağımsız
+    metin yol;         // çalıştırılabilir dosyanın yolu (/proc/self/exe)
+    sayi umask;        // dosya oluşturma maskesi (varsayılan 022)
+    sayi sig_maske;    // engellenen sinyaller (rt_sigprocmask)
 }
 
 liste[Surec] g_surec;
@@ -53,6 +57,22 @@ liste[sayi] g_fd_tur;
 liste[sayi] g_fd_no;
 liste[sayi] g_fd_konum;
 liste[sayi] g_fd_bayrak;
+
+// Sinyal eylemleri: yuva * 64 + (sinyal - 1) → ham struct sigaction (32 bayt; "" = SIG_DFL).
+// Kaynak sınırları: (yuva * RLIM_SAYI + kaynak) * 2 → {rlim_cur, rlim_max}; -1 = RLIM_INFINITY.
+sabit sayi RLIM_SAYI = 16;
+liste[metin] g_sig_eylem;
+liste[sayi] g_rlim;
+
+fonk rlim_varsayilan(sayi kaynak, mantik azami) -> sayi {
+    eger (kaynak == 3) { don YIGIN_BOY; }      // RLIMIT_STACK: yığın büyümez
+    eger (kaynak == 4 && !azami) { don 0; }    // RLIMIT_CORE
+    eger (kaynak == 7) { don FD_MAX; }         // RLIMIT_NOFILE
+    eger (kaynak == 8) { don 8388608; }        // RLIMIT_MEMLOCK
+    eger (kaynak == 12) { don 819200; }        // RLIMIT_MSGQUEUE
+    eger (kaynak == 13 || kaynak == 14) { don 0; } // RLIMIT_NICE, RLIMIT_RTPRIO
+    don -1;
+}
 
 fonk sayfa_asagi(sayi a) -> sayi => a - a % SAYFA;
 fonk sayfa_yukari(sayi a) -> sayi => sayfa_asagi(a + SAYFA - 1);
@@ -112,6 +132,10 @@ fonk surec_yeni(metin ad, metin girdi) -> sayi {
     eger (girdi != yok) { y.girdi = girdi; }
     y.girdi_konum = 0;
     y.satir_artik = "";
+    y.cwd = g_cwd;
+    y.yol = "";
+    y.umask = 18;
+    y.sig_maske = 0;
     eger (s < 0) {
         s = g_surec.uzunluk();
         g_surec.ekle(y);
@@ -121,13 +145,21 @@ fonk surec_yeni(metin ad, metin girdi) -> sayi {
             g_fd_konum.ekle(0);
             g_fd_bayrak.ekle(0);
         }
+        her (sayi i in 0..64) { g_sig_eylem.ekle(""); }
+        her (sayi i in 0..RLIM_SAYI * 2) { g_rlim.ekle(0); }
     } yoksa {
         g_surec.yaz(s, y);
         her (sayi fd in 0..FD_MAX) { fd_kur(s, fd, FD_KAPALI, -1, 0); }
     }
-    eger (y.girdi_var) { fd_kur(s, 0, FD_GIRDI, -1, 0); } yoksa { fd_kur(s, 0, FD_TERMINAL, -1, 0); }
-    fd_kur(s, 1, FD_TERMINAL, -1, 1);
-    fd_kur(s, 2, FD_TERMINAL, -1, 1);
+    her (sayi i in 0..64) { g_sig_eylem.yaz(s * 64 + i, ""); }
+    her (sayi k in 0..RLIM_SAYI) {
+        g_rlim.yaz((s * RLIM_SAYI + k) * 2, rlim_varsayilan(k, yanlis));
+        g_rlim.yaz((s * RLIM_SAYI + k) * 2 + 1, rlim_varsayilan(k, dogru));
+    }
+    // terminal Linux'taki gibi O_RDWR açıktır
+    eger (y.girdi_var) { fd_kur(s, 0, FD_GIRDI, -1, 0); } yoksa { fd_kur(s, 0, FD_TERMINAL, -1, 2); }
+    fd_kur(s, 1, FD_TERMINAL, -1, 2);
+    fd_kur(s, 2, FD_TERMINAL, -1, 2);
     g_surec_gorev.koy(y.gorev, s);
     don s;
 }
@@ -310,6 +342,7 @@ fonk elf_calistir(sayi no, liste[metin] a, metin girdi) -> sayi {
         don 126;
     }
     sayi s = surec_yeni(yol_ad(fs_yol(no)), girdi);
+    g_surec[s].yol = fs_yol(no);
     metin veri = fs_oku(no);
     sayi n = bayt_say(veri);
     metin h = "çalıştırılabilir biçim hatası";

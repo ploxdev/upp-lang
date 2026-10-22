@@ -1,0 +1,850 @@
+// vi: kipli düzenleyici (duzenleyici.upp çekirdeğiyle). vim'in temel komutları:
+//   hareket   h j k l, oklar, 0 ^ $, w b e, gg G, NG, Ctrl-F/B/D/U, Enter + -
+//   düzenleme x X dd D dw d$ d0 dG yy Y yw y$ p P J r~ cc cw c$ C s S, u Ctrl-R
+//   ekleme    i a I A o O (Esc ile çıkılır), sayı öneki (3dd, 5j, 2p...)
+//   arama     /metin ?metin n N
+//   ex        :w [dosya] :q :q! :wq :x :e! :N :$ :s/a/b/[g] :%s/a/b/[g] ZZ ZQ
+
+sayi g_vi_kip = 0;             // 0 komut, 1 ekleme
+metin g_vi_kayit = "";         // yank/silme kaydı
+mantik g_vi_kayit_satir = yanlis; // kayıt satır kipinde mi (dd, yy)
+metin g_vi_mesaj = "";
+mantik g_vi_mesaj_hata = yanlis;
+metin g_vi_aranan = "";
+mantik g_vi_ara_ileri = dogru;
+mantik g_vi_cik = yanlis;
+
+fonk vi_mesaj(metin m) -> bos {
+    g_vi_mesaj = m;
+    g_vi_mesaj_hata = yanlis;
+}
+
+fonk vi_hata(metin m) -> bos {
+    g_vi_mesaj = m;
+    g_vi_mesaj_hata = dogru;
+}
+
+// Komut kipinde imleç satırdaki son karakteri geçemez.
+fonk vi_sinirla() -> bos {
+    dz_sinirla();
+    eger (g_vi_kip == 0) {
+        sayi n = uz(g_dz[g_dz_y]);
+        eger (g_dz_x >= n && n > 0) { g_dz_x = n - 1; }
+    }
+}
+
+// Alt satır: mesaj ya da kip, sağda satır,sütun ve konum.
+fonk vi_alt() -> bos {
+    sayi r = g_dz_h;
+    metin sol = g_vi_mesaj;
+    eger (sol == "" && g_vi_kip == 1) { sol = "-- EKLE --"; }
+    metin s = g_dz[g_dz_y];
+    metin konum = "";
+    eger (uz(s) == 0) {
+        konum = "{g_dz_y + 1},0-1";
+    } yoksa {
+        metin onu = kes(s, 0, g_dz_x);
+        sayi b = bayt_say(onu) + 1;
+        sayi col = dz_sutun(s, g_dz_x) + 1;
+        eger (b == col) { konum = "{g_dz_y + 1},{b}"; } yoksa { konum = "{g_dz_y + 1},{b}-{col}"; }
+    }
+    sayi n = g_dz.uzunluk();
+    metin oran = "";
+    eger (n <= g_dz_metin_h) {
+        oran = "Tümü";
+    } yoksa eger (g_dz_ust == 0) {
+        oran = "Baş";
+    } yoksa eger (g_dz_ust + g_dz_metin_h >= n) {
+        oran = "Son";
+    } yoksa {
+        oran = "%{g_dz_ust * 100 / (n - g_dz_metin_h)}";
+    }
+    metin sag = dz_doldur(konum, 14) + oran;
+    sayi sag_bas = g_dz_g - 18;
+    metin sol_k = dz_kirp(sol, sag_bas - 1);
+    metin cizim = sol_k;
+    eger (g_vi_mesaj_hata && g_vi_mesaj != "") {
+        cizim = "\e[97;41m" + sol_k + "\e[0m";
+    } yoksa eger (g_vi_mesaj == "" && g_vi_kip == 1) {
+        cizim = "\e[1m" + sol_k + "\e[0m";
+    }
+    cizim += upp.metin.tekrar(" ", sag_bas - uz(sol_k)) + sag;
+    dz_satir_koy(r, cizim, sag_bas + uz(sag));
+}
+
+fonk vi_ciz() -> bos {
+    vi_sinirla();
+    dz_kaydir();
+    dz_metin_ciz("~");
+    vi_alt();
+    dz_bosalt(dz_imlec_satir(), dz_imlec_sutun());
+}
+
+// Alt satırda ':' ya da '/' girdisi. Boşken geri silme ya da Esc: yok.
+fonk vi_istem(metin onek) -> metin {
+    metin s = "";
+    sayi r = g_dz_h;
+    iken (dogru) {
+        metin gorunen = dz_kirp(onek + s, g_dz_g - 1);
+        dz_satir_koy(r, gorunen, uz(gorunen));
+        dz_bosalt(r, uz(gorunen) + 1);
+        sayi c = dz_tus();
+        eger (c == 13 || c == 10) { don s; }
+        eger (c == 27 || c == 3) { don yok; }
+        eger (c == 8 || c == 127) {
+            eger (s == "") { don yok; }
+            s = kes(s, 0, uz(s) - 1);
+            devam;
+        }
+        eger (c == 21) {
+            s = "";
+            devam;
+        }
+        eger (dz_yazdirilabilir(c) || c == 9) { s += upp.metin.karakter(c); }
+    }
+    don yok;
+}
+
+// ---- kelime hareketleri ----
+
+// 0 boşluk, 1 kelime (harf, rakam, _), 2 noktalama
+fonk vi_sinif(sayi c) -> sayi {
+    eger (c == 32 || c == 9) { don 0; }
+    eger (harf_mi(c) || rakam_mi(c)) { don 1; }
+    don 2;
+}
+
+// w: sonraki kelimenin başı (satır aşar; boş satır bir kelimedir).
+fonk vi_w() -> bos {
+    metin s = g_dz[g_dz_y];
+    sayi n = uz(s);
+    sayi x = g_dz_x;
+    eger (x < n) {
+        sayi k = vi_sinif(s[x]);
+        eger (k != 0) {
+            iken (x < n && vi_sinif(s[x]) == k) { x += 1; }
+        }
+        iken (x < n && vi_sinif(s[x]) == 0) { x += 1; }
+    }
+    eger (x < n) {
+        g_dz_x = x;
+        don;
+    }
+    eger (g_dz_y + 1 >= g_dz.uzunluk()) {
+        g_dz_x = n;
+        don;
+    }
+    g_dz_y += 1;
+    g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+}
+
+// b: önceki kelimenin başı.
+fonk vi_b() -> bos {
+    sayi x = g_dz_x;
+    iken (dogru) {
+        metin s = g_dz[g_dz_y];
+        iken (x > 0 && vi_sinif(s[x - 1]) == 0) { x -= 1; }
+        eger (x > 0) {
+            sayi k = vi_sinif(s[x - 1]);
+            iken (x > 0 && vi_sinif(s[x - 1]) == k) { x -= 1; }
+            g_dz_x = x;
+            don;
+        }
+        eger (g_dz_y == 0) {
+            g_dz_x = 0;
+            don;
+        }
+        g_dz_y -= 1;
+        x = uz(g_dz[g_dz_y]);
+        eger (x == 0) {
+            g_dz_x = 0;
+            don;
+        }
+    }
+}
+
+// e: kelimenin sonu.
+fonk vi_e() -> bos {
+    sayi x = g_dz_x + 1;
+    iken (dogru) {
+        metin s = g_dz[g_dz_y];
+        sayi n = uz(s);
+        iken (x < n && vi_sinif(s[x]) == 0) { x += 1; }
+        eger (x < n) {
+            sayi k = vi_sinif(s[x]);
+            iken (x + 1 < n && vi_sinif(s[x + 1]) == k) { x += 1; }
+            g_dz_x = x;
+            don;
+        }
+        eger (g_dz_y + 1 >= g_dz.uzunluk()) { don; }
+        g_dz_y += 1;
+        x = 0;
+    }
+}
+
+// ---- kayıt ve satır işlemleri ----
+
+fonk vi_satirlari_al(sayi y, sayi adet) -> metin {
+    liste[metin] L;
+    sayi son_y = y + adet;
+    eger (son_y > g_dz.uzunluk()) { son_y = g_dz.uzunluk(); }
+    her (sayi i in y..son_y) { L.ekle(g_dz[i]); }
+    don upp.metin.birlestir(L, "\n");
+}
+
+fonk vi_satirlari_sil(sayi y, sayi adet) -> bos {
+    sayi k = 0;
+    iken (k < adet && g_dz.uzunluk() > 1 && y < g_dz.uzunluk()) {
+        g_dz.sil(y);
+        k += 1;
+    }
+    eger (k < adet && g_dz.uzunluk() == 1) { g_dz.yaz(0, ""); }
+    g_dz_y = y;
+    eger (g_dz_y >= g_dz.uzunluk()) { g_dz_y = g_dz.uzunluk() - 1; }
+    g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+    g_dz_degisti = dogru;
+}
+
+// Satırın [bas, bitis) aralığını kayda alır ve siler.
+fonk vi_aralik_sil(sayi bas, sayi bitis, mantik kaydet) -> bos {
+    metin s = g_dz[g_dz_y];
+    eger (bitis > uz(s)) { bitis = uz(s); }
+    eger (bitis <= bas) { don; }
+    eger (kaydet) {
+        g_vi_kayit = kes(s, bas, bitis - bas);
+        g_vi_kayit_satir = yanlis;
+    }
+    g_dz.yaz(g_dz_y, kes(s, 0, bas) + kes_son(s, bitis));
+    g_dz_x = bas;
+    g_dz_degisti = dogru;
+}
+
+// Bir hareketin satır içi hedefi (d/c/y için): w, e, $, 0, ^, l, h.
+// Hedef yoksa -1.
+fonk vi_hedef(sayi hareket, sayi adet) -> sayi {
+    sayi y0 = g_dz_y;
+    sayi x0 = g_dz_x;
+    sayi hedef = -1;
+    metin s = g_dz[g_dz_y];
+    eger (hareket == 'w' || hareket == 'W') {
+        her (sayi i in 0..adet) { vi_w(); }
+        eger (g_dz_y != y0) { hedef = uz(s); } yoksa { hedef = g_dz_x; }
+    } yoksa eger (hareket == 'e' || hareket == 'E') {
+        her (sayi i in 0..adet) { vi_e(); }
+        eger (g_dz_y != y0) { hedef = uz(s); } yoksa { hedef = g_dz_x + 1; }
+    } yoksa eger (hareket == '$' || hareket == TUS_SON) {
+        hedef = uz(s);
+    } yoksa eger (hareket == '0' || hareket == TUS_EV) {
+        hedef = 0;
+    } yoksa eger (hareket == '^') {
+        hedef = dz_ilk_dolu(s);
+    } yoksa eger (hareket == 'l' || hareket == ' ' || hareket == TUS_SAG) {
+        hedef = x0 + adet;
+    } yoksa eger (hareket == 'h' || hareket == TUS_SOL) {
+        hedef = x0 - adet;
+        eger (hedef < 0) { hedef = 0; }
+    }
+    g_dz_y = y0;
+    g_dz_x = x0;
+    don hedef;
+}
+
+// d/c/y + hareket. islem: 'd', 'c', 'y'. Dönüş: ekleme kipine geçilecek mi.
+fonk vi_islec(sayi islem, sayi adet) -> mantik {
+    sayi h = dz_tus();
+    // ikinci sayı: d3w
+    sayi ek = 0;
+    iken (h >= '1' && h <= '9' || (ek > 0 && h == '0')) {
+        ek = ek * 10 + h - '0';
+        h = dz_tus();
+    }
+    eger (ek > 0) { adet = adet * ek; }
+    eger (h == 27) { don yanlis; }
+    // satır kipinde: dd, cc, yy, dj, dk, dG, dgg
+    mantik satir_kip = h == islem || h == 'j' || h == 'k' || h == 'G' || h == TUS_ASAGI || h == TUS_YUKARI;
+    sayi y1 = g_dz_y;
+    sayi y2 = g_dz_y;
+    eger (h == islem) {
+        y2 = g_dz_y + adet - 1;
+    } yoksa eger (h == 'j' || h == TUS_ASAGI) {
+        y2 = g_dz_y + adet;
+    } yoksa eger (h == 'k' || h == TUS_YUKARI) {
+        y1 = g_dz_y - adet;
+    } yoksa eger (h == 'G') {
+        y2 = g_dz.uzunluk() - 1;
+    } yoksa eger (h == 'g') {
+        sayi h2 = dz_tus();
+        eger (h2 != 'g') { don yanlis; }
+        satir_kip = dogru;
+        y1 = 0;
+    }
+    eger (satir_kip) {
+        eger (y1 < 0) { y1 = 0; }
+        eger (y2 >= g_dz.uzunluk()) { y2 = g_dz.uzunluk() - 1; }
+        sayi adet_s = y2 - y1 + 1;
+        g_vi_kayit = vi_satirlari_al(y1, adet_s);
+        g_vi_kayit_satir = dogru;
+        eger (islem == 'y') {
+            g_dz_y = y1;
+            eger (adet_s > 2) { vi_mesaj("{adet_s} satır kopyalandı"); }
+            don yanlis;
+        }
+        dz_anlik();
+        eger (islem == 'c') {
+            // cc: satırların yerine boş bir satır
+            vi_satirlari_sil(y1, adet_s - 1);
+            g_dz.yaz(g_dz_y, "");
+            g_dz_x = 0;
+            g_dz_degisti = dogru;
+            don dogru;
+        }
+        vi_satirlari_sil(y1, adet_s);
+        eger (adet_s > 2) { vi_mesaj("{adet_s} daha az satır"); }
+        don yanlis;
+    }
+    // cw, vim'de ce gibi davranır (sondaki boşluğu silmez)
+    eger (islem == 'c' && (h == 'w' || h == 'W')) {
+        metin s0 = g_dz[g_dz_y];
+        eger (g_dz_x < uz(s0) && vi_sinif(s0[g_dz_x]) != 0) { h = 'e'; }
+    }
+    sayi hedef = vi_hedef(h, adet);
+    eger (hedef < 0) { don yanlis; }
+    sayi bas = g_dz_x;
+    sayi bitis = hedef;
+    eger (hedef < bas) {
+        bas = hedef;
+        bitis = g_dz_x;
+    }
+    metin s = g_dz[g_dz_y];
+    eger (bitis > uz(s)) { bitis = uz(s); }
+    eger (islem == 'y') {
+        g_vi_kayit = kes(s, bas, bitis - bas);
+        g_vi_kayit_satir = yanlis;
+        g_dz_x = bas;
+        don yanlis;
+    }
+    dz_anlik();
+    vi_aralik_sil(bas, bitis, dogru);
+    don islem == 'c';
+}
+
+fonk vi_yapistir(mantik once, sayi adet) -> bos {
+    eger (g_vi_kayit == "" && !g_vi_kayit_satir) { don; }
+    dz_anlik();
+    eger (g_vi_kayit_satir) {
+        liste[metin] L = upp.metin.bol(g_vi_kayit, "\n");
+        sayi y = g_dz_y;
+        eger (!once) { y += 1; }
+        sayi k = 0;
+        her (sayi t in 0..adet) {
+            her (oto s in L) {
+                dz_araya(y + k, s);
+                k += 1;
+            }
+        }
+        g_dz_y = y;
+        g_dz_x = dz_ilk_dolu(g_dz[y]);
+    } yoksa {
+        metin m = upp.metin.tekrar(g_vi_kayit, adet);
+        eger (!once && uz(g_dz[g_dz_y]) > 0) { g_dz_x += 1; }
+        dz_metin_ekle(m);
+        g_dz_x -= 1;
+        eger (g_dz_x < 0) { g_dz_x = 0; }
+    }
+    g_dz_degisti = dogru;
+}
+
+fonk vi_ara(mantik ileri) -> bos {
+    eger (g_vi_aranan == "") {
+        vi_hata("E35: Önceki düzenli ifade yok");
+        don;
+    }
+    sayi r = dz_ara(g_vi_aranan, ileri);
+    eger (r == 0) {
+        vi_hata("E486: Dizgi bulunamadı: " + g_vi_aranan);
+    } yoksa eger (r == 2) {
+        eger (ileri) { vi_hata("arama SONA ulaştı, BAŞTAN sürüyor"); } yoksa { vi_hata("arama BAŞA ulaştı, SONDAN sürüyor"); }
+    } yoksa {
+        eger (ileri) { vi_mesaj("/" + g_vi_aranan); } yoksa { vi_mesaj("?" + g_vi_aranan); }
+    }
+}
+
+fonk vi_dosya_bilgi() -> metin {
+    metin ad = g_dz_yol;
+    eger (ad == "") { don "[Adsız]"; }
+    eger (g_dz_yeni) { don "\"" + ad + "\" [Yeni]"; }
+    metin m = dz_icerik();
+    sayi n = dz_satir_sayisi();
+    don "\"" + ad + "\" {n}S, {bayt_say(m)}B";
+}
+
+// :s/eski/yeni/[g] — düz metin (düzenli ifade yok); kaç değişiklik yapıldı.
+fonk vi_degistir(sayi y, metin eski, metin yeni, mantik hepsi) -> sayi {
+    metin s = g_dz[y];
+    eger (upp.metin.bul(s, eski) < 0) { don 0; }
+    eger (hepsi) {
+        sayi n = 0;
+        metin kalan = s;
+        iken (upp.metin.bul(kalan, eski) >= 0) {
+            n += 1;
+            kalan = kes_son(kalan, upp.metin.bul(kalan, eski) + uz(eski));
+        }
+        g_dz.yaz(y, upp.metin.degistir(s, eski, yeni));
+        don n;
+    }
+    sayi k = upp.metin.bul(s, eski);
+    g_dz.yaz(y, kes(s, 0, k) + yeni + kes_son(s, k + uz(eski)));
+    don 1;
+}
+
+fonk vi_yaz(metin yol) -> mantik {
+    eger (yol == "") { yol = g_dz_yol; }
+    eger (yol == "") {
+        vi_hata("E32: Dosya adı yok");
+        don yanlis;
+    }
+    mantik yeni_mi = fs_coz(yol) < 0;
+    sayi b = dz_kaydet(yol);
+    eger (b < 0) {
+        vi_hata("E212: Dosya yazmak için açılamıyor: " + g_dz_hata);
+        don yanlis;
+    }
+    eger (g_dz_yol == "") { g_dz_yol = yol; }
+    sayi n = dz_satir_sayisi();
+    metin ek = "";
+    eger (yeni_mi) { ek = " [Yeni]"; }
+    vi_mesaj("\"" + yol + "\"" + ek + " {n}S, {b}B yazıldı");
+    don dogru;
+}
+
+// ':' komutları
+fonk vi_ex(metin komut) -> bos {
+    metin k = upp.metin.kirp(komut);
+    eger (k == "") { don; }
+    eger (sayi_mi(k)) {
+        g_dz_y = sayiya(k) - 1;
+        dz_sinirla();
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+        don;
+    }
+    eger (k == "$") {
+        g_dz_y = g_dz.uzunluk() - 1;
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+        don;
+    }
+    // :s ve :%s
+    mantik tum = upp.metin.baslar(k, "%s/");
+    eger (upp.metin.baslar(k, "s/") || tum) {
+        metin govde = kes_son(k, 2);
+        eger (tum) { govde = kes_son(k, 3); }
+        liste[metin] P = upp.metin.bol(govde, "/");
+        eger (P.uzunluk() < 2 || P[0] == "") {
+            vi_hata("E486: Dizgi bulunamadı");
+            don;
+        }
+        mantik hepsi = P.uzunluk() > 2 && upp.metin.bul(P[2], "g") >= 0;
+        dz_anlik();
+        sayi toplam = 0;
+        sayi satir_n = 0;
+        sayi bas = g_dz_y;
+        sayi bitis = g_dz_y + 1;
+        eger (tum) {
+            bas = 0;
+            bitis = g_dz.uzunluk();
+        }
+        her (sayi y in bas..bitis) {
+            sayi d = vi_degistir(y, P[0], P[1], hepsi);
+            eger (d > 0) {
+                toplam += d;
+                satir_n += 1;
+                g_dz_y = y;
+            }
+        }
+        eger (toplam == 0) {
+            dz_anlik_iptal();
+            vi_hata("E486: Dizgi bulunamadı: " + P[0]);
+            don;
+        }
+        g_dz_degisti = dogru;
+        g_dz_x = 0;
+        eger (toplam > 2) { vi_mesaj("{satir_n} satırda {toplam} değişiklik"); }
+        don;
+    }
+    // :w :q :wq :x ve ! biçimleri; :w dosya
+    metin ad = k;
+    metin arg = "";
+    sayi bosluk_k = upp.metin.bul(k, " ");
+    eger (bosluk_k > 0) {
+        ad = kes(k, 0, bosluk_k);
+        arg = upp.metin.kirp(kes_son(k, bosluk_k + 1));
+    }
+    mantik zorla = upp.metin.biter(ad, "!");
+    eger (zorla) { ad = kes(ad, 0, uz(ad) - 1); }
+    eger (ad == "w" || ad == "write") {
+        vi_yaz(arg);
+        don;
+    }
+    eger (ad == "wq" || ad == "x" || ad == "xit" || ad == "exit") {
+        eger (ad != "wq" && !g_dz_degisti && arg == "") {
+            g_vi_cik = dogru;
+            don;
+        }
+        eger (vi_yaz(arg)) { g_vi_cik = dogru; }
+        don;
+    }
+    eger (ad == "q" || ad == "quit") {
+        eger (g_dz_degisti && !zorla) {
+            vi_hata("E37: Son değişiklikten sonra yazılmadı (geçersiz kılmak için ! ekleyin)");
+            don;
+        }
+        g_vi_cik = dogru;
+        don;
+    }
+    eger (ad == "e" || ad == "edit") {
+        eger (arg != "" && arg != g_dz_yol) {
+            eger (g_dz_degisti && !zorla) {
+                vi_hata("E37: Son değişiklikten sonra yazılmadı (geçersiz kılmak için ! ekleyin)");
+                don;
+            }
+        } yoksa {
+            eger (g_dz_degisti && !zorla) {
+                vi_hata("E37: Son değişiklikten sonra yazılmadı (geçersiz kılmak için ! ekleyin)");
+                don;
+            }
+            arg = g_dz_yol;
+        }
+        eger (!dz_yukle(arg)) {
+            vi_hata(g_dz_hata);
+            don;
+        }
+        vi_mesaj(vi_dosya_bilgi());
+        don;
+    }
+    vi_hata("E492: Bir düzenleyici komutu değil: " + k);
+}
+
+// Ekleme kipinde bir tuş. Esc: komut kipine dönüş.
+fonk vi_ekle_tus(sayi c) -> bos {
+    eger (c == 27 || c == 3) {
+        g_vi_kip = 0;
+        eger (g_dz_x > 0) { g_dz_x -= 1; }
+        g_dz_istenen = -1;
+        don;
+    }
+    eger (c == 13 || c == 10) {
+        dz_satir_bol();
+    } yoksa eger (c == 8 || c == 127) {
+        dz_geri_sil();
+    } yoksa eger (c == TUS_SIL) {
+        dz_sil();
+    } yoksa eger (c == TUS_SOL) {
+        eger (g_dz_x > 0) { g_dz_x -= 1; }
+        dz_yatay_sifirla();
+    } yoksa eger (c == TUS_SAG) {
+        eger (g_dz_x < uz(g_dz[g_dz_y])) { g_dz_x += 1; }
+        dz_yatay_sifirla();
+    } yoksa eger (c == TUS_YUKARI) {
+        dz_dikey(-1);
+    } yoksa eger (c == TUS_ASAGI) {
+        dz_dikey(1);
+    } yoksa eger (c == TUS_EV) {
+        g_dz_x = 0;
+    } yoksa eger (c == TUS_SON) {
+        g_dz_x = uz(g_dz[g_dz_y]);
+    } yoksa eger (c == 9 || dz_yazdirilabilir(c)) {
+        dz_metin_ekle(upp.metin.karakter(c));
+    }
+}
+
+// Ekleme kipine geçiş (değişikliğin tamamı tek geri alma adımıdır).
+fonk vi_ekle_bas() -> bos {
+    g_vi_kip = 1;
+    vi_mesaj("");
+}
+
+// Komut kipinde bir komut; adet sayı önekidir (yoksa 0).
+fonk vi_komut(sayi c, sayi sayac) -> bos {
+    sayi adet = sayac;
+    eger (adet < 1) { adet = 1; }
+    sayi yarim = g_dz_metin_h / 2;
+    metin s = g_dz[g_dz_y];
+    eger (c == 'h' || c == TUS_SOL || c == 8 || c == 127) {
+        g_dz_x -= adet;
+        eger (g_dz_x < 0) { g_dz_x = 0; }
+        dz_yatay_sifirla();
+    } yoksa eger (c == 'l' || c == ' ' || c == TUS_SAG) {
+        g_dz_x += adet;
+        sayi n = uz(s);
+        eger (g_dz_x >= n) { g_dz_x = n - 1; }
+        eger (g_dz_x < 0) { g_dz_x = 0; }
+        dz_yatay_sifirla();
+    } yoksa eger (c == 'j' || c == TUS_ASAGI || c == 14) {
+        dz_dikey(adet);
+    } yoksa eger (c == 'k' || c == TUS_YUKARI || c == 16) {
+        dz_dikey(-adet);
+    } yoksa eger (c == 13 || c == 10 || c == '+') {
+        dz_dikey(adet);
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+        dz_yatay_sifirla();
+    } yoksa eger (c == '-') {
+        dz_dikey(-adet);
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+        dz_yatay_sifirla();
+    } yoksa eger (c == '0' || c == TUS_EV) {
+        g_dz_x = 0;
+        dz_yatay_sifirla();
+    } yoksa eger (c == '^') {
+        g_dz_x = dz_ilk_dolu(s);
+        dz_yatay_sifirla();
+    } yoksa eger (c == '$' || c == TUS_SON) {
+        eger (adet > 1) { dz_dikey(adet - 1); }
+        g_dz_x = uz(g_dz[g_dz_y]);
+        g_dz_istenen = 1000000;
+    } yoksa eger (c == 'w' || c == 'W') {
+        her (sayi i in 0..adet) { vi_w(); }
+        dz_yatay_sifirla();
+    } yoksa eger (c == 'b' || c == 'B') {
+        her (sayi i in 0..adet) { vi_b(); }
+        dz_yatay_sifirla();
+    } yoksa eger (c == 'e' || c == 'E') {
+        her (sayi i in 0..adet) { vi_e(); }
+        dz_yatay_sifirla();
+    } yoksa eger (c == 'G') {
+        eger (sayac > 0) { g_dz_y = sayac - 1; } yoksa { g_dz_y = g_dz.uzunluk() - 1; }
+        dz_sinirla();
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+        dz_yatay_sifirla();
+    } yoksa eger (c == 'g') {
+        sayi c2 = dz_tus();
+        eger (c2 == 'g') {
+            g_dz_y = adet - 1;
+            dz_sinirla();
+            g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+            dz_yatay_sifirla();
+        }
+    } yoksa eger (c == 6 || c == TUS_SAYFA_ASAGI) {
+        g_dz_ust += g_dz_metin_h - 2;
+        eger (g_dz_ust > g_dz.uzunluk() - 1) { g_dz_ust = g_dz.uzunluk() - 1; }
+        g_dz_y = g_dz_ust;
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+    } yoksa eger (c == 2 || c == TUS_SAYFA_YUKARI) {
+        g_dz_ust -= g_dz_metin_h - 2;
+        eger (g_dz_ust < 0) { g_dz_ust = 0; }
+        g_dz_y = g_dz_ust + g_dz_metin_h - 1;
+        dz_sinirla();
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+    } yoksa eger (c == 4) {
+        g_dz_ust += yarim;
+        eger (g_dz_ust > g_dz.uzunluk() - 1) { g_dz_ust = g_dz.uzunluk() - 1; }
+        dz_dikey(yarim);
+    } yoksa eger (c == 21) {
+        g_dz_ust -= yarim;
+        eger (g_dz_ust < 0) { g_dz_ust = 0; }
+        dz_dikey(-yarim);
+    } yoksa eger (c == 'x' || c == TUS_SIL) {
+        eger (uz(s) > 0) {
+            dz_anlik();
+            vi_aralik_sil(g_dz_x, g_dz_x + adet, dogru);
+        }
+    } yoksa eger (c == 'X') {
+        eger (g_dz_x > 0) {
+            dz_anlik();
+            sayi bas = g_dz_x - adet;
+            eger (bas < 0) { bas = 0; }
+            vi_aralik_sil(bas, g_dz_x, dogru);
+        }
+    } yoksa eger (c == 'D') {
+        dz_anlik();
+        vi_aralik_sil(g_dz_x, uz(s), dogru);
+    } yoksa eger (c == 'C') {
+        dz_anlik();
+        vi_aralik_sil(g_dz_x, uz(s), dogru);
+        vi_ekle_bas();
+    } yoksa eger (c == 's') {
+        dz_anlik();
+        vi_aralik_sil(g_dz_x, g_dz_x + adet, dogru);
+        vi_ekle_bas();
+    } yoksa eger (c == 'S') {
+        dz_anlik();
+        g_vi_kayit = s;
+        g_vi_kayit_satir = dogru;
+        g_dz.yaz(g_dz_y, "");
+        g_dz_x = 0;
+        g_dz_degisti = dogru;
+        vi_ekle_bas();
+    } yoksa eger (c == 'd' || c == 'c' || c == 'y') {
+        eger (vi_islec(c, adet)) { vi_ekle_bas(); }
+    } yoksa eger (c == 'Y') {
+        g_vi_kayit = vi_satirlari_al(g_dz_y, adet);
+        g_vi_kayit_satir = dogru;
+    } yoksa eger (c == 'p') {
+        vi_yapistir(yanlis, adet);
+    } yoksa eger (c == 'P') {
+        vi_yapistir(dogru, adet);
+    } yoksa eger (c == 'J') {
+        eger (g_dz_y + 1 < g_dz.uzunluk()) {
+            dz_anlik();
+            sayi kez = adet;
+            eger (kez > 1) { kez -= 1; }
+            her (sayi i in 0..kez) {
+                eger (g_dz_y + 1 >= g_dz.uzunluk()) { dur; }
+                metin a = g_dz[g_dz_y];
+                metin b = g_dz[g_dz_y + 1];
+                b = kes_son(b, dz_ilk_dolu(b));
+                metin ara = " ";
+                eger (a == "" || b == "" || upp.metin.biter(a, " ")) { ara = ""; }
+                g_dz_x = uz(a);
+                g_dz.yaz(g_dz_y, a + ara + b);
+                g_dz.sil(g_dz_y + 1);
+            }
+            g_dz_degisti = dogru;
+        }
+    } yoksa eger (c == 'r') {
+        sayi c2 = dz_tus();
+        eger (dz_yazdirilabilir(c2) && g_dz_x + adet <= uz(s)) {
+            dz_anlik();
+            g_dz.yaz(g_dz_y, kes(s, 0, g_dz_x) + upp.metin.tekrar(upp.metin.karakter(c2), adet) + kes_son(s, g_dz_x + adet));
+            g_dz_x += adet - 1;
+            g_dz_degisti = dogru;
+        }
+    } yoksa eger (c == '~') {
+        eger (uz(s) > 0) {
+            dz_anlik();
+            sayi bitis = g_dz_x + adet;
+            eger (bitis > uz(s)) { bitis = uz(s); }
+            metin yeni = "";
+            her (sayi i in g_dz_x..bitis) {
+                metin k = upp.metin.karakter(s[i]);
+                metin buyuk = upp.metin.buyuk(k);
+                eger (buyuk == k) { yeni += upp.metin.kucuk(k); } yoksa { yeni += buyuk; }
+            }
+            g_dz.yaz(g_dz_y, kes(s, 0, g_dz_x) + yeni + kes_son(s, bitis));
+            g_dz_x = bitis;
+            g_dz_degisti = dogru;
+        }
+    } yoksa eger (c == 'u') {
+        eger (!dz_gecmis_al(dogru)) { vi_mesaj("Zaten en eski değişiklikte"); }
+    } yoksa eger (c == 18) {
+        eger (!dz_gecmis_al(yanlis)) { vi_mesaj("Zaten en yeni değişiklikte"); }
+    } yoksa eger (c == 'i' || c == TUS_EKLE) {
+        dz_anlik();
+        vi_ekle_bas();
+    } yoksa eger (c == 'a') {
+        dz_anlik();
+        eger (uz(s) > 0) { g_dz_x += 1; }
+        vi_ekle_bas();
+    } yoksa eger (c == 'I') {
+        dz_anlik();
+        g_dz_x = dz_ilk_dolu(s);
+        vi_ekle_bas();
+    } yoksa eger (c == 'A') {
+        dz_anlik();
+        g_dz_x = uz(s);
+        vi_ekle_bas();
+    } yoksa eger (c == 'o') {
+        dz_anlik();
+        dz_araya(g_dz_y + 1, "");
+        g_dz_y += 1;
+        g_dz_x = 0;
+        g_dz_degisti = dogru;
+        vi_ekle_bas();
+    } yoksa eger (c == 'O') {
+        dz_anlik();
+        dz_araya(g_dz_y, "");
+        g_dz_x = 0;
+        g_dz_degisti = dogru;
+        vi_ekle_bas();
+    } yoksa eger (c == '/' || c == '?') {
+        metin onek = "/";
+        eger (c == '?') { onek = "?"; }
+        metin a = vi_istem(onek);
+        eger (a == yok) {
+            vi_mesaj("");
+            don;
+        }
+        eger (a != "") { g_vi_aranan = a; }
+        g_vi_ara_ileri = c == '/';
+        vi_ara(g_vi_ara_ileri);
+    } yoksa eger (c == 'n') {
+        vi_ara(g_vi_ara_ileri);
+    } yoksa eger (c == 'N') {
+        vi_ara(!g_vi_ara_ileri);
+    } yoksa eger (c == ':') {
+        metin k = vi_istem(":");
+        vi_mesaj("");
+        eger (k != yok) { vi_ex(k); }
+    } yoksa eger (c == 'Z') {
+        sayi c2 = dz_tus();
+        eger (c2 == 'Z') { vi_ex("x"); }
+        eger (c2 == 'Q') { vi_ex("q!"); }
+    } yoksa eger (c == 7) {
+        vi_mesaj(vi_dosya_bilgi() + " --%{(g_dz_y + 1) * 100 / g_dz.uzunluk()}--");
+    } yoksa eger (c == 12) {
+        dz_ekran_sifirla();
+    }
+}
+
+fonk k_vi(liste[metin] a, metin girdi) -> sayi {
+    metin yol = "";
+    sayi bas_satir = 0;
+    her (sayi i in 1..a.uzunluk()) {
+        metin x = a[i];
+        eger (x == "+") {
+            bas_satir = -1;
+        } yoksa eger (upp.metin.baslar(x, "+") && sayi_mi(kes_son(x, 1))) {
+            bas_satir = sayiya(kes_son(x, 1));
+        } yoksa eger (x == "-h" || x == "--help") {
+            satir("kullanım: vi [+SATIR] [dosya]");
+            don 0;
+        } yoksa eger (upp.metin.baslar(x, "-")) {
+            // vim seçenekleri yok sayılır
+        } yoksa eger (yol == "") {
+            yol = x;
+        }
+    }
+    eger (!terminal_mi()) {
+        hata_bildir("vi: terminal gerekir (boru ya da yönlendirme ile çalışmaz)");
+        don 1;
+    }
+    eger (!dz_yukle(yol)) {
+        hata_bildir("vi: " + g_dz_hata);
+        don 1;
+    }
+    dz_boyut();
+    g_dz_metin_ust = 1;
+    g_dz_metin_h = g_dz_h - 1;
+    g_vi_kip = 0;
+    g_vi_cik = yanlis;
+    vi_mesaj("");
+    eger (yol != "") { vi_mesaj(vi_dosya_bilgi()); }
+    eger (bas_satir != 0) {
+        g_dz_y = bas_satir - 1;
+        eger (bas_satir < 0) { g_dz_y = g_dz.uzunluk() - 1; }
+        dz_sinirla();
+        g_dz_x = dz_ilk_dolu(g_dz[g_dz_y]);
+    }
+    dz_ekran_sifirla();
+    sayi sayac = 0;
+    iken (!g_vi_cik) {
+        vi_ciz();
+        sayi c = dz_tus();
+        // bilinmeyen ESC x dizisi (hızlı yazım, yapıştırma): Esc, ardından x
+        eger (c >= TUS_ALT) {
+            g_bekleyen.ekle(c - TUS_ALT);
+            c = 27;
+        }
+        eger (g_vi_kip == 1) {
+            vi_ekle_tus(c);
+            devam;
+        }
+        eger ((c >= '1' && c <= '9') || (c == '0' && sayac > 0)) {
+            sayac = sayac * 10 + c - '0';
+            devam;
+        }
+        eger (c != 7) { vi_mesaj(""); }
+        vi_komut(c, sayac);
+        sayac = 0;
+    }
+    upp.yaz("\e[0m\e[H\e[2J");
+    don 0;
+}

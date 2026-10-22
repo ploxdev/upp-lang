@@ -2411,6 +2411,11 @@ fonk uret_cumle(sayi stmt) -> bos {
             }
             emit_don_temizlik();
             emit(kat3("return ", rvt, ";"));
+        } yoksa eger (tip_void_mi(rt)) {
+            // bos fonksiyonda "don f()" / "=> f()": çağrı yapılır, değer yoktur
+            emit(kat(uret_ifade(dugum_a(stmt)), ";"));
+            emit_don_temizlik();
+            emit("return;");
         } yoksa {
             oto rv = uret_ifade(dugum_a(stmt));
             oto rvt = kat("_rv", sayi_metin(tmp_yeni()));

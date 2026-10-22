@@ -1,0 +1,551 @@
+// Uppix — metin düzenleyici çekirdeği (nano ve vi ortak).
+// Tampon satır listesidir; imleç (satır, karakter) olarak tutulur, sekmeler 8
+// sütuna, denetim karakterleri ^X biçimine genişler. Ekran ANSI dizileriyle
+// çizilir ve her karede yalnızca değişen satırlar yazılır (seri terminalde de
+// hızlıdır). Boyut TIOCGWINSZ ile aynı kaynaktan (çekirdek konsolu) gelir;
+// LINES ve COLUMNS ortam değişkenleri onu ezer.
+
+sabit sayi TUS_YUKARI = 1000;
+sabit sayi TUS_ASAGI = 1001;
+sabit sayi TUS_SAG = 1002;
+sabit sayi TUS_SOL = 1003;
+sabit sayi TUS_EV = 1004;
+sabit sayi TUS_SON = 1005;
+sabit sayi TUS_SIL = 1006;
+sabit sayi TUS_SAYFA_YUKARI = 1007;
+sabit sayi TUS_SAYFA_ASAGI = 1008;
+sabit sayi TUS_EKLE = 1009;
+sabit sayi TUS_ALT = 2000;     // Alt-x / ESC x: TUS_ALT + x
+
+liste[metin] g_dz;             // satırlar
+sayi g_dz_y = 0;               // imleç satırı
+sayi g_dz_x = 0;               // imleç karakteri
+sayi g_dz_istenen = -1;        // dikey harekette korunan görüntü sütunu (-1: yok)
+sayi g_dz_ust = 0;             // görünen ilk satır
+sayi g_dz_sol = 0;             // yatay kaydırma (sütun)
+sayi g_dz_g = 80;              // ekran genişliği
+sayi g_dz_h = 24;              // ekran yüksekliği
+sayi g_dz_metin_ust = 1;       // metin alanının ilk ekran satırı (1 tabanlı)
+sayi g_dz_metin_h = 23;        // metin alanının yüksekliği
+metin g_dz_yol = "";
+mantik g_dz_degisti = yanlis;
+mantik g_dz_yeni = yanlis;     // dosya diskte yok
+metin g_dz_hata = "";
+liste[metin] g_dz_ekran;       // ekran satırlarının son çizilen hali
+metin g_dz_cikti = "";         // kare boyunca biriken çıktı
+liste[metin] g_dz_geri;        // geri alma: tampon görüntüleri
+liste[sayi] g_dz_geri_konum;   // her görüntü için imleç (satır, karakter)
+liste[metin] g_dz_ileri;       // yineleme (geri almanın tersi)
+liste[sayi] g_dz_ileri_konum;
+
+// ---- tampon ve dosya ----
+
+fonk dz_sifirla() -> bos {
+    g_dz.temizle();
+    g_dz_y = 0;
+    g_dz_x = 0;
+    g_dz_ust = 0;
+    g_dz_sol = 0;
+    g_dz_istenen = -1;
+    g_dz_degisti = yanlis;
+    g_dz_yeni = yanlis;
+    g_dz_hata = "";
+    g_dz_geri.temizle();
+    g_dz_geri_konum.temizle();
+    g_dz_ileri.temizle();
+    g_dz_ileri_konum.temizle();
+}
+
+fonk dz_metinden(metin m) -> bos {
+    g_dz.temizle();
+    liste[metin] L = upp.metin.bol(m, "\n");
+    eger (L.uzunluk() > 1 && L[L.uzunluk() - 1] == "") { L.sil(L.uzunluk() - 1); }
+    her (oto s in L) { g_dz.ekle(s); }
+    eger (g_dz.uzunluk() == 0) { g_dz.ekle(""); }
+}
+
+// Dosyayı tampona okur; yoksa boş yeni tampon. Dizinse yanlis (g_dz_hata).
+fonk dz_yukle(metin yol) -> mantik {
+    dz_sifirla();
+    g_dz_yol = yol;
+    eger (yol == "") {
+        g_dz.ekle("");
+        don dogru;
+    }
+    sayi no = fs_coz(yol);
+    eger (no < 0) {
+        g_dz_yeni = dogru;
+        g_dz.ekle("");
+        don dogru;
+    }
+    eger (g_fs[no].tur == D_DIZIN) {
+        g_dz_hata = "'{yol}' bir dizin";
+        don yanlis;
+    }
+    dz_metinden(fs_oku(no));
+    don dogru;
+}
+
+// Tamponun dosya içeriği: her satır \n ile biter (boş tampon boş dosyadır).
+fonk dz_icerik() -> metin {
+    eger (g_dz.uzunluk() == 1 && g_dz[0] == "") { don ""; }
+    don upp.metin.birlestir(g_dz, "\n") + "\n";
+}
+
+fonk dz_satir_sayisi() -> sayi {
+    eger (g_dz.uzunluk() == 1 && g_dz[0] == "") { don 0; }
+    don g_dz.uzunluk();
+}
+
+// Yazılan bayt sayısı; hata olursa -1 (g_dz_hata).
+fonk dz_kaydet(metin yol) -> sayi {
+    sayi no = fs_coz(yol);
+    eger (no >= 0 && g_fs[no].tur == D_DIZIN) {
+        g_dz_hata = "'{yol}' bir dizin";
+        don -1;
+    }
+    eger (no < 0) { no = fs_dosya_ac(yol); }
+    eger (no < 0) {
+        g_dz_hata = "'{yol}' oluşturulamıyor: böyle bir dizin yok";
+        don -1;
+    }
+    metin m = dz_icerik();
+    eger (!fs_yaz(no, m, yanlis)) {
+        g_dz_hata = "'{yol}' yazılamıyor: {g_fs_hata}";
+        don -1;
+    }
+    g_dz_degisti = yanlis;
+    g_dz_yeni = yanlis;
+    don bayt_say(m);
+}
+
+// ---- geri alma / yineleme ----
+
+// Her değişiklikten önce çağrılır.
+fonk dz_anlik() -> bos {
+    g_dz_geri.ekle(upp.metin.birlestir(g_dz, "\n"));
+    g_dz_geri_konum.ekle(g_dz_y);
+    g_dz_geri_konum.ekle(g_dz_x);
+    eger (g_dz_geri.uzunluk() > 200) {
+        g_dz_geri.sil(0);
+        g_dz_geri_konum.sil(0);
+        g_dz_geri_konum.sil(0);
+    }
+    g_dz_ileri.temizle();
+    g_dz_ileri_konum.temizle();
+}
+
+// Art arda aynı türden değişiklikler (ör. yazma) tek geri alma adımıdır:
+// görüntü yalnızca tür değişince alınır. Döngü her tuşta g_dz_tur_simdi'yi
+// sıfırlar, sonunda g_dz_son_tur'a aktarır.
+sayi g_dz_son_tur = 0;
+sayi g_dz_tur_simdi = 0;
+
+// Görüntü alındıysa dogru.
+fonk dz_anlik_tur(sayi tur) -> mantik {
+    g_dz_tur_simdi = tur;
+    eger (tur != 0 && tur == g_dz_son_tur) { don yanlis; }
+    dz_anlik();
+    don dogru;
+}
+
+// Değişiklik olmadıysa son görüntüyü bırakır.
+fonk dz_anlik_iptal() -> bos {
+    sayi n = g_dz_geri.uzunluk();
+    eger (n == 0) { don; }
+    g_dz_geri.sil(n - 1);
+    g_dz_geri_konum.sil(2 * n - 1);
+    g_dz_geri_konum.sil(2 * n - 2);
+}
+
+fonk dz_gecmis_al(mantik geri) -> mantik {
+    sayi n = g_dz_geri.uzunluk();
+    eger (!geri) { n = g_dz_ileri.uzunluk(); }
+    eger (n == 0) { don yanlis; }
+    metin m = "";
+    sayi y = 0;
+    sayi x = 0;
+    metin simdi_m = upp.metin.birlestir(g_dz, "\n");
+    eger (geri) {
+        m = g_dz_geri[n - 1];
+        y = g_dz_geri_konum[2 * n - 2];
+        x = g_dz_geri_konum[2 * n - 1];
+        g_dz_geri.sil(n - 1);
+        g_dz_geri_konum.sil(2 * n - 1);
+        g_dz_geri_konum.sil(2 * n - 2);
+        g_dz_ileri.ekle(simdi_m);
+        g_dz_ileri_konum.ekle(g_dz_y);
+        g_dz_ileri_konum.ekle(g_dz_x);
+    } yoksa {
+        m = g_dz_ileri[n - 1];
+        y = g_dz_ileri_konum[2 * n - 2];
+        x = g_dz_ileri_konum[2 * n - 1];
+        g_dz_ileri.sil(n - 1);
+        g_dz_ileri_konum.sil(2 * n - 1);
+        g_dz_ileri_konum.sil(2 * n - 2);
+        g_dz_geri.ekle(simdi_m);
+        g_dz_geri_konum.ekle(g_dz_y);
+        g_dz_geri_konum.ekle(g_dz_x);
+    }
+    g_dz.temizle();
+    her (oto s in upp.metin.bol(m, "\n")) { g_dz.ekle(s); }
+    eger (g_dz.uzunluk() == 0) { g_dz.ekle(""); }
+    g_dz_y = y;
+    g_dz_x = x;
+    dz_sinirla();
+    g_dz_degisti = dogru;
+    g_dz_istenen = -1;
+    don dogru;
+}
+
+// ---- düzenleme ----
+
+fonk dz_sinirla() -> bos {
+    eger (g_dz_y >= g_dz.uzunluk()) { g_dz_y = g_dz.uzunluk() - 1; }
+    eger (g_dz_y < 0) { g_dz_y = 0; }
+    sayi n = uz(g_dz[g_dz_y]);
+    eger (g_dz_x > n) { g_dz_x = n; }
+    eger (g_dz_x < 0) { g_dz_x = 0; }
+}
+
+// i. konuma satır ekler.
+fonk dz_araya(sayi i, metin s) -> bos {
+    g_dz.ekle("");
+    sayi k = g_dz.uzunluk() - 1;
+    iken (k > i) {
+        g_dz.yaz(k, g_dz[k - 1]);
+        k -= 1;
+    }
+    g_dz.yaz(i, s);
+}
+
+// İmlece metin ekler; metin \n içerebilir (satırlar bölünür). İmleç sonuna gider.
+fonk dz_metin_ekle(metin m) -> bos {
+    liste[metin] P = upp.metin.bol(m, "\n");
+    metin s = g_dz[g_dz_y];
+    metin sol = kes(s, 0, g_dz_x);
+    metin sag = kes_son(s, g_dz_x);
+    sayi n = P.uzunluk();
+    eger (n <= 1) {
+        metin p = "";
+        eger (n == 1) { p = P[0]; }
+        g_dz.yaz(g_dz_y, sol + p + sag);
+        g_dz_x += uz(p);
+    } yoksa {
+        g_dz.yaz(g_dz_y, sol + P[0]);
+        sayi orta = n - 1;
+        her (sayi i in 1..orta) { dz_araya(g_dz_y + i, P[i]); }
+        dz_araya(g_dz_y + n - 1, P[n - 1] + sag);
+        g_dz_y += n - 1;
+        g_dz_x = uz(P[n - 1]);
+    }
+    g_dz_degisti = dogru;
+    g_dz_istenen = -1;
+}
+
+fonk dz_satir_bol() -> bos => dz_metin_ekle("\n");
+
+// Backspace: imleçten önceki karakteri siler; satır başında üst satırla birleştirir.
+fonk dz_geri_sil() -> mantik {
+    metin s = g_dz[g_dz_y];
+    eger (g_dz_x > 0) {
+        g_dz.yaz(g_dz_y, kes(s, 0, g_dz_x - 1) + kes_son(s, g_dz_x));
+        g_dz_x -= 1;
+    } yoksa eger (g_dz_y > 0) {
+        metin onceki = g_dz[g_dz_y - 1];
+        g_dz.yaz(g_dz_y - 1, onceki + s);
+        g_dz.sil(g_dz_y);
+        g_dz_y -= 1;
+        g_dz_x = uz(onceki);
+    } yoksa {
+        don yanlis;
+    }
+    g_dz_degisti = dogru;
+    g_dz_istenen = -1;
+    don dogru;
+}
+
+// Delete: imleçteki karakteri siler; satır sonunda alt satırı birleştirir.
+fonk dz_sil() -> mantik {
+    metin s = g_dz[g_dz_y];
+    eger (g_dz_x < uz(s)) {
+        g_dz.yaz(g_dz_y, kes(s, 0, g_dz_x) + kes_son(s, g_dz_x + 1));
+    } yoksa eger (g_dz_y + 1 < g_dz.uzunluk()) {
+        g_dz.yaz(g_dz_y, s + g_dz[g_dz_y + 1]);
+        g_dz.sil(g_dz_y + 1);
+    } yoksa {
+        don yanlis;
+    }
+    g_dz_degisti = dogru;
+    g_dz_istenen = -1;
+    don dogru;
+}
+
+// ---- görüntü sütunları ----
+
+// c karakterinin sutun konumundaki genişliği.
+fonk dz_kgen(sayi c, sayi sutun) -> sayi {
+    eger (c == 9) { don 8 - sutun % 8; }
+    eger (c < 32 || c == 127) { don 2; }
+    don 1;
+}
+
+// s'nin ilk x karakterinin görüntü genişliği.
+fonk dz_sutun(metin s, sayi x) -> sayi {
+    sayi n = uz(s);
+    eger (x > n) { x = n; }
+    sayi col = 0;
+    her (sayi i in 0..x) { col += dz_kgen(s[i], col); }
+    don col;
+}
+
+// hedef sütuna düşen karakter.
+fonk dz_x_sutundan(metin s, sayi hedef) -> sayi {
+    sayi col = 0;
+    her (sayi i in 0..uz(s)) {
+        sayi w = dz_kgen(s[i], col);
+        eger (col + w > hedef) { don i; }
+        col += w;
+    }
+    don uz(s);
+}
+
+// Satırın ekrandaki hali: sekmeler boşluk, denetim karakterleri ^X.
+fonk dz_goster(metin s) -> metin {
+    mantik duz = dogru;
+    her (sayi i in 0..uz(s)) {
+        sayi c = s[i];
+        eger (c < 32 || c == 127) {
+            duz = yanlis;
+            dur;
+        }
+    }
+    eger (duz) { don s; }
+    metin r = "";
+    sayi col = 0;
+    her (sayi i in 0..uz(s)) {
+        sayi c = s[i];
+        eger (c == 9) {
+            sayi k = 8 - col % 8;
+            r += upp.metin.tekrar(" ", k);
+            col += k;
+        } yoksa eger (c == 127) {
+            r += "^?";
+            col += 2;
+        } yoksa eger (c < 32) {
+            r += "^" + upp.metin.karakter(c + 64);
+            col += 2;
+        } yoksa {
+            r += upp.metin.karakter(c);
+            col += 1;
+        }
+    }
+    don r;
+}
+
+// Satırın yatay kaydırmaya göre görünen parçası (en çok ekran genişliği).
+fonk dz_gorunur(metin s) -> metin {
+    metin e = dz_goster(s);
+    eger (g_dz_sol > 0) { e = kes_son(e, g_dz_sol); }
+    eger (uz(e) > g_dz_g) { e = kes(e, 0, g_dz_g); }
+    don e;
+}
+
+fonk dz_doldur(metin s, sayi n) -> metin {
+    eger (uz(s) >= n) { don s; }
+    don s + upp.metin.tekrar(" ", n - uz(s));
+}
+
+fonk dz_kirp(metin s, sayi n) -> metin {
+    eger (uz(s) <= n) { don s; }
+    don kes(s, 0, n);
+}
+
+// ---- hareket ----
+
+fonk dz_yatay_sifirla() -> bos {
+    g_dz_istenen = -1;
+}
+
+fonk dz_dikey(sayi d) -> bos {
+    eger (g_dz_istenen < 0) { g_dz_istenen = dz_sutun(g_dz[g_dz_y], g_dz_x); }
+    sayi y = g_dz_y + d;
+    eger (y < 0) { y = 0; }
+    eger (y >= g_dz.uzunluk()) { y = g_dz.uzunluk() - 1; }
+    g_dz_y = y;
+    g_dz_x = dz_x_sutundan(g_dz[y], g_dz_istenen);
+}
+
+fonk dz_ilk_dolu(metin s) -> sayi {
+    sayi i = 0;
+    iken (i < uz(s) && (s[i] == 32 || s[i] == 9)) { i += 1; }
+    don i;
+}
+
+// İmleci görünür tutar: dikeyde satır satır, yatayda yarım ekran kaydırır.
+fonk dz_kaydir() -> bos {
+    eger (g_dz_y < g_dz_ust) { g_dz_ust = g_dz_y; }
+    eger (g_dz_y >= g_dz_ust + g_dz_metin_h) { g_dz_ust = g_dz_y - g_dz_metin_h + 1; }
+    sayi col = dz_sutun(g_dz[g_dz_y], g_dz_x);
+    eger (col < g_dz_sol) {
+        g_dz_sol = col - g_dz_g / 2;
+        eger (g_dz_sol < 0) { g_dz_sol = 0; }
+    }
+    eger (col >= g_dz_sol + g_dz_g) { g_dz_sol = col - g_dz_g / 2; }
+}
+
+// ---- ekran ----
+
+fonk dz_boyut() -> bos {
+    g_dz_g = upp.cekirdek.ekran_bilgi(12);
+    g_dz_h = upp.cekirdek.ekran_bilgi(13);
+    eger (sayi_mi(ortam("COLUMNS"))) { g_dz_g = sayiya(ortam("COLUMNS")); }
+    eger (sayi_mi(ortam("LINES"))) { g_dz_h = sayiya(ortam("LINES")); }
+    eger (g_dz_g < 20) { g_dz_g = 80; }
+    eger (g_dz_h < 6) { g_dz_h = 24; }
+}
+
+// Ekranın tamamı bir sonraki karede yeniden çizilir.
+fonk dz_ekran_sifirla() -> bos {
+    g_dz_ekran.temizle();
+    sayi satir_say = g_dz_h + 1;
+    her (sayi i in 0..satir_say) { g_dz_ekran.ekle("\x01"); }
+    g_dz_cikti += "\e[0m\e[H\e[2J";
+}
+
+// r. ekran satırını (1 tabanlı) s yapar; gen: s'nin görünen genişliği.
+// Tam genişlikte satırda \e[K yazılmaz (son hücreyi silerdi).
+fonk dz_satir_koy(sayi r, metin s, sayi gen) -> bos {
+    eger (r < 1 || r > g_dz_h) { don; }
+    eger (g_dz_ekran[r] == s) { don; }
+    g_dz_ekran.yaz(r, s);
+    g_dz_cikti += "\e[{r};1H" + s;
+    eger (gen < g_dz_g) { g_dz_cikti += "\e[K"; }
+}
+
+// Metin alanını çizer; dosya sonundan sonraki satırlara bos_isaret yazılır.
+fonk dz_metin_ciz(metin bos_isaret) -> bos {
+    her (sayi i in 0..g_dz_metin_h) {
+        sayi y = g_dz_ust + i;
+        sayi r = g_dz_metin_ust + i;
+        eger (y < g_dz.uzunluk()) {
+            metin e = dz_gorunur(g_dz[y]);
+            dz_satir_koy(r, e, uz(e));
+        } yoksa eger (bos_isaret != "") {
+            dz_satir_koy(r, "\e[94m" + bos_isaret + "\e[0m", 1);
+        } yoksa {
+            dz_satir_koy(r, "", 0);
+        }
+    }
+}
+
+// Biriken çıktıyı imleç gizliyken yazar ve imleci (satır, sütun) konumuna koyar.
+fonk dz_bosalt(sayi satir_no, sayi sutun) -> bos {
+    upp.yaz("\e[?25l" + g_dz_cikti + "\e[{satir_no};{sutun}H\e[?25h");
+    g_dz_cikti = "";
+}
+
+// İmlecin ekran konumu.
+fonk dz_imlec_satir() -> sayi => g_dz_metin_ust + g_dz_y - g_dz_ust;
+
+fonk dz_imlec_sutun() -> sayi => dz_sutun(g_dz[g_dz_y], g_dz_x) - g_dz_sol + 1;
+
+// ---- tuşlar ----
+
+// En çok ms milisaniye bekler; tuş yoksa 0.
+fonk dz_tus_kisa(sayi ms) -> sayi {
+    eger (g_bekleyen.uzunluk() > 0) {
+        sayi c = g_bekleyen[0];
+        g_bekleyen.sil(0);
+        don c;
+    }
+    sayi bitis = upp.zaman() + ms;
+    iken (dogru) {
+        sayi c = upp.cekirdek.tus_oku();
+        eger (c != 0) { don c; }
+        eger (upp.zaman() >= bitis) { don 0; }
+        upp.uyut(2);
+    }
+    don 0;
+}
+
+// Bir tuş okur ve ANSI dizilerini çözer: oklar, Home/End, Insert/Delete,
+// PgUp/PgDn (ESC [ x, ESC O x, ESC [ n ~, değiştiricili ESC [ 1 ; 5 x).
+// Tek başına ESC 27, ESC ile gelen başka bir tuş TUS_ALT + tuş döner.
+fonk dz_tus() -> sayi {
+    sayi c = tus_al();
+    eger (c != 27) { don c; }
+    sayi c2 = dz_tus_kisa(40);
+    eger (c2 == 0) { don 27; }
+    eger (c2 != '[' && c2 != 'O') { don TUS_ALT + c2; }
+    sayi c3 = dz_tus_kisa(40);
+    sayi n = 0;
+    iken (c3 >= '0' && c3 <= '9') {
+        n = n * 10 + c3 - '0';
+        c3 = dz_tus_kisa(40);
+    }
+    iken (c3 == ';' || (c3 >= '0' && c3 <= '9')) { c3 = dz_tus_kisa(40); }
+    eger (c3 == 'A') { don TUS_YUKARI; }
+    eger (c3 == 'B') { don TUS_ASAGI; }
+    eger (c3 == 'C') { don TUS_SAG; }
+    eger (c3 == 'D') { don TUS_SOL; }
+    eger (c3 == 'H') { don TUS_EV; }
+    eger (c3 == 'F') { don TUS_SON; }
+    eger (c3 == '~') {
+        eger (n == 1 || n == 7) { don TUS_EV; }
+        eger (n == 4 || n == 8) { don TUS_SON; }
+        eger (n == 2) { don TUS_EKLE; }
+        eger (n == 3) { don TUS_SIL; }
+        eger (n == 5) { don TUS_SAYFA_YUKARI; }
+        eger (n == 6) { don TUS_SAYFA_ASAGI; }
+    }
+    don 0;
+}
+
+fonk dz_yazdirilabilir(sayi c) -> mantik => c >= 32 && c != 127 && c < TUS_YUKARI;
+
+// Satırdaki bir alt metni imleçten sonra (ileri) ya da önce (geri) arar,
+// dosya sonunda/başında sarar. Bulursa imleci oraya koyar. Dönüş: 0 yok,
+// 1 bulundu, 2 sarılarak bulundu.
+fonk dz_ara(metin aranan, mantik ileri) -> sayi {
+    eger (aranan == "") { don 0; }
+    sayi n = g_dz.uzunluk();
+    sayi au = uz(aranan);
+    sayi tur_say = n + 1;
+    her (sayi adim in 0..tur_say) {
+        sayi y = 0;
+        eger (ileri) { y = (g_dz_y + adim) % n; } yoksa { y = ((g_dz_y - adim) % n + n) % n; }
+        metin s = g_dz[y];
+        sayi bulunan = -1;
+        eger (ileri) {
+            sayi bas = 0;
+            eger (adim == 0) { bas = g_dz_x + 1; }
+            eger (adim == n) { bas = 0; }
+            eger (bas <= uz(s)) {
+                sayi k = upp.metin.bul(kes_son(s, bas), aranan);
+                eger (k >= 0) { bulunan = bas + k; }
+            }
+            eger (adim == n && bulunan > g_dz_x) { bulunan = -1; }
+        } yoksa {
+            sayi sinir = uz(s);
+            eger (adim == 0) { sinir = g_dz_x; }
+            sayi bas = 0;
+            iken (bas + au <= sinir) {
+                sayi k = upp.metin.bul(kes_son(s, bas), aranan);
+                eger (k < 0 || bas + k + au > sinir) { dur; }
+                bulunan = bas + k;
+                bas = bas + k + 1;
+            }
+            eger (adim == n && bulunan >= 0 && bulunan < g_dz_x) { bulunan = -1; }
+        }
+        eger (bulunan >= 0) {
+            mantik sarildi = (ileri && y < g_dz_y) || (!ileri && y > g_dz_y) || (adim == n);
+            g_dz_y = y;
+            g_dz_x = bulunan;
+            g_dz_istenen = -1;
+            eger (sarildi) { don 2; }
+            don 1;
+        }
+    }
+    don 0;
+}

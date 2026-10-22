@@ -1,0 +1,427 @@
+// nano: GNU nano benzeri kipsiz düzenleyici (duzenleyici.upp çekirdeğiyle).
+// Ekran: üstte başlık, ortada metin, altta durum satırı ve iki satır kısayol.
+//   ^O yaz (dosya adı sorar)   ^S kaydet   ^X çık (değiştiyse sorar)
+//   ^K satırı kes (art arda kesilenler birikir)   ^U yapıştır
+//   ^W ara (boş girdi son aramayı yineler)   ^C konum   ^_ satıra git
+//   ^Z / M-U geri al   M-E yinele   ^A ^E satır başı/sonu   ^Y ^V sayfa
+//   ^G yardım   ^L ekranı yenile   +SATIR: dosyayı o satırda aç
+
+liste[metin] g_nano_kesik;      // kesim tamponu (satırlar)
+mantik g_nano_kesiyor = yanlis; // son komut ^K mıydı (art arda kesimler birikir)
+metin g_nano_mesaj = "";
+metin g_nano_aranan = "";
+
+fonk nano_baslik() -> bos {
+    metin sol = "  Uppix nano {UPPIX_SURUM}";
+    metin ad = g_dz_yol;
+    eger (ad == "") { ad = "Yeni Tampon"; }
+    metin sag = "";
+    eger (g_dz_degisti) { sag = "Değiştirildi  "; }
+    sayi orta = (g_dz_g - uz(ad)) / 2;
+    eger (orta < uz(sol) + 1) { orta = uz(sol) + 1; }
+    metin s = dz_doldur(sol, orta) + ad;
+    s = dz_kirp(dz_doldur(s, g_dz_g - uz(sag)) + sag, g_dz_g);
+    s = dz_doldur(s, g_dz_g);
+    dz_satir_koy(1, "\e[7m" + s + "\e[0m", g_dz_g);
+}
+
+fonk nano_durum() -> bos {
+    sayi r = g_dz_h - 2;
+    eger (g_nano_mesaj == "") {
+        dz_satir_koy(r, "", 0);
+        don;
+    }
+    metin m = dz_kirp("[ " + g_nano_mesaj + " ]", g_dz_g);
+    sayi bas = (g_dz_g - uz(m)) / 2;
+    dz_satir_koy(r, upp.metin.tekrar(" ", bas) + "\e[7m" + m + "\e[0m", bas + uz(m));
+}
+
+// Kısayol satırı: ogeler tuş/açıklama çiftleridir; her öğe eşit genişlikte.
+fonk nano_kisayol(sayi r, liste[metin] ogeler) -> bos {
+    sayi n = ogeler.uzunluk() / 2;
+    sayi gen = g_dz_g / n;
+    metin s = "";
+    sayi gorunen = 0;
+    her (sayi i in 0..n) {
+        metin tus = ogeler[2 * i];
+        sayi w = gen - uz(tus);
+        eger (i == n - 1) { w = g_dz_g - gorunen - uz(tus); }
+        eger (w < 0) { w = 0; }
+        metin parca = dz_kirp(dz_doldur(" " + ogeler[2 * i + 1], w), w);
+        s += "\e[7m" + tus + "\e[0m" + parca;
+        gorunen += uz(tus) + uz(parca);
+    }
+    dz_satir_koy(r, s, gorunen);
+}
+
+fonk nano_kisayollar() -> bos {
+    liste[metin] a;
+    a.ekle("^G");
+    a.ekle("Yardım");
+    a.ekle("^O");
+    a.ekle("Yaz");
+    a.ekle("^W");
+    a.ekle("Ara");
+    a.ekle("^K");
+    a.ekle("Kes");
+    a.ekle("^C");
+    a.ekle("Konum");
+    a.ekle("^_");
+    a.ekle("Satıra Git");
+    nano_kisayol(g_dz_h - 1, a);
+    liste[metin] b;
+    b.ekle("^X");
+    b.ekle("Çık");
+    b.ekle("^S");
+    b.ekle("Kaydet");
+    b.ekle("^Z");
+    b.ekle("Geri Al");
+    b.ekle("^U");
+    b.ekle("Yapıştır");
+    b.ekle("^A");
+    b.ekle("Satır Başı");
+    b.ekle("^E");
+    b.ekle("Satır Sonu");
+    nano_kisayol(g_dz_h, b);
+}
+
+fonk nano_ciz() -> bos {
+    dz_kaydir();
+    nano_baslik();
+    dz_metin_ciz("");
+    nano_durum();
+    nano_kisayollar();
+    dz_bosalt(dz_imlec_satir(), dz_imlec_sutun());
+}
+
+// Durum satırında girdi ister (ters renkli). Enter: girdi, ^C/Esc: yok.
+fonk nano_istem(metin istem, metin ilk) -> metin {
+    metin s = ilk;
+    sayi r = g_dz_h - 2;
+    iken (dogru) {
+        metin gorunen = dz_kirp(istem + s, g_dz_g - 1);
+        metin satir_m = dz_doldur(gorunen, g_dz_g);
+        dz_satir_koy(r, "\e[7m" + satir_m + "\e[0m", g_dz_g);
+        dz_bosalt(r, uz(gorunen) + 1);
+        sayi c = dz_tus();
+        eger (c == 13 || c == 10) { don s; }
+        eger (c == 3 || c == 27 || c == 7) { don yok; }
+        eger (c == 8 || c == 127) {
+            eger (uz(s) > 0) { s = kes(s, 0, uz(s) - 1); }
+            devam;
+        }
+        eger (c == 21) {
+            s = "";
+            devam;
+        }
+        eger (dz_yazdirilabilir(c) || c == 9) { s += upp.metin.karakter(c); }
+    }
+    don yok;
+}
+
+// Evet/hayır sorusu: 1 evet, 0 hayır, -1 iptal.
+fonk nano_sor(metin soru) -> sayi {
+    liste[metin] a;
+    a.ekle("E");
+    a.ekle("Evet");
+    nano_kisayol(g_dz_h - 1, a);
+    liste[metin] b;
+    b.ekle("H");
+    b.ekle("Hayır");
+    b.ekle("^C");
+    b.ekle("İptal");
+    nano_kisayol(g_dz_h, b);
+    sayi r = g_dz_h - 2;
+    metin gorunen = dz_kirp(soru + " ", g_dz_g - 1);
+    dz_satir_koy(r, "\e[7m" + dz_doldur(gorunen, g_dz_g) + "\e[0m", g_dz_g);
+    dz_bosalt(r, uz(gorunen) + 1);
+    iken (dogru) {
+        sayi c = dz_tus();
+        eger (c == 'e' || c == 'E' || c == 'y' || c == 'Y') { don 1; }
+        eger (c == 'h' || c == 'H' || c == 'n' || c == 'N') { don 0; }
+        eger (c == 3 || c == 27) { don -1; }
+    }
+    don -1;
+}
+
+// ^O: dosya adını sorup yazar. Başarılıysa dogru.
+fonk nano_yaz(mantik sor) -> mantik {
+    metin yol = g_dz_yol;
+    eger (sor || yol == "") {
+        metin girilen = nano_istem("Yazılacak Dosya Adı: ", yol);
+        eger (girilen == yok || girilen == "") {
+            g_nano_mesaj = "İptal edildi";
+            don yanlis;
+        }
+        yol = girilen;
+    }
+    sayi n = dz_kaydet(yol);
+    eger (n < 0) {
+        g_nano_mesaj = "Yazma hatası: " + g_dz_hata;
+        don yanlis;
+    }
+    g_dz_yol = yol;
+    sayi satir_n = dz_satir_sayisi();
+    g_nano_mesaj = "{satir_n} satır yazıldı";
+    don dogru;
+}
+
+fonk nano_yuzde(sayi a, sayi b) -> sayi {
+    eger (b <= 0) { don 100; }
+    don a * 100 / b;
+}
+
+// ^C: imleç konumu.
+fonk nano_konum() -> bos {
+    sayi n = g_dz.uzunluk();
+    sayi su = uz(g_dz[g_dz_y]) + 1;
+    sayi karakter = 0;
+    sayi toplam = 0;
+    her (sayi i in 0..n) {
+        eger (i < g_dz_y) { karakter += uz(g_dz[i]) + 1; }
+        toplam += uz(g_dz[i]) + 1;
+    }
+    karakter += g_dz_x + 1;
+    g_nano_mesaj = "satır {g_dz_y + 1}/{n} (%{nano_yuzde(g_dz_y + 1, n)}), sütun {g_dz_x + 1}/{su} (%{nano_yuzde(g_dz_x + 1, su)}), karakter {karakter}/{toplam} (%{nano_yuzde(karakter, toplam)})";
+}
+
+fonk nano_satira_git() -> bos {
+    metin g = nano_istem("Satır ve sütun numarası girin: ", "");
+    eger (g == yok || g == "") {
+        g_nano_mesaj = "İptal edildi";
+        don;
+    }
+    liste[metin] P = upp.metin.bol(g, ",");
+    eger (!sayi_mi(upp.metin.kirp(P[0])) || (P.uzunluk() > 1 && !sayi_mi(upp.metin.kirp(P[1])))) {
+        g_nano_mesaj = "Geçersiz satır ya da sütun numarası";
+        don;
+    }
+    sayi y = sayiya(P[0]);
+    eger (y < 0) { y = g_dz.uzunluk() + y + 1; }
+    g_dz_y = y - 1;
+    g_dz_x = 0;
+    eger (P.uzunluk() > 1) { g_dz_x = sayiya(P[1]) - 1; }
+    dz_sinirla();
+    g_dz_istenen = -1;
+}
+
+fonk nano_ara() -> bos {
+    metin istem = "Ara: ";
+    eger (g_nano_aranan != "") { istem = "Ara [" + g_nano_aranan + "]: "; }
+    metin g = nano_istem(istem, "");
+    eger (g == yok) {
+        g_nano_mesaj = "İptal edildi";
+        don;
+    }
+    eger (g != "") { g_nano_aranan = g; }
+    eger (g_nano_aranan == "") {
+        g_nano_mesaj = "İptal edildi";
+        don;
+    }
+    sayi y0 = g_dz_y;
+    sayi x0 = g_dz_x;
+    sayi r = dz_ara(g_nano_aranan, dogru);
+    eger (r == 0) {
+        g_nano_mesaj = "\"" + g_nano_aranan + "\" bulunamadı";
+    } yoksa eger (g_dz_y == y0 && g_dz_x == x0) {
+        g_nano_mesaj = "Tek eşleşme bu";
+    } yoksa eger (r == 2) {
+        g_nano_mesaj = "Arama başa döndü";
+    }
+}
+
+fonk nano_kes() -> bos {
+    dz_anlik();
+    eger (!g_nano_kesiyor) { g_nano_kesik.temizle(); }
+    g_nano_kesik.ekle(g_dz[g_dz_y]);
+    eger (g_dz.uzunluk() == 1) {
+        g_dz.yaz(0, "");
+    } yoksa {
+        g_dz.sil(g_dz_y);
+    }
+    g_dz_x = 0;
+    dz_sinirla();
+    g_dz_degisti = dogru;
+    g_dz_istenen = -1;
+}
+
+fonk nano_yapistir() -> bos {
+    eger (g_nano_kesik.uzunluk() == 0) {
+        g_nano_mesaj = "Kesim tamponu boş";
+        don;
+    }
+    dz_anlik();
+    dz_metin_ekle(upp.metin.birlestir(g_nano_kesik, "\n") + "\n");
+}
+
+fonk nano_yardim() -> bos {
+    liste[metin] L;
+    L.ekle("Uppix nano yardımı");
+    L.ekle("");
+    L.ekle("Metin doğrudan yazılır; oklar, Home/End, PgUp/PgDn ile gezilir.");
+    L.ekle("^ Ctrl tuşu, M- Alt (ya da önce Esc) demektir.");
+    L.ekle("");
+    L.ekle("^O  dosyayı yaz (adı sorar)        ^S  kaydet");
+    L.ekle("^X  çık (değiştiyse kaydetmeyi sorar)");
+    L.ekle("^K  satırı kes (art arda kesilenler birikir)");
+    L.ekle("^U  kesileni imlece yapıştır");
+    L.ekle("^W  ara (boş girdi son aramayı yineler)");
+    L.ekle("^C  imleç konumu                   ^_  satıra (ve sütuna) git");
+    L.ekle("^Z  geri al (M-U da olur)          M-E yinele");
+    L.ekle("^A  satır başı   ^E  satır sonu    ^Y  önceki sayfa   ^V  sonraki sayfa");
+    L.ekle("^P  yukarı   ^N  aşağı   ^B  sola   ^F  sağa    ^D  imleçteki karakteri sil");
+    L.ekle("^L  ekranı yeniden çiz             ^G  bu yardım");
+    L.ekle("");
+    L.ekle("Komut satırı: nano [+SATIR[,SÜTUN]] [dosya]");
+    L.ekle("");
+    L.ekle("Çıkmak için bir tuşa basın.");
+    dz_ekran_sifirla();
+    dz_satir_koy(1, "\e[7m" + dz_doldur("  Uppix nano {UPPIX_SURUM}  —  yardım", g_dz_g) + "\e[0m", g_dz_g);
+    her (sayi i in 0..L.uzunluk()) {
+        metin s = dz_kirp(L[i], g_dz_g);
+        dz_satir_koy(i + 3, s, uz(s));
+    }
+    dz_bosalt(g_dz_h, 1);
+    dz_tus();
+    dz_ekran_sifirla();
+}
+
+fonk k_nano(liste[metin] a, metin girdi) -> sayi {
+    metin yol = "";
+    sayi bas_satir = 0;
+    sayi bas_sutun = 0;
+    her (sayi i in 1..a.uzunluk()) {
+        metin x = a[i];
+        eger (upp.metin.baslar(x, "+") && uz(x) > 1) {
+            liste[metin] P = upp.metin.bol(kes_son(x, 1), ",");
+            eger (sayi_mi(P[0])) { bas_satir = sayiya(P[0]); }
+            eger (P.uzunluk() > 1 && sayi_mi(P[1])) { bas_sutun = sayiya(P[1]); }
+        } yoksa eger (x == "-h" || x == "--help") {
+            satir("kullanım: nano [+SATIR[,SÜTUN]] [dosya]");
+            don 0;
+        } yoksa eger (upp.metin.baslar(x, "-")) {
+            // GNU nano seçenekleri yok sayılır
+        } yoksa eger (yol == "") {
+            yol = x;
+        }
+    }
+    eger (!terminal_mi()) {
+        hata_bildir("nano: terminal gerekir (boru ya da yönlendirme ile çalışmaz)");
+        don 1;
+    }
+    eger (!dz_yukle(yol)) {
+        hata_bildir("nano: " + g_dz_hata);
+        don 1;
+    }
+    dz_boyut();
+    g_dz_metin_ust = 2;
+    g_dz_metin_h = g_dz_h - 4;
+    g_nano_kesiyor = yanlis;
+    g_nano_mesaj = "";
+    eger (yol != "") {
+        eger (g_dz_yeni) {
+            g_nano_mesaj = "Yeni Dosya";
+        } yoksa {
+            sayi n = dz_satir_sayisi();
+            g_nano_mesaj = "{n} satır okundu";
+        }
+    }
+    eger (bas_satir > 0) {
+        g_dz_y = bas_satir - 1;
+        g_dz_x = bas_sutun - 1;
+        dz_sinirla();
+    }
+    dz_ekran_sifirla();
+    iken (dogru) {
+        nano_ciz();
+        sayi c = dz_tus();
+        mantik kesti = yanlis;
+        g_dz_tur_simdi = 0;
+        metin onceki_mesaj = g_nano_mesaj;
+        g_nano_mesaj = "";
+        sayi sayfa = g_dz_metin_h - 2;
+        eger (sayfa < 1) { sayfa = 1; }
+        eger (c == 24) {
+            // ^X
+            eger (!g_dz_degisti) { dur; }
+            sayi cevap = nano_sor("Değiştirilmiş tampon kaydedilsin mi?");
+            eger (cevap == 0) { dur; }
+            eger (cevap == 1 && nano_yaz(dogru)) { dur; }
+            eger (cevap < 0) { g_nano_mesaj = "İptal edildi"; }
+        } yoksa eger (c == 15) {
+            nano_yaz(dogru);                       // ^O
+        } yoksa eger (c == 19) {
+            nano_yaz(yanlis);                      // ^S
+        } yoksa eger (c == 11) {
+            nano_kes();                            // ^K
+            kesti = dogru;
+        } yoksa eger (c == 21) {
+            nano_yapistir();                       // ^U
+        } yoksa eger (c == 23) {
+            nano_ara();                            // ^W
+        } yoksa eger (c == 3) {
+            nano_konum();                          // ^C
+        } yoksa eger (c == 31) {
+            nano_satira_git();                     // ^_
+        } yoksa eger (c == 7) {
+            nano_yardim();                         // ^G
+        } yoksa eger (c == 12) {
+            dz_ekran_sifirla();                    // ^L
+            g_nano_mesaj = onceki_mesaj;
+        } yoksa eger (c == 26 || c == TUS_ALT + 'u' || c == TUS_ALT + 'U') {
+            eger (!dz_gecmis_al(dogru)) { g_nano_mesaj = "Geri alınacak bir şey yok"; }
+        } yoksa eger (c == TUS_ALT + 'e' || c == TUS_ALT + 'E') {
+            eger (!dz_gecmis_al(yanlis)) { g_nano_mesaj = "Yinelenecek bir şey yok"; }
+        } yoksa eger (c == TUS_YUKARI || c == 16) {
+            dz_dikey(-1);
+        } yoksa eger (c == TUS_ASAGI || c == 14) {
+            dz_dikey(1);
+        } yoksa eger (c == TUS_SOL || c == 2) {
+            eger (g_dz_x > 0) {
+                g_dz_x -= 1;
+            } yoksa eger (g_dz_y > 0) {
+                g_dz_y -= 1;
+                g_dz_x = uz(g_dz[g_dz_y]);
+            }
+            dz_yatay_sifirla();
+        } yoksa eger (c == TUS_SAG || c == 6) {
+            eger (g_dz_x < uz(g_dz[g_dz_y])) {
+                g_dz_x += 1;
+            } yoksa eger (g_dz_y + 1 < g_dz.uzunluk()) {
+                g_dz_y += 1;
+                g_dz_x = 0;
+            }
+            dz_yatay_sifirla();
+        } yoksa eger (c == TUS_EV || c == 1) {
+            g_dz_x = 0;
+            dz_yatay_sifirla();
+        } yoksa eger (c == TUS_SON || c == 5) {
+            g_dz_x = uz(g_dz[g_dz_y]);
+            dz_yatay_sifirla();
+        } yoksa eger (c == TUS_SAYFA_YUKARI || c == 25) {
+            g_dz_ust -= sayfa;
+            eger (g_dz_ust < 0) { g_dz_ust = 0; }
+            dz_dikey(-sayfa);
+        } yoksa eger (c == TUS_SAYFA_ASAGI || c == 22) {
+            g_dz_ust += sayfa;
+            eger (g_dz_ust > g_dz.uzunluk() - 1) { g_dz_ust = g_dz.uzunluk() - 1; }
+            dz_dikey(sayfa);
+        } yoksa eger (c == 13 || c == 10) {
+            dz_anlik();
+            dz_satir_bol();
+        } yoksa eger (c == 8 || c == 127) {
+            mantik alindi = dz_anlik_tur(2);
+            eger (!dz_geri_sil() && alindi) { dz_anlik_iptal(); }
+        } yoksa eger (c == TUS_SIL || c == 4) {
+            mantik alindi = dz_anlik_tur(3);
+            eger (!dz_sil() && alindi) { dz_anlik_iptal(); }
+        } yoksa eger (c == 9 || dz_yazdirilabilir(c)) {
+            dz_anlik_tur(1);
+            dz_metin_ekle(upp.metin.karakter(c));
+        }
+        g_nano_kesiyor = kesti;
+        g_dz_son_tur = g_dz_tur_simdi;
+    }
+    upp.yaz("\e[0m\e[H\e[2J");
+    don 0;
+}

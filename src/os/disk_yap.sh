@@ -14,8 +14,9 @@
 #                      İmaj zaten varsa yalnızca çekirdek ve /usr/bin'deki kullanıcı
 #                      programları güncellenir (kök içeriği korunur).
 #
-#   Kullanıcı programları (kullanici/*.c) libc'siz statik Linux ELF olarak
-#   ÇIKTI/kullanici/ altına derlenir ve kökte /usr/bin'e konur.
+#   Kullanıcı programları (kullanici/*.c) libc'siz statik Linux ELF olarak,
+#   kullanici/glibc/*.c ise glibc ile statik (cc -static) derlenir; ikisi de
+#   ÇIKTI/kullanici/ altına yazılır ve kökte /usr/bin'e konur.
 #       usb-fat32.img, usb-exfat.img yoksa oluşturulur.
 #
 # Gerekenler: mkfs.ext4 (e2fsprogs), sfdisk, mkfs.fat + mtools (dosfstools, mtools),
@@ -60,6 +61,15 @@ kullanici_derle() {
             -fno-asynchronous-unwind-tables -O2 -Wall -Wl,--build-id=none -Wl,-z,noexecstack \
             -o "$KD/$(basename "$c" .c)" "$c"
     done
+    # glibc ile statik derlenen sıradan Linux programları (libc.a varsa)
+    if printf 'int main(void){return 0;}' | cc -static -x c -o /dev/null - >/dev/null 2>&1; then
+        for c in "$BURA"/kullanici/glibc/*.c; do
+            [ -f "$c" ] || continue
+            cc -static -O2 -Wall -Wl,--build-id=none -o "$KD/$(basename "$c" .c)" "$c"
+        done
+    else
+        echo "[disk] statik glibc (libc.a) yok: kullanici/glibc programları derlenmedi"
+    fi
 }
 
 # Var olan imajın ext4 kökünde /usr/bin'deki programları yeniler. $1 imaj, $2 bölüm ofseti (bayt).

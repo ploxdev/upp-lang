@@ -16,8 +16,14 @@ kullan "komut_metin.upp";
 kullan "komut_sistem.upp";
 kullan "komut_disk.upp";
 kullan "komut_oyun.upp";
+kullan "komut_hexdump.upp";
+kullan "duzenleyici.upp";
+kullan "komut_nano.upp";
+kullan "komut_vi.upp";
 kullan "surec.upp";
 kullan "sistem_cagrisi.upp";
+kullan "sistem_cagrisi_dosya.upp";
+kullan "sistem_cagrisi_surec.upp";
 
 sabit metin UPPIX_SURUM = "0.4.0";
 
@@ -66,6 +72,8 @@ fonk komutlari_kur() -> bos {
     komut_ekle("grep", k_grep, "satır ara (-i -v -n -c, ^ $)");
     komut_ekle("head", k_head, "ilk satırlar (-n N)");
     komut_ekle("help", k_help, "bu liste");
+    komut_ekle("hexdump", k_hexdump, "onaltılık döküm (-C -b -c -d -o -x -n -s -v)");
+    komut_ekle("hd", k_hd, "kanonik onaltılık döküm (hexdump -C)");
     komut_ekle("history", k_history, "komut geçmişi (-c)");
     komut_ekle("hostname", k_hostname, "makine adı");
     komut_ekle("id", k_id, "kullanıcı kimliği");
@@ -77,6 +85,7 @@ fonk komutlari_kur() -> bos {
     komut_ekle("mount", k_mount, "dosya sistemi bağla / listele (-t -o ro)");
     komut_ekle("umount", k_umount, "dosya sistemini ayır");
     komut_ekle("mv", k_mv, "taşı / yeniden adlandır");
+    komut_ekle("nano", k_nano, "metin düzenleyici (^O yaz, ^X çık, ^G yardım)");
     komut_ekle("nproc", k_nproc, "işlemci sayısı");
     komut_ekle("poweroff", k_poweroff, "makineyi kapat");
     komut_ekle("halt", k_poweroff, "makineyi kapat");
@@ -112,6 +121,8 @@ fonk komutlari_kur() -> bos {
     komut_ekle("unset", k_unset, "ortam değişkenini sil");
     komut_ekle("uppfetch", k_uppfetch, "sistem özeti");
     komut_ekle("uptime", k_uptime, "çalışma süresi (-p)");
+    komut_ekle("vi", k_vi, "kipli metin düzenleyici (i ekle, Esc, :wq)");
+    komut_ekle("vim", k_vi, "kipli metin düzenleyici (vi)");
     komut_ekle("wc", k_wc, "satır/kelime/bayt say (-l -w -c)");
     komut_ekle("which", k_which, "komutun yolu");
     komut_ekle("whoami", k_whoami, "kullanıcı adı");
