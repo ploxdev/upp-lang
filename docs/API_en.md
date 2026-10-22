@@ -542,8 +542,8 @@ Low-level primitives that directly touch CPU state, I/O ports, or raw physical m
 | :--- | :--- | :--- |
 | `port_yaz8 / 16 / 32(port, val)` | `(sayi, sayi) -> bos` | Writes to an x86 hardware I/O port (`outb`, `outw`, `outl`) |
 | `port_oku8 / 16 / 32(port)` | `(sayi) -> sayi` | Reads from an x86 hardware I/O port (`inb`, `inw`, `inl`) |
-| `bellek_yaz8 / 16 / 32 / 64(addr, val)` | `(sayi, sayi) -> bos` | Performs a `volatile` MMIO write to `addr` |
-| `bellek_oku8 / 16 / 32 / 64(addr)` | `(sayi) -> sayi` | Performs a `volatile` MMIO read from `addr` |
+| `bellek_yaz8 / 16 / 32 / 64(addr, val)` | `(sayi, sayi) -> bos` | Performs a `volatile` MMIO write to physical `addr` (through the HHDM under Limine; a higher-half kernel address is used as is) |
+| `bellek_oku8 / 16 / 32 / 64(addr)` | `(sayi) -> sayi` | Performs a `volatile` MMIO read from physical `addr` (through the HHDM under Limine) |
 | `dur()`, `kesme_kapat()`, `kesme_ac()` | `() -> bos` | Privileged CPU instructions: `hlt` (halt), `cli` (disable interrupts), `sti` (enable interrupts) |
 | `yigin_kur(addr, size)` | `(sayi, sayi) -> bos` | Assigns a memory region to the freestanding heap allocator |
 
@@ -575,12 +575,35 @@ The remaining kernel services can be called directly from **safe code**:
 | `disk_oku(d, lba, count, buf, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Reads `count` sectors starting at `lba` into `upp.tampon` handle `buf` at byte offset `ofs` |
 | `disk_yaz(d, lba, count, buf, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Writes `count` sectors from `buf` (`ofs`) to disk `d` and flushes the drive cache (LBA28/LBA48 PIO) |
 
+#### User mode (ring 3) *(`--onyukleyici limine` only)*
+
+The mechanism lives in the kernel (C) and the policy in the operating system (u++): the process table, ELF loading, and the meaning of each system call are written in u++. Uppix uses these with the Linux x86_64 ABI (see [`src/os/README.md`](../src/os/README.md)). `ka` is an address-space handle (the physical address of its PML4). `koruma` uses Linux `PROT_*` bits: 1 read, 2 write, 4 execute.
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `kullanici_destekli()` | `() -> mantik` | Whether user mode is set up (Limine/HHDM) |
+| `kullanici_alan_yeni()` / `kullanici_alan_sil(ka)` | `() -> sayi` / `(sayi) -> bos` | New address space with an empty lower half (`0` if out of memory) / delete it with all its pages |
+| `kullanici_esle(ka, addr, len, prot)` | `(sayi, sayi, sayi, sayi) -> mantik` | Maps the range with fresh zeroed pages; permissions of already mapped pages are merged |
+| `kullanici_esleme_kaldir(ka, addr, len)` | `(sayi, sayi, sayi) -> bos` | Unmaps pages and releases the process's frames |
+| `kullanici_koruma(ka, addr, len, prot, merge)` | `(sayi, sayi, sayi, sayi, mantik) -> bos` | Sets permissions (the mprotect mechanism); `merge` only adds |
+| `kullanici_bos_mu(ka, addr, len)` | `(sayi, sayi, sayi) -> mantik` | `dogru` if no page in the range is mapped |
+| `kullanici_fiziksel_esle(ka, addr, phys, len, prot)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Maps device memory (e.g. the framebuffer) write-combining. *Requires `guvensiz`* |
+| `kullanici_oku(ka, addr, buf, ofs, n)` / `kullanici_yaz(...)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | User memory ↔ `upp.tampon`. Every page's permissions are checked; `yanlis` on a bad address (EFAULT) |
+| `kullanici_metin(ka, addr, max)` | `(sayi, sayi, sayi) -> metin` | NUL-terminated user string; `yok` on a bad address or at the limit |
+| `kullanici_calistir(ka, entry, stack)` | `(sayi, sayi, sayi) -> sayi` | Runs the process in ring 3 on this task; returns its exit code (128 + signal when killed) |
+| `kullanici_cikis_iste(code)` | `(sayi) -> bos` | The process exits with `code` when the system call handler returns (exit) |
+| `kullanici_on_plan(v)` | `(mantik) -> bos` | Whether the process is in the foreground (Ctrl-C kills it with SIGINT) |
+| `kullanici_son_hata()` | `() -> metin` | Why the last process ended (`"Bölümleme hatası (SIGSEGV): ..."`, `"^C"`; `""` on a normal exit) |
+| `sistem_cagrisi_kur(f)` | `(fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi) -> bos` | `SYSCALL` handler: `f(no, a1, ..., a6)`; the result goes to rax (errors: `-errno`) |
+| `ekran_bilgi(field)` | `(sayi) -> sayi` | 0 framebuffer physical address, 1 size, 2-3 width/height in pixels, 4 pitch, 5 bpp, 6-11 color fields, 12-13 columns/rows |
+| `cerceve_bilgi(field)` | `(sayi) -> sayi` | User frame pool: 0 total, 1 used, 2 free (bytes) |
+
 > [!NOTE]
 > **Kernel Runtime Environment:**
-> - **Heap Placement:** At boot, the freestanding heap automatically relocates to the largest available RAM region in the memory map (within the first 1 GiB under Multiboot, between 1 MiB and 4 GiB under Limine; ~122 MiB on QEMU's default 128 MiB configuration), falling back to a 4 MiB `.bss` arena if no memory map is provided.
+> - **Heap Placement:** At boot, the freestanding heap automatically relocates to the largest available RAM region in the memory map (within the first 1 GiB under Multiboot; under Limine three quarters of the largest region, the remaining quarter becoming the user-process frame pool), falling back to a 4 MiB `.bss` arena if no memory map is provided.
 > - **Console:** Under Multiboot the VGA text driver maps Turkish characters to CP437; under Limine a text console is drawn onto the framebuffer with the Terminus 8x16 font (Turkish characters included). Both render box-drawing and shade characters (`├ └ │ ─ █ ░ ▒ ▓`) and interpret ANSI escape sequences: color (`\e[1;32m`), clearing (`\e[2J`, `\e[K`), cursor positioning (`\e[H`, `\e[row;colH`, `\e[nC`/`\e[nD`), and hiding/showing the cursor (`\e[?25l` / `\e[?25h`).
-> - **Limine:** With `--onyukleyici limine` the kernel is an ELF64 linked at `0xffffffff80000000` (`-mcmodel=kernel`). At boot it uses Limine protocol (base revision 6) requests for the memory map, framebuffer, HHDM and kernel address, then installs its own GDT and page tables (first 4 GiB identity-mapped plus the kernel), enables SSE, and disables the local APIC so 8259 PIC interrupts are delivered.
-> - **Exceptions:** CPU exceptions (divide error, page fault, etc.) print a Turkish exception diagnostic with `RIP` and `CR2` and exit QEMU with code `3`.
+> - **Limine:** With `--onyukleyici limine` the kernel is an ELF64 linked at `0xffffffff80000000` (`-mcmodel=kernel`). At boot it uses Limine protocol (base revision 6) requests for the memory map, framebuffer, HHDM and kernel address, then installs its own page tables: the kernel image and all physical memory (HHDM) live in the upper half, leaving the lower half empty for user processes. It sets up the GDT/TSS, `SYSCALL`, SSE, and NX/SMEP/SMAP, and disables the local APIC so 8259 PIC interrupts are delivered.
+> - **Exceptions:** CPU exceptions (divide error, page fault, etc.) print a Turkish exception diagnostic with `RIP` and `CR2` and exit QEMU with code `3`. An exception in ring 3 only terminates that process.
 
 ### `upp.tampon.*` — Bounds-Checked Byte Buffers *(All Targets)*
 

@@ -2,6 +2,8 @@
 
 Uppix, tamamen **u++** ile yazılmış, Unix benzeri küçük bir işletim sistemidir. x86_64 makinede [Limine](onyukleyici/limine) ile diskten **64-bit long mode**'da açılır (BIOS ya da UEFI) ve libc kullanmaz. **Kök dosya sistemi ext4 bir diskte durur** ve yapılan değişiklikler kalıcıdır. USB bellek gibi **FAT32** ve **exFAT** diskleri tanır, okur ve yazar. Kabuk, dosya sistemi sürücüleri ve 74 komutun (bir yılan oyunu dahil) hepsi u++ kaynağıdır. Altta yalnızca u++'ın serbest (freestanding) çalışma zamanı vardır: kesmeler, zamanlayıcı, klavye/seri girdi, ATA disk erişimi, bellek ayırıcı ve görev geçişi.
 
+Uppix **kullanıcı programlarını ring 3'te** çalıştırır. Sistem çağrıları **Linux x86_64 ile birebir uyumludur**: `gcc -static -nostdlib` ile Linux için derlenmiş bir ELF, Uppix'te değiştirilmeden çalışır ve aynı çıktıyı verir.
+
 ```text
 root@uppix:~# lsblk
 AD      BOYUT TÜR   FSTÜR  ETİKET           BAĞLAMA
@@ -53,9 +55,82 @@ Eski Multiboot yolu da durur: `--onyukleyici multiboot` (varsayılan) ile çekir
 - **Kabuk (`uppsh`):** boru (`|`), yönlendirme (`>`, `>>`, `<`, `2>`), `;`, `&&`, `||` ve arka plan işleri (`&`, `jobs`, `kill %1`). Ayrıca `$AD`, `${AD}`, `$?`, `$$`, `$1…$9`, `$#`, `$@`, `~`, joker (`*`, `?`), tek/çift tırnak, takma adlar, betikler (`sh dosya`, `source`, `PATH` üzerinden çalıştırılabilir dosyalar) ve `/etc/profile`.
 - **Satır düzenleyici:** ↑/↓ geçmiş, ←/→, Home/End, Delete, Tab ile komut ve dosya adı tamamlama, Ctrl-A/E/U/K/W/L/C/D.
 - **Görevler:** işbirlikçi çoklu görev (en çok 32 görev, her biri 64 KiB yığınla). Görevler `sleep` sırasında ve girdi beklenirken sıra verir. `ps`, `kill` ve `jobs` ile yönetilirler.
-- **Önyükleme:** [Limine](onyukleyici/limine) v11.4.1 depoya gömülüdür (BIOS aşamaları, `BOOTX64.EFI` ve `bios-install` aracının kaynağı). Çekirdek, `0xffffffff80000000`'da duran bir ELF64'tür. Limine protokolünün istekleriyle bellek haritasını, çerçeve tamponunu, HHDM'yi ve çekirdeğin fiziksel adresini alır. Sonra kendi GDT'sini ve sayfa tablolarını kurar: ilk 4 GiB birebir 2 MiB sayfalarla, çekirdek de kendi yüksek adresinde 4 KiB sayfalarla eşlenir. 8259 PIC kesmeleri doğrudan gelsin diye yerel APIC'i kapatır.
+- **Önyükleme:** [Limine](onyukleyici/limine) v11.4.1 depoya gömülüdür (BIOS aşamaları, `BOOTX64.EFI` ve `bios-install` aracının kaynağı). Çekirdek, `0xffffffff80000000`'da duran bir ELF64'tür. Limine protokolünün istekleriyle bellek haritasını, çerçeve tamponunu, HHDM'yi ve çekirdeğin fiziksel adresini alır. Sonra kendi sayfa tablolarını kurar: çekirdek kendi yüksek adresinde 4 KiB sayfalarla, tüm fiziksel bellek de HHDM'de 2 MiB sayfalarla eşlenir (çerçeve tamponu PAT ile write-combining). Alt yarı boş kalır, kullanıcı süreçlerinindir. GDT/TSS, `SYSCALL` ve NX/SMEP/SMAP kurulur. 8259 PIC kesmeleri doğrudan gelsin diye yerel APIC kapatılır.
 - **Ekran:** Limine ekranı grafik kipte bırakır. Uppix bu çerçeve tamponuna kendi metin konsolunu çizer: [Terminus](../runtime/TERMINUS_LISANS.txt) 8x16 yazı tipi (Türkçe karakterler dahil), ANSI renkleri, kutu çizgileri, kaydırma ve alt çizgi imleç. Multiboot ile açılınca VGA metin ekranı kullanılır.
 - **Donanım:** Limine/Multiboot bellek haritası, CMOS saati (dosya zamanları Unix saniyesidir), CPUID, ACPI ile kapatma, 8042 ile yeniden başlatma.
+
+## Kullanıcı kipi (ring 3) ve Linux sistem çağrıları
+
+```text
+root@uppix:~# merhaba bir iki
+Merhaba, ring 3! Linux sistem çağrılarıyla konuşuyorum.
+argc: 3
+...
+root@uppix:~# cokme; echo $?
+cokme: boş göstericiye yazılıyor...
+Bölümleme hatası (SIGSEGV): komut 0x0000000000401161, adres 0x0000000000000000
+139
+root@uppix:~# fbdemo
+fb: 1280x800, 32 bpp, satır 5120 bayt, uppixfb
+fbdemo: çizildi (sağ üst köşe)
+```
+
+Kabuk, çalıştırılabilir bir ELF dosyasını (`/usr/bin`'de ya da yol vererek) ayrı bir adres alanında, ring 3'te çalıştırır. Program yalnızca sistem çağrılarıyla konuşur; çekirdeği bozamaz. Bir istisna (boş gösterici, geçersiz komut, sıfıra bölme) yalnızca o süreci Linux'taki sinyaller gibi sonlandırır: çıkış kodu 128 + sinyaldir, kabuk çalışmaya devam eder.
+
+**Sistem çağrıları:** Numaralar, bayraklar, errno değerleri ve yapı düzenleri Linux x86_64'le aynıdır. Çağrı `syscall` komutuyla yapılır: rax numara; rdi, rsi, rdx, r10, r8, r9 argüman; hata dönüşü `-errno`.
+
+| No | Çağrı | Uppix'te |
+|---|---|---|
+| 0 | `read` | Dosya (VFS), terminal (kanonik satır: yankı, geri silme, Ctrl-D ile EOF, Ctrl-C ile SIGINT) ya da kabuktan gelen girdi (boru, `<`) |
+| 1 | `write` | Dosya (ortaya yazma ve sonun ötesine sıfır doldurma dahil), stdout (borulara ve `>`'a yakalanır), stderr (doğrudan terminal) |
+| 2 | `open` | `O_RDONLY/WRONLY/RDWR`, `O_CREAT`, `O_EXCL`, `O_TRUNC`, `O_APPEND`, `O_DIRECTORY`; `/dev/null`, `/dev/tty`, `/dev/fb0` |
+| 3 | `close` | |
+| 4, 5 (ve 6) | `stat`, `fstat` (`lstat`) | 144 baytlık `struct stat`: tür ve izin bitleri, boyut, blok sayısı, zamanlar |
+| 8 | `lseek` | `SEEK_SET/CUR/END`; terminalde ve boruda `ESPIPE` |
+| 9 | `mmap` | Anonim, dosyadan (`MAP_PRIVATE` kopyası), `MAP_FIXED`; `/dev/fb0` `MAP_SHARED` ile çerçeve tamponunu doğrudan adres alanına eşler |
+| 11 | `munmap` | Sayfaları ve çerçevelerini bırakır |
+| 12 | `brk` | Yığını büyütür/küçültür; başarısızsa eski sınırı döndürür |
+| 16 | `ioctl` | `TIOCGWINSZ` (terminal boyutu), `TCGETS` (`isatty`), `FBIOGET_VSCREENINFO`, `FBIOGET_FSCREENINFO` |
+| 35 | `nanosleep` | Diğer görevlere sıra verir; ön planda Ctrl-C ile kesilir |
+| 60 (ve 231) | `exit` (`exit_group`) | |
+| 257 | `openat` | Yalnızca `AT_FDCWD` (libc'lerin `open()` karşılığı) |
+
+Desteklenmeyen bir çağrı `-ENOSYS` döndürür ve `dmesg`'e bir kez yazılır.
+
+**Uyumluluk testi:** [`kullanici/sctest.c`](kullanici/sctest.c) bu çağrıların hepsini ve hata yollarını sınar; çıktısında adres, inode ya da zaman yoktur. QEMU testi aynı ikiliyi Uppix'te ve gerçek Linux'ta çalıştırıp çıktıları `diff` ile karşılaştırır. 58 satırın hepsi aynıdır.
+
+**Programlar** ([`kullanici/`](kullanici)): [`linux.h`](kullanici/linux.h) libc'siz ortamdır (`_start`, sistem çağrısı sarmalayıcıları, Linux yapıları). [`disk_yap.sh`](disk_yap.sh) her C dosyasını derleyip kökte `/usr/bin`'e koyar.
+
+| Program | Ne yapar |
+|---|---|
+| `merhaba` | argv ve ortamı yazar; `--cik` ile 7 döner |
+| `sctest` | 12 sistem çağrısının uyumluluk testi |
+| `ekran` | Terminal boyutu (`TIOCGWINSZ`) ve stdin terminal mi (`TCGETS`) |
+| `ucat` | stdin'i ya da dosyaları kopyalar (`cat` gibi) |
+| `fbdemo` | `/dev/fb0`'ı açar, ioctl ile ekranı öğrenir, `mmap` ile eşleyip doğrudan piksel çizer |
+| `cokme` | Boş göstericiye yazar: yalnızca süreç sonlanır (SIGSEGV, 139) |
+| `dongu` | Sistem çağrısı yapmayan sonsuz döngü: zaman dilimiyle kesilir, Ctrl-C ya da `kill` ile durur |
+
+Kendi programınızı eklemek için `kullanici/` altına bir `.c` dosyası koyun (`#include "linux.h"`, `int main(int argc, char** argv, char** envp)`). İmaj zaten varsa sonraki derleme `/usr/bin`'deki programları günceller. Aynı ikili Linux'ta da çalışır:
+
+```bash
+gcc -static -nostdlib -fno-pie -no-pie -ffreestanding -O2 -o merhaba src/os/kullanici/merhaba.c
+```
+
+**Mimari:**
+- **Bellek düzeni:** Çekirdek tamamen üst yarıdadır: görüntü `0xffffffff80000000`'da, tüm fiziksel bellek HHDM'de. Alt yarı süreçlerindir ve düzen Linux'takiyle aynıdır:
+  - ELF bölümleri `p_vaddr`'da (yorumlayıcısız `ET_DYN` için `0x555555554000` + `p_vaddr`);
+  - `brk` yığını son bölümün ardından;
+  - `mmap` bölgeleri `0x7f0000000000`'dan aşağı doğru;
+  - 1 MiB yığın `0x7ffffffff000`'a kadar;
+  - `0x10000` altı hiç eşlenmez.
+- **Adres alanları:** Her sürecin kendi PML4'ü vardır; çekirdek yarısı paylaşılır ve kullanıcıya kapalıdır. Kod sayfaları salt okunurdur, veri ve yığın NX'tir. İşlemci destekliyorsa SMEP ve SMAP açılır. Kullanıcı sayfaları çekirdek yığınından ayrı bir fiziksel çerçeve havuzundan gelir.
+- **İlk yığın:** SysV ABI'ye göre `argc`, `argv`, `envp` ve auxv (`AT_PHDR`, `AT_ENTRY`, `AT_PAGESZ`, `AT_RANDOM`, `AT_EXECFN`…) kurulur, yani libc başlangıç kodları da çalışabilir.
+- **Giriş ve geçiş:** Sistem çağrıları `SYSCALL`/`SYSRET` ile gelir. GDT'de çekirdek ve kullanıcı segmentleri ve bir TSS vardır. Görev geçişi CR3'ü ve `TSS.rsp0`'ı değiştirir.
+- **Zamanlama:** Çekirdek kodu işbirlikçidir; ring 3 kodu ise zamanlayıcıyla kesilir ve 10 ms'lik dilimi dolunca sırasını verir. Bu yüzden `dongu &` çalışırken kabuk yanıt vermeye devam eder.
+- **Mekanizma ve politika:** Mekanizma C'dedir ([`upp_kullanici.c`](../runtime/upp_kullanici.c)): GDT/TSS, SYSCALL girişi, sayfa tabloları, kullanıcı belleğine izin denetimli kopyalama. Politika u++'tadır ([`surec.upp`](kaynak/surec.upp), [`sistem_cagrisi.upp`](kaynak/sistem_cagrisi.upp)): süreç tablosu, dosya tanımlayıcıları, ELF yükleme, mmap yerleşimi ve çağrıların anlamı.
+
+Kullanıcı kipi yalnızca Limine ile açılışta vardır. Multiboot'ta çekirdek alt yarıyı (ilk 1 GiB) birebir kullandığından ELF çalıştırmak açık bir hatayla reddedilir.
 
 ### Komutlar
 
@@ -92,6 +167,9 @@ root@uppix:~# umount /mnt/sdb1
 | `kaynak/satir.upp` | Satır düzenleyici, geçmiş, Tab tamamlama, Ctrl-C ile kesme |
 | `kaynak/cikti.upp` | Görev başına çıktı yakalama (boru ve yönlendirme için) |
 | `kaynak/komut_*.upp` | Komutlar; her biri `fonk(liste[metin] a, metin girdi) -> sayi` (`komut_oyun.upp`: `snake`) |
+| `kaynak/surec.upp` | Kullanıcı süreçleri: süreç tablosu, dosya tanımlayıcıları, ELF64 yükleyici, SysV ilk yığını, kabuktan çalıştırma |
+| `kaynak/sistem_cagrisi.upp` | Linux x86_64 sistem çağrıları (read, write, open, close, stat, fstat, lseek, mmap, munmap, brk, ioctl, nanosleep, exit) |
+| `kullanici/*.c` | Ring 3 programları (libc'siz statik Linux ELF); `linux.h` ortak başlık |
 | `kaynak/yardimci.upp` | Sıralama, biçimleme, joker eşleme, takvim/Unix zamanı |
 
 Her dosya sistemi sürücüsü fonksiyon değerlerinden oluşan bir `sinif Surucu`'dur: `bagla`, `yukle` (dizini önbelleğe al), `oku`, `yaz`, `olustur`, `sil`, `tasi`, `oznitelik`, `alan`. VFS hangi düğümün hangi bağlamaya ait olduğunu bilir ve doğru sürücüyü çağırır. Dizinler ilk erişimde yüklenir. Komutlar dosya sisteminden habersizdir; `cp /root/a.txt /mnt/sdc/` gibi diskler arası kopyalama aynı kodla çalışır.
@@ -105,6 +183,7 @@ Her dosya sistemi sürücüsü fonksiyon değerlerinden oluşan bir `sinif Suruc
 | `tests/cekirdek/08_uppix.upp` | Disksiz açılış (RAM kök); 25 kabuk komutu |
 | `tests/cekirdek/09_uppix_disk.upp` | İmajları sıfırdan üretir, üç dosya sistemine yazar, sonra Linux araçlarıyla denetler: `e2fsck -fn`, `debugfs`, `fsck.fat`, `mtype`, `fsck.exfat` |
 | `tests/cekirdek/10_uppix_kalici.upp` | Aynı imajlarla ikinci açılış: yazılanlar yerinde mi |
+| `tests/cekirdek/13_uppix_kullanici.upp` | Ring 3: argv/çıkış kodu, `sctest`, terminal ioctl'u, boru, SIGSEGV, zaman dilimiyle kesilen döngü ve `kill`; `sctest`'in çıktısı gerçek Linux'takiyle `diff` ile karşılaştırılır |
 | `tests/cekirdek/12_uppix_snake.upp` | `snake -o -n 200` otopilotu beklemeden oynatır; rekor dosyası, boru/yönlendirmede reddetme ve seçenek hataları |
 | `tests/cekirdek/11_uppix_limine.upp` | `uppix.img`'i üretir ve Limine ile 64-bit açar; `/boot` ve kökü yazar, sonra iki bölümü `e2fsck`, `fsck.fat` ve `mtype` ile denetler |
 
@@ -113,6 +192,7 @@ Her dosya sistemi sürücüsü fonksiyon değerlerinden oluşan bir `sinif Suruc
 - ext4 yazımı günlük (journal) kullanmaz. Dosya en çok 4 extent'te tutulur, yani boş alan çok parçalıysa büyük dosya yazılamaz. htree ile dizinlenmiş büyük dizinlere ekleme yapılmaz. Grup bitmap'i başlatılmamış (`*_UNINIT`) gruplar ayırmada atlanır.
 - FAT12/FAT16 ve 512 bayt dışı sektör boyutları desteklenmez. Önbellek yoktur: her işlem diske gider.
 - Disk sürücüsü ATA PIO'dur; AHCI/NVMe ve virtio-blk sırada.
-- Çoklu görev işbirlikçidir. Kullanıcı modu (ring 3), sistem çağrıları ve ELF programları henüz yok; komutlar çekirdek içinde çalışır.
+- Çekirdek içindeki kod işbirlikçidir; yalnızca ring 3 kodu kesilir. Yerleşik komutlar çekirdek içinde çalışır.
+- Kullanıcı süreçleri tek iş parçacıklıdır. `fork`/`execve`, sinyal işleyicileri, dinamik bağlama (`PT_INTERP`) ve iş parçacığı yerel alanı (`arch_prctl`) henüz yok. Bu yüzden glibc/musl ile derlenmiş programlar sıradaki adımdır; şimdilik `-nostdlib` programlar çalışır. Yığın 1 MiB'dır ve sayfa hatasıyla büyümez.
 - Çerçeve tamponu 4 GiB'nin altında ve RGB olmalı; değilse ekran çıktısı yalnızca seri porta gider. SMP yok: yalnızca açılış işlemcisi çalışır.
 - `uppc` henüz Uppix içinde çalışmıyor, çünkü C çıktısını derleyecek bir derleyici gerekiyor.

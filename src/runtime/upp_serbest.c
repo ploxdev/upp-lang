@@ -26,14 +26,29 @@ static long long upp_cekirdek_port_oku8(long long p) { return _upp_inb((uint16_t
 static long long upp_cekirdek_port_oku16(long long p) { return _upp_inw((uint16_t)p); }
 static long long upp_cekirdek_port_oku32(long long p) { return _upp_inl((uint16_t)p); }
 
-static void upp_cekirdek_bellek_yaz8(long long a, long long v) { *(volatile uint8_t*)(uintptr_t)a = (uint8_t)v; }
-static void upp_cekirdek_bellek_yaz16(long long a, long long v) { *(volatile uint16_t*)(uintptr_t)a = (uint16_t)v; }
-static void upp_cekirdek_bellek_yaz32(long long a, long long v) { *(volatile uint32_t*)(uintptr_t)a = (uint32_t)v; }
-static void upp_cekirdek_bellek_yaz64(long long a, long long v) { *(volatile uint64_t*)(uintptr_t)a = (uint64_t)v; }
-static long long upp_cekirdek_bellek_oku8(long long a) { return *(volatile uint8_t*)(uintptr_t)a; }
-static long long upp_cekirdek_bellek_oku16(long long a) { return *(volatile uint16_t*)(uintptr_t)a; }
-static long long upp_cekirdek_bellek_oku32(long long a) { return *(volatile uint32_t*)(uintptr_t)a; }
-static long long upp_cekirdek_bellek_oku64(long long a) { return (long long)*(volatile uint64_t*)(uintptr_t)a; }
+/* Limine'de tüm fiziksel bellek bu ofsette (HHDM) eşlenir, alt yarı süreçlerindir;
+ * Multiboot'ta 0'dır (ilk 1 GiB birebir). */
+static uint64_t _upp_hhdm = 0;
+static uint64_t _upp_hhdm_son = 0; /* HHDM'nin kapsadığı fiziksel üst sınır */
+
+/* upp.cekirdek.bellek_*: adres fizikseldir (MMIO, VGA); zaten üst yarıdaki bir
+ * çekirdek adresi olduğu gibi kullanılır. */
+static inline volatile void* _upp_fiz_sanal(long long a) {
+    uint64_t u = (uint64_t)a;
+    if (u >= 0xffff800000000000ull) {
+        return (volatile void*)(uintptr_t)u;
+    }
+    return (volatile void*)(uintptr_t)(u + _upp_hhdm);
+}
+
+static void upp_cekirdek_bellek_yaz8(long long a, long long v) { *(volatile uint8_t*)_upp_fiz_sanal(a) = (uint8_t)v; }
+static void upp_cekirdek_bellek_yaz16(long long a, long long v) { *(volatile uint16_t*)_upp_fiz_sanal(a) = (uint16_t)v; }
+static void upp_cekirdek_bellek_yaz32(long long a, long long v) { *(volatile uint32_t*)_upp_fiz_sanal(a) = (uint32_t)v; }
+static void upp_cekirdek_bellek_yaz64(long long a, long long v) { *(volatile uint64_t*)_upp_fiz_sanal(a) = (uint64_t)v; }
+static long long upp_cekirdek_bellek_oku8(long long a) { return *(volatile uint8_t*)_upp_fiz_sanal(a); }
+static long long upp_cekirdek_bellek_oku16(long long a) { return *(volatile uint16_t*)_upp_fiz_sanal(a); }
+static long long upp_cekirdek_bellek_oku32(long long a) { return *(volatile uint32_t*)_upp_fiz_sanal(a); }
+static long long upp_cekirdek_bellek_oku64(long long a) { return (long long)*(volatile uint64_t*)_upp_fiz_sanal(a); }
 
 static void upp_cekirdek_dur(void) { __asm__ volatile("hlt"); }
 static void upp_cekirdek_kesme_kapat(void) { __asm__ volatile("cli"); }
@@ -85,7 +100,9 @@ static unsigned char _upp_cp437(long long cp);
  * hücre modelini (kod noktası + VGA renk özniteliği) kullanır; ANSI
  * çözümleyici ve imleç ortaktır. Seri terminal baytları kendisi yorumlar.
  * ===================================================================== */
-#define _UPP_VGA ((volatile uint16_t*)(uintptr_t)0xB8000)
+/* VGA metin belleği: Multiboot'ta birebir, Limine'de HHDM üzerinden (bkz. _upp_limine_kur). */
+static volatile uint16_t* _upp_vga_taban = (volatile uint16_t*)(uintptr_t)0xB8000;
+#define _UPP_VGA _upp_vga_taban
 #define _UPP_FB_HUCRE_MAX 32768
 
 /* Terminus Font 8x16 (Lat15: Latin-1/5/9, Türkçe dahil), console-setup Lat15-Terminus16.psf.
@@ -535,17 +552,33 @@ static void _upp_ekr_hucre(int x, int y, long long cp, uint8_t renk) {
 static void _upp_ekr_kaydir(void) {
     int i;
     if (_upp_fb_aktif) {
-        size_t satir = (size_t)16 * _upp_fb_adim;
-        memmove((void*)_upp_fb, (const void*)(_upp_fb + satir), satir * (size_t)(_upp_ekr_y - 1));
-        memmove(_upp_fb_hucreler, _upp_fb_hucreler + _upp_ekr_g, sizeof(uint32_t) * (size_t)_upp_ekr_g * (size_t)(_upp_ekr_y - 1));
-        if (_upp_fb_imlec_y > 0) {
-            _upp_fb_imlec_y--;
-        } else {
-            _upp_fb_imlec_y = -1;
+        /* Çerçeve tamponundan asla okunmaz: aygıt belleğinden okumak (önbelleksiz ya
+         * da write-combining) çok yavaştır ve her satırda tüm ekranı taşımak
+         * megabaytlarca okuma demektir. Hücre tablosu kaydırılır, yalnızca içeriği
+         * değişen hücreler yeniden çizilir (boş alanlar ve tekrarlar atlanır). */
+        int x, y, g = _upp_ekr_g;
+        uint32_t bos = (uint32_t)' ' | (0x07u << 24);
+        if (_upp_fb_imlec_x >= 0 && _upp_fb_imlec_y >= 0 && _upp_fb_imlec_x < g && _upp_fb_imlec_y < _upp_ekr_y) {
+            _upp_fb_ciz(_upp_fb_imlec_x, _upp_fb_imlec_y, _upp_fb_hucreler[_upp_fb_imlec_y * g + _upp_fb_imlec_x], 0);
         }
-        for (i = 0; i < _upp_ekr_g; i++) {
-            _upp_ekr_hucre(i, _upp_ekr_y - 1, ' ', 0x07);
+        _upp_fb_imlec_x = -1;
+        _upp_fb_imlec_y = -1;
+        for (y = 0; y < _upp_ekr_y - 1; y++) {
+            for (x = 0; x < g; x++) {
+                uint32_t yeni = _upp_fb_hucreler[(y + 1) * g + x];
+                if (_upp_fb_hucreler[y * g + x] != yeni) {
+                    _upp_fb_hucreler[y * g + x] = yeni;
+                    _upp_fb_ciz(x, y, yeni, 0);
+                }
+            }
         }
+        for (x = 0; x < g; x++) {
+            if (_upp_fb_hucreler[(_upp_ekr_y - 1) * g + x] != bos) {
+                _upp_fb_hucreler[(_upp_ekr_y - 1) * g + x] = bos;
+                _upp_fb_ciz(x, _upp_ekr_y - 1, bos, 0);
+            }
+        }
+        (void)i;
     } else {
         for (i = 0; i < _upp_ekr_g * (_upp_ekr_y - 1); i++) {
             _UPP_VGA[i] = _UPP_VGA[i + _upp_ekr_g];
@@ -987,6 +1020,12 @@ __asm__(
     "    and $-16, %rsp\n"
     "    sub $512, %rsp\n"
     "    fxsave (%rsp)\n"
+    /* Kesilen kodun (ör. ring 3) MXCSR/x87 ayarı işleyiciye sızmasın: varsayılan. */
+    "    sub $16, %rsp\n"
+    "    movl $0x1F80, (%rsp)\n"
+    "    ldmxcsr (%rsp)\n"
+    "    add $16, %rsp\n"
+    "    fninit\n"
     "    call _upp_kesme_isle\n"
     "    fxrstor (%rsp)\n"
     "    mov %rbx, %rsp\n"
@@ -1151,7 +1190,14 @@ static void _upp_mk_hex(char** s, uint64_t v) {
     _upp_m_ekle_n(s, b, 18u, 1);
 }
 
+/* upp_kullanici.c: ring 3'ten gelen kesme ve istisnalar */
+static void _upp_kul_istisna(UppKesmeCerceve* c);
+static void _upp_kul_kesme(UppKesmeCerceve* c);
+
 __attribute__((used)) void _upp_kesme_isle(UppKesmeCerceve* c) {
+    if (c->vektor < 32 && (c->cs & 3u) == 3u) {
+        _upp_kul_istisna(c); /* yalnızca süreci sonlandırır; dönmez */
+    }
     if (c->vektor < 32) {
         char* m = upp_mk_bas();
         const char* ad = _upp_istisna_adi(c->vektor);
@@ -1181,6 +1227,9 @@ __attribute__((used)) void _upp_kesme_isle(UppKesmeCerceve* c) {
     }
     if (c->vektor >= 32) {
         _upp_outb(0x20, 0x20);
+    }
+    if (c->vektor >= 32 && (c->cs & 3u) == 3u) {
+        _upp_kul_kesme(c); /* Ctrl-C, seri girdi, zaman dilimi (EOI'dan sonra: sıra verebilir) */
     }
 }
 
@@ -1293,9 +1342,13 @@ static void _upp_bellek_kur(void) {
  * Limine çekirdeği 64-bit long mode'da, higher-half (0xffffffff80000000)
  * adreste başlatır. İstekler önyükleyici asm'sinde (.limine_istekler);
  * _upp_limine_kur() yanıtları HHDM üzerinden okuyup kopyalar, sonra kendi
- * sayfa tablolarımıza geçer: ilk 4 GiB birebir (çerçeve tamponu önbelleksiz)
- * + çekirdek görüntüsü kendi sanal adresinde. Limine yerel APIC'i açık ama
- * LINT0'ı maskeli bırakır; APIC kapatılınca 8259 PIC kesmeleri yeniden gelir.
+ * sayfa tablolarımıza geçer. Çekirdek tamamen üst yarıdadır:
+ *   - görüntü kendi sanal adresinde (0xffffffff80000000, 4 KiB sayfalar);
+ *   - tüm fiziksel bellek HHDM'de (Limine'in ofseti, 2 MiB sayfalar;
+ *     çerçeve tamponunun sayfaları önbelleksiz).
+ * Alt yarı (0..0x00007fffffffffff) boştur: kullanıcı süreçlerinindir
+ * (bkz. upp_kullanici.c). Limine yerel APIC'i açık ama LINT0'ı maskeli
+ * bırakır; APIC kapatılınca 8259 PIC kesmeleri yeniden gelir.
  * ===================================================================== */
 extern volatile uint64_t _upp_limine_surum[3] __attribute__((weak));
 extern volatile uint64_t _upp_limine_hhdm[6] __attribute__((weak));
@@ -1313,10 +1366,15 @@ static char _upp_lm_ad[96];
 static uint64_t _upp_lm_surum = 0;
 static char _upp_ekran_bilgi[64];
 
-#define _UPP_ST_HAVUZ 64
+#define _UPP_ST_HAVUZ 96
 static uint64_t _upp_st_havuz[_UPP_ST_HAVUZ][512] __attribute__((aligned(4096)));
 static int _upp_st_n = 0;
 static uint64_t _upp_st_fiz = 0, _upp_st_sanal = 0;
+/* Çekirdeğin PML4'ü: süreçlerin PML4'leri üst yarı girdilerini buradan kopyalar. */
+static uint64_t* _upp_cekirdek_pml4 = NULL;
+static uint64_t _upp_cekirdek_cr3 = 0;
+/* Çerçeve tamponunun fiziksel adresi/boyu (kullanıcıya mmap için). */
+static uint64_t _upp_fb_fiz = 0, _upp_fb_boy = 0;
 
 static uint64_t _upp_st_fizik(const void* p) {
     return (uint64_t)(uintptr_t)p - _upp_st_sanal + _upp_st_fiz;
@@ -1382,7 +1440,7 @@ __attribute__((used)) void _upp_limine_kur(void) {
     uint32_t fb_gen = 0, fb_yuk = 0, fb_adim = 0, fb_bpp = 0;
     uint8_t rk = 0, rs = 0, gk = 0, gs = 0, bk = 0, bs = 0;
     uint64_t* pml4;
-    uint64_t v, son;
+    uint64_t v, son, ust;
     unsigned i, j;
     if (&_upp_limine_surum == NULL) {
         return;
@@ -1438,20 +1496,49 @@ __attribute__((used)) void _upp_limine_kur(void) {
             }
         }
     }
-    if (!_upp_st_sanal) {
+    if (!_upp_st_sanal || !hhdm || (hhdm & 0x3FFFFFFFull) != 0) {
         return;
+    }
+    /* HHDM'nin kapsayacağı fiziksel üst sınır: RAM, ACPI ve çerçeve tamponu
+     * dahil haritadaki en yüksek adres (en az 4 GiB: MMIO; en çok 64 GiB). */
+    ust = 0x100000000ull;
+    for (i = 0; i < (unsigned)_upp_lm_n; i++) {
+        uint64_t t = _upp_lm_tur[i];
+        uint64_t e = _upp_lm_bas[i] + _upp_lm_uz[i];
+        if ((t == 0 || t == 2 || t == 3 || t == 5 || t == 6 || t == 7) && e > ust) {
+            ust = e;
+        }
+    }
+    if (fb_boy && fb_fiz + fb_boy > ust) {
+        ust = fb_fiz + fb_boy;
+    }
+    ust = (ust + 0x3FFFFFFFull) & ~0x3FFFFFFFull;
+    if (ust > (64ull << 30)) {
+        ust = 64ull << 30;
+    }
+    /* PAT: PA1 (PWT=1, PCD=0) write-combining olur; çerçeve tamponu bununla
+     * eşlenir. PAT yoksa PWT tek başına write-through'dur. */
+    {
+        uint32_t a, b, c, d;
+        __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1u), "c"(0u));
+        if (d & (1u << 16)) {
+            uint64_t pat = 0x0007040600070106ull;
+            __asm__ volatile("wbinvd" ::: "memory");
+            __asm__ volatile("wrmsr" : : "a"((uint32_t)pat), "d"((uint32_t)(pat >> 32)), "c"(0x277u));
+        }
     }
     /* Kendi sayfa tablolarımız */
     pml4 = _upp_st_yeni();
     {
-        uint64_t* pdpt = _upp_st_alt(pml4, 0);
-        for (i = 0; i < 4; i++) {
-            uint64_t* pd = _upp_st_alt(pdpt, i);
+        uint64_t* pdpt = _upp_st_alt(pml4, (unsigned)((hhdm >> 39) & 511u));
+        unsigned pdpt_ilk = (unsigned)((hhdm >> 30) & 511u);
+        for (i = 0; (uint64_t)i < (ust >> 30) && pdpt_ilk + i < 512u; i++) {
+            uint64_t* pd = _upp_st_alt(pdpt, pdpt_ilk + i);
             for (j = 0; j < 512; j++) {
                 uint64_t fiz = ((uint64_t)i << 30) | ((uint64_t)j << 21);
-                uint64_t bayrak = 0x83;
+                uint64_t bayrak = 0x83; /* P | RW | 2 MiB; kullanıcıya kapalı */
                 if (fb_boy && fiz + 0x200000ull > fb_fiz && fiz < fb_fiz + fb_boy) {
-                    bayrak |= 0x18; /* PWT|PCD: önbelleksiz */
+                    bayrak |= 0x08; /* PWT → PAT PA1: write-combining */
                 }
                 pd[j] = fiz | bayrak;
             }
@@ -1466,6 +1553,11 @@ __attribute__((used)) void _upp_limine_kur(void) {
         pt[(v >> 12) & 511u] = (v - _upp_st_sanal + _upp_st_fiz) | 3u;
     }
     __asm__ volatile("mov %0, %%cr3" : : "r"(_upp_st_fizik(pml4)) : "memory");
+    _upp_cekirdek_pml4 = pml4;
+    _upp_cekirdek_cr3 = _upp_st_fizik(pml4);
+    _upp_hhdm = hhdm;
+    _upp_hhdm_son = ust;
+    _upp_vga_taban = (volatile uint16_t*)(uintptr_t)(hhdm + 0xB8000ull);
     /* Yerel APIC'i kapat: 8259 PIC kesmeleri doğrudan INTR'ye gelir. */
     {
         uint32_t lo, hi;
@@ -1473,8 +1565,10 @@ __attribute__((used)) void _upp_limine_kur(void) {
         lo &= ~0x800u;
         __asm__ volatile("wrmsr" : : "a"(lo), "d"(hi), "c"(0x1Bu));
     }
-    if (fb_bpp && fb_fiz + fb_boy <= 0x100000000ull) {
-        _upp_fb_kur(fb_fiz, fb_gen, fb_yuk, fb_adim, fb_bpp, rk, rs, gk, gs, bk, bs);
+    if (fb_bpp && fb_fiz + fb_boy <= ust) {
+        _upp_fb_fiz = fb_fiz;
+        _upp_fb_boy = fb_boy;
+        _upp_fb_kur(hhdm + fb_fiz, fb_gen, fb_yuk, fb_adim, fb_bpp, rk, rs, gk, gs, bk, bs);
         _upp_kopyala_ad(_upp_ekran_bilgi, sizeof(_upp_ekran_bilgi), "çerçeve tamponu ");
         _upp_sayi_ad(_upp_ekran_bilgi, sizeof(_upp_ekran_bilgi), fb_gen);
         _upp_ekle_ad(_upp_ekran_bilgi, sizeof(_upp_ekran_bilgi), "x");
@@ -1489,10 +1583,76 @@ __attribute__((used)) void _upp_limine_kur(void) {
     }
 }
 
-/* Limine bellek haritasından yığın: 4 GiB birebir eşleme içindeki en büyük kullanılabilir bölge. */
-static int _upp_limine_bellek(void) {
-    uint64_t en_bas = 0, en_son = 0;
+/* =====================================================================
+ * Fiziksel çerçeve (4 KiB sayfa) ayırıcı — yalnızca Limine (HHDM) kipinde.
+ * Kullanıcı süreçlerinin sayfaları ve sayfa tabloları buradan gelir; çekirdek
+ * yığını (heap) ayrı bir bölgededir, böylece kullanıcı belleği çekirdeği
+ * aç bırakamaz. Bölgeler sırayla tüketilir; bırakılan çerçeveler, ilk 8
+ * baytında bir sonrakinin fiziksel adresini tutan tek bağlı listeye girer.
+ * ===================================================================== */
+#define _UPP_CER_BOLGE_N 32
+static uint64_t _upp_cer_bas[_UPP_CER_BOLGE_N], _upp_cer_son[_UPP_CER_BOLGE_N];
+static int _upp_cer_bolge_n = 0;
+static uint64_t _upp_cer_serbest = 0;
+static uint64_t _upp_cer_toplam = 0, _upp_cer_kullanilan = 0;
+
+static void _upp_cer_bolge_ekle(uint64_t bas, uint64_t son) {
+    bas = (bas + 0xFFFull) & ~0xFFFull;
+    son &= ~0xFFFull;
+    if (bas < 0x100000ull) {
+        bas = 0x100000ull;
+    }
+    if (son > _upp_hhdm_son) {
+        son = _upp_hhdm_son;
+    }
+    if (son <= bas || _upp_cer_bolge_n >= _UPP_CER_BOLGE_N) {
+        return;
+    }
+    _upp_cer_bas[_upp_cer_bolge_n] = bas;
+    _upp_cer_son[_upp_cer_bolge_n] = son;
+    _upp_cer_bolge_n++;
+    _upp_cer_toplam += son - bas;
+}
+
+/* Sıfırlanmış bir çerçevenin fiziksel adresi; bellek bittiyse 0. */
+static uint64_t _upp_cer_ayir(void) {
+    uint64_t f = 0;
     int i;
+    if (_upp_cer_serbest) {
+        f = _upp_cer_serbest;
+        _upp_cer_serbest = *(volatile uint64_t*)(uintptr_t)(f + _upp_hhdm);
+    } else {
+        for (i = 0; i < _upp_cer_bolge_n; i++) {
+            if (_upp_cer_bas[i] < _upp_cer_son[i]) {
+                f = _upp_cer_bas[i];
+                _upp_cer_bas[i] += 4096u;
+                break;
+            }
+        }
+    }
+    if (!f) {
+        return 0;
+    }
+    memset((void*)(uintptr_t)(f + _upp_hhdm), 0, 4096);
+    _upp_cer_kullanilan += 4096u;
+    return f;
+}
+
+static void _upp_cer_birak(uint64_t f) {
+    if (!f) {
+        return;
+    }
+    *(volatile uint64_t*)(uintptr_t)(f + _upp_hhdm) = _upp_cer_serbest;
+    _upp_cer_serbest = f;
+    _upp_cer_kullanilan -= 4096u;
+}
+
+/* Limine bellek haritası: en büyük kullanılabilir bölgenin dörtte üçü çekirdek
+ * yığını, dörtte biri ve diğer kullanılabilir/geri kazanılabilir bölgeler
+ * kullanıcı çerçeveleri olur. İkisi de HHDM üzerinden erişilir. */
+static int _upp_limine_bellek(void) {
+    uint64_t en_bas = 0, en_son = 0, cer;
+    int i, en = -1;
     if (!_upp_limine || _upp_lm_n == 0) {
         return 0;
     }
@@ -1506,14 +1666,26 @@ static int _upp_limine_bellek(void) {
             continue;
         }
         if (s < 0x100000ull) s = 0x100000ull;
-        if (e > 0x100000000ull) e = 0x100000000ull;
+        if (e > _upp_hhdm_son) e = _upp_hhdm_son;
         if (e > s && e - s > en_son - en_bas) {
             en_bas = s;
             en_son = e;
+            en = i;
         }
     }
-    if (!_upp_yigin_bas && en_son - en_bas >= 0x100000ull) {
-        _upp_yigin_bolge((void*)(uintptr_t)en_bas, (size_t)(en_son - en_bas));
+    if (_upp_yigin_bas || en_son - en_bas < 0x100000ull) {
+        return 1;
+    }
+    cer = ((en_son - en_bas) / 4u) & ~0xFFFull;
+    if (en_son - en_bas < (16ull << 20)) {
+        cer = 0;
+    }
+    _upp_yigin_bolge((void*)(uintptr_t)(en_bas + _upp_hhdm), (size_t)(en_son - en_bas - cer));
+    _upp_cer_bolge_ekle(en_son - cer, en_son);
+    for (i = 0; i < _upp_lm_n; i++) {
+        if (i != en && (_upp_lm_tur[i] == 0 || _upp_lm_tur[i] == 5)) {
+            _upp_cer_bolge_ekle(_upp_lm_bas[i], _upp_lm_bas[i] + _upp_lm_uz[i]);
+        }
     }
     return 1;
 }
@@ -1548,16 +1720,24 @@ static long long upp_cekirdek_yigin_kullanilan(void) {
     return (long long)_upp_yigin_dolu;
 }
 
-/* Çekirdek girişinde, upp_ana()'dan önce. */
+static void _upp_kul_kur(void); /* upp_kullanici.c */
+
+/* Çekirdek girişinde, upp_ana()'dan önce. Limine kipinde kullanıcı kipi
+ * (GDT/TSS, SYSCALL) de kurulur. */
 static void _upp_cekirdek_hazirla(void) {
     _upp_bellek_kur();
     upp_cekirdek_kesmeler_kur();
+    _upp_kul_kur();
 }
 
 /* =====================================================================
- * Görevler: işbirlikçi çoklu görev. Geçiş yalnızca upp.uyut,
- * upp.cekirdek.sira_ver ve girdi beklerken olur; runtime'ın paylaşılan
+ * Görevler: işbirlikçi çoklu görev. Çekirdek kodu yalnızca upp.uyut,
+ * upp.cekirdek.sira_ver ve girdi beklerken sıra verir; runtime'ın paylaşılan
  * durumu bu yüzden kilitsiz güvendedir. Görev 1 çekirdeğin ana akışıdır.
+ * Bir görev kullanıcı süreci (ring 3) çalıştırıyorsa ka != 0'dır: geçiş
+ * CR3'ü ve TSS.rsp0'ı ona göre ayarlar; ring 3 kodu zamanlayıcıyla kesilip
+ * sırasını verebilir (bkz. upp_kullanici.c). Geçiş RFLAGS'ı da taşır:
+ * kesme içinden sıra veren görev IF=0 ile, diğerleri IF=1 ile sürer.
  * ===================================================================== */
 #define _UPP_GOREV_N 32
 #define _UPP_GOREV_YIGIN (64u * 1024u)
@@ -1576,6 +1756,14 @@ typedef struct {
     uint64_t baslama;
     void (*f)(long long);
     long long arg;
+    /* kullanıcı süreci (ring 3) */
+    uint64_t ka;          /* adres alanı: PML4'ün fiziksel adresi; 0 = çekirdek görevi */
+    uint64_t kul_kayit;   /* ring 3'e girerken kaydedilen çekirdek yığını (çıkış, TSS.rsp0) */
+    uint64_t kul_dilim;   /* zaman diliminin başladığı tik */
+    int kul_on_plan;      /* Ctrl-C bu süreci sonlandırır */
+    int kul_cikis;        /* sistem çağrısı dönerken süreci bitir */
+    long long kul_kod;
+    char kul_hata[128];   /* son sonlandırma nedeni ("" = normal çıkış) */
 } UppGorev;
 
 static UppGorev _upp_gorev[_UPP_GOREV_N];
@@ -1587,12 +1775,18 @@ __asm__(
     ".text\n"
     ".global _upp_gorev_gec\n"
     "_upp_gorev_gec:\n"
+    "    pushfq\n"
     "    push %rbp\n    push %rbx\n    push %r12\n    push %r13\n    push %r14\n    push %r15\n"
     "    mov %rsp, (%rdi)\n"
     "    mov %rsi, %rsp\n"
     "    pop %r15\n    pop %r14\n    pop %r13\n    pop %r12\n    pop %rbx\n    pop %rbp\n"
+    "    popfq\n"
     "    ret\n");
 extern void _upp_gorev_gec(uint64_t* eski, uint64_t yeni);
+
+/* upp_kullanici.c */
+static void _upp_kul_gecis_hazirla(int k);
+static void _upp_kul_alan_sil(uint64_t ka);
 
 static void _upp_gorev_ilk(void) {
     if (_upp_gorev_kuruldu) {
@@ -1611,6 +1805,10 @@ static void _upp_gorev_temizle(void) {
     for (k = 1; k < _UPP_GOREV_N; k++) {
         UppGorev* g = &_upp_gorev[k];
         if (k != _upp_gorev_cur && g->durum == _UPP_G_BITTI) {
+            if (g->ka) {
+                _upp_kul_alan_sil(g->ka);
+                g->ka = 0;
+            }
             UPP_BIRAK(g->yigin);
             upp_metin_release(g->ad);
             g->yigin = NULL;
@@ -1642,6 +1840,7 @@ static void _upp_gecis(void) {
         if (k >= 0) {
             if (k != _upp_gorev_cur) {
                 int eski = _upp_gorev_cur;
+                _upp_kul_gecis_hazirla(k);
                 _upp_gorev_cur = k;
                 _upp_gorev_gec(&_upp_gorev[eski].rsp, _upp_gorev[k].rsp);
                 _upp_gorev_temizle();
@@ -1694,6 +1893,7 @@ static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, 
     sp = (uint64_t*)(((uintptr_t)(g->yigin + _UPP_GOREV_YIGIN)) & ~(uintptr_t)15u);
     *--sp = 0;
     *--sp = (uint64_t)(uintptr_t)_upp_gorev_giris;
+    *--sp = 0x202; /* RFLAGS: IF=1 */
     for (i = 0; i < 6; i++) {
         *--sp = 0;
     }
@@ -1704,6 +1904,11 @@ static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, 
     g->kimlik = _upp_gorev_sonraki++;
     g->baslama = _upp_tik;
     g->uyan = 0;
+    g->ka = 0;
+    g->kul_kayit = 0;
+    g->kul_on_plan = 0;
+    g->kul_cikis = 0;
+    g->kul_hata[0] = 0;
     g->durum = _UPP_G_HAZIR;
     return g->kimlik;
 }

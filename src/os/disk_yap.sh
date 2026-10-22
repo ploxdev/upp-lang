@@ -11,7 +11,11 @@
 #                        1: 64 MiB FAT32 "UPPIXBOOT" (ESP): /limine, /EFI/BOOT, /uppix.elf → Uppix'te /boot
 #                        2: 127 MiB ext4 "uppix-kok": kök (/)
 #                      Limine BIOS aşamaları MBR'ye yazılır; UEFI için BOOTX64.EFI da vardır.
-#                      İmaj zaten varsa yalnızca çekirdek güncellenir (kök içeriği korunur).
+#                      İmaj zaten varsa yalnızca çekirdek ve /usr/bin'deki kullanıcı
+#                      programları güncellenir (kök içeriği korunur).
+#
+#   Kullanıcı programları (kullanici/*.c) libc'siz statik Linux ELF olarak
+#   ÇIKTI/kullanici/ altına derlenir ve kökte /usr/bin'e konur.
 #       usb-fat32.img, usb-exfat.img yoksa oluşturulur.
 #
 # Gerekenler: mkfs.ext4 (e2fsprogs), sfdisk, mkfs.fat + mtools (dosfstools, mtools),
@@ -41,6 +45,41 @@ gerek() {
     done
 }
 
+# Kullanıcı programları: yalnızca Linux sistem çağrılarıyla konuşan statik ELF'ler
+# (aynı ikili gerçek Linux'ta da çalışır).
+kullanici_derle() {
+    KD="$CIKTI/kullanici"
+    mkdir -p "$KD"
+    if ! command -v cc >/dev/null 2>&1; then
+        echo "[disk] cc yok: kullanıcı programları derlenmedi"
+        return 0
+    fi
+    for c in "$BURA"/kullanici/*.c; do
+        [ -f "$c" ] || continue
+        cc -static -nostdlib -fno-pie -no-pie -ffreestanding -fno-builtin -fno-stack-protector \
+            -fno-asynchronous-unwind-tables -O2 -Wall -Wl,--build-id=none -Wl,-z,noexecstack \
+            -o "$KD/$(basename "$c" .c)" "$c"
+    done
+}
+
+# Var olan imajın ext4 kökünde /usr/bin'deki programları yeniler. $1 imaj, $2 bölüm ofseti (bayt).
+kullanici_guncelle() {
+    [ -d "$CIKTI/kullanici" ] || return 0
+    K=$(mktemp)
+    echo "cd /usr/bin" > "$K"
+    for p in "$CIKTI/kullanici"/*; do
+        [ -f "$p" ] || continue
+        ad=$(basename "$p")
+        echo "rm $ad" >> "$K"
+        echo "write $p $ad" >> "$K"
+        echo "set_inode_field $ad mode 0100755" >> "$K"
+        echo "set_inode_field $ad uid 0" >> "$K"
+        echo "set_inode_field $ad gid 0" >> "$K"
+    done
+    debugfs -w -f "$K" "$1?offset=$2" >/dev/null 2>&1 || echo "[disk] uyarı: /usr/bin güncellenemedi"
+    rm -f "$K"
+}
+
 # ext4 kök: $1 = imaj dosyası, $2 = boyut
 ext4_kok() {
     # Hazırlık Linux dosya sisteminde yapılır: Windows diskinde (/mnt/c) izinler korunmaz.
@@ -54,6 +93,13 @@ ext4_kok() {
     chmod 1777 "$HAZIR/tmp"
     chmod 700 "$HAZIR/root"
     chmod 755 "$HAZIR"/usr/share/ornekler/*.sh
+    if [ -d "$CIKTI/kullanici" ]; then
+        for p in "$CIKTI/kullanici"/*; do
+            [ -f "$p" ] || continue
+            cp "$p" "$HAZIR/usr/bin/"
+            chmod 755 "$HAZIR/usr/bin/$(basename "$p")"
+        done
+    fi
     if [ -n "$3" ]; then
         cp "$3" "$HAZIR/boot/"
     fi
@@ -107,6 +153,7 @@ usb_exfat() {
 # ---------------------------------------------------------------------------
 if [ -z "$CEKIRDEK" ]; then
     gerek mkfs.ext4 debugfs
+    kullanici_derle
     MB=""
     [ -f "$BURA/derleme/uppix32.elf" ] && MB="$BURA/derleme/uppix32.elf"
     ext4_kok "$CIKTI/uppix-kok.img" 64M "$MB"
@@ -121,9 +168,11 @@ fi
 LIMINE="$BURA/onyukleyici/limine"
 IMAJ="$CIKTI/uppix.img"
 gerek mcopy mmd
+kullanici_derle
 if [ -f "$IMAJ" ]; then
     mcopy -o -i "$IMAJ@@1M" "$CEKIRDEK" ::/uppix.elf
-    echo "[disk] çekirdek güncellendi: $IMAJ (FAT32 bölüm 1, /uppix.elf)"
+    kullanici_guncelle "$IMAJ" $((133120 * 512))
+    echo "[disk] çekirdek ve kullanıcı programları güncellendi: $IMAJ (FAT32 /uppix.elf, ext4 /usr/bin)"
 else
     gerek mkfs.ext4 debugfs sfdisk mkfs.fat cc
     # İmaj Linux geçici dizininde kurulur ve sonunda tek seferde kopyalanır:

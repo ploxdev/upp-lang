@@ -1,0 +1,354 @@
+// Uppix — kullanıcı süreçleri (ring 3).
+// Çekirdek (runtime) adres alanını, ring 3'e girişi, sistem çağrısı girişini
+// ve kullanıcı belleğine denetimli erişimi sağlar (mekanizma). Süreçlerin
+// politikası burada: süreç tablosu, dosya tanımlayıcıları, ELF yükleme, ilk
+// yığın (argv, envp, auxv), brk ve mmap yerleşimi. Sistem çağrıları
+// sistem_cagrisi.upp'tadır ve Linux x86_64 ABI'siyle birebir uyumludur.
+//
+// Bellek düzeni (Linux'taki gibi alt yarı):
+//   0x10000 altı               eşlenmez (boş gösterici)
+//   ELF bölümleri              p_vaddr (ET_DYN: 0x555555554000 + p_vaddr)
+//   brk yığını                 son bölümün ardından yukarı doğru
+//   mmap bölgeleri             0x7f0000000000'dan aşağı doğru
+//   yığın                      0x7ffffffff000'a kadar 1 MiB
+
+sabit sayi SAYFA = 4096;
+sabit sayi YIGIN_UST = 0x7ffffffff000;
+sabit sayi YIGIN_BOY = 1048576;
+sabit sayi MMAP_UST = 0x7f0000000000;
+sabit sayi PIE_TABAN = 0x555555554000;
+sabit sayi FD_MAX = 32;
+
+// Dosya tanımlayıcı türleri
+sabit sayi FD_KAPALI = 0;
+sabit sayi FD_TERMINAL = 1;  // klavye ve ekran (tty)
+sabit sayi FD_GIRDI = 2;     // kabuktan gelen girdi (boru, '<')
+sabit sayi FD_DOSYA = 3;
+sabit sayi FD_DIZIN = 4;
+sabit sayi FD_NULL = 5;
+sabit sayi FD_FB = 6;        // /dev/fb0
+
+sinif Surec {
+    sayi pid;          // 0: boş yuva
+    sayi gorev;
+    sayi ka;           // adres alanı
+    metin ad;
+    sayi giris;
+    sayi yigin;
+    sayi brk_bas;
+    sayi brk;
+    sayi mmap_ust;
+    mantik girdi_var;
+    metin girdi;
+    sayi girdi_konum;
+    metin satir_artik; // terminalden okunmuş, henüz verilmemiş baytlar
+}
+
+liste[Surec] g_surec;
+harita[sayi, sayi] g_surec_gorev; // görev kimliği → g_surec yuvası
+sayi g_sonraki_pid = 100;
+
+// Dosya tanımlayıcıları: yuva * FD_MAX + fd
+liste[sayi] g_fd_tur;
+liste[sayi] g_fd_no;
+liste[sayi] g_fd_konum;
+liste[sayi] g_fd_bayrak;
+
+fonk sayfa_asagi(sayi a) -> sayi => a - a % SAYFA;
+fonk sayfa_yukari(sayi a) -> sayi => sayfa_asagi(a + SAYFA - 1);
+
+// Bu görevde çalışan sürecin yuvası; yoksa -1.
+fonk surec_simdi() -> sayi {
+    sayi g = upp.cekirdek.gorev_kimlik();
+    eger (!g_surec_gorev.var_mi(g)) { don -1; }
+    don g_surec_gorev.al(g);
+}
+
+fonk fd_yer(sayi s, sayi fd) -> sayi => s * FD_MAX + fd;
+
+fonk fd_gecerli(sayi s, sayi fd) -> mantik {
+    eger (fd < 0 || fd >= FD_MAX) { don yanlis; }
+    don g_fd_tur[fd_yer(s, fd)] != FD_KAPALI;
+}
+
+fonk fd_kur(sayi s, sayi fd, sayi tur, sayi no, sayi bayrak) -> bos {
+    sayi y = fd_yer(s, fd);
+    g_fd_tur.yaz(y, tur);
+    g_fd_no.yaz(y, no);
+    g_fd_konum.yaz(y, 0);
+    g_fd_bayrak.yaz(y, bayrak);
+}
+
+// En küçük boş tanımlayıcı; yoksa -1 (EMFILE).
+fonk fd_ayir(sayi s) -> sayi {
+    her (sayi fd in 0..FD_MAX) {
+        eger (g_fd_tur[fd_yer(s, fd)] == FD_KAPALI) { don fd; }
+    }
+    don -1;
+}
+
+// Yeni süreç yuvası: stdin kabuktan girdi varsa ondan, yoksa terminalden.
+fonk surec_yeni(metin ad, metin girdi) -> sayi {
+    sayi s = -1;
+    her (sayi i in 0..g_surec.uzunluk()) {
+        eger (g_surec[i].pid == 0) {
+            s = i;
+            dur;
+        }
+    }
+    Surec y;
+    y.pid = g_sonraki_pid;
+    g_sonraki_pid += 1;
+    y.gorev = upp.cekirdek.gorev_kimlik();
+    y.ka = upp.cekirdek.kullanici_alan_yeni();
+    y.ad = ad;
+    y.giris = 0;
+    y.yigin = 0;
+    y.brk_bas = 0;
+    y.brk = 0;
+    y.mmap_ust = MMAP_UST;
+    y.girdi_var = girdi != yok;
+    y.girdi = "";
+    eger (girdi != yok) { y.girdi = girdi; }
+    y.girdi_konum = 0;
+    y.satir_artik = "";
+    eger (s < 0) {
+        s = g_surec.uzunluk();
+        g_surec.ekle(y);
+        her (sayi i in 0..FD_MAX) {
+            g_fd_tur.ekle(FD_KAPALI);
+            g_fd_no.ekle(-1);
+            g_fd_konum.ekle(0);
+            g_fd_bayrak.ekle(0);
+        }
+    } yoksa {
+        g_surec.yaz(s, y);
+        her (sayi fd in 0..FD_MAX) { fd_kur(s, fd, FD_KAPALI, -1, 0); }
+    }
+    eger (y.girdi_var) { fd_kur(s, 0, FD_GIRDI, -1, 0); } yoksa { fd_kur(s, 0, FD_TERMINAL, -1, 0); }
+    fd_kur(s, 1, FD_TERMINAL, -1, 1);
+    fd_kur(s, 2, FD_TERMINAL, -1, 1);
+    g_surec_gorev.koy(y.gorev, s);
+    don s;
+}
+
+// Yuvayı boşaltır. alan_sil: adres alanını da sil (görev öldürüldüyse çekirdek
+// zaten silmiştir).
+fonk surec_bitir(sayi s, mantik alan_sil) -> bos {
+    eger (s < 0 || g_surec[s].pid == 0) { don; }
+    eger (alan_sil && g_surec[s].ka != 0) { upp.cekirdek.kullanici_alan_sil(g_surec[s].ka); }
+    her (sayi fd in 0..FD_MAX) { fd_kur(s, fd, FD_KAPALI, -1, 0); }
+    g_surec_gorev.sil(g_surec[s].gorev);
+    g_surec[s].pid = 0;
+    g_surec[s].ka = 0;
+    g_surec[s].girdi = "";
+    g_surec[s].satir_artik = "";
+}
+
+// kill: öldürülen görevin süreci varsa yuvası boşalır.
+fonk surec_gorev_oldu(sayi gorev) -> bos {
+    eger (g_surec_gorev.var_mi(gorev)) { surec_bitir(g_surec_gorev.al(gorev), yanlis); }
+}
+
+// ---- ELF64 yükleyici ----
+
+fonk elf_koruma(sayi pf) -> sayi {
+    // ELF PF_X=1 PF_W=2 PF_R=4 → Linux PROT_READ=1 PROT_WRITE=2 PROT_EXEC=4
+    sayi k = 0;
+    eger (pf % 8 >= 4) { k += 1; }
+    eger (pf % 4 >= 2) { k += 2; }
+    eger (pf % 2 == 1) { k += 4; }
+    don k;
+}
+
+// t: dosyanın tamamı (n bayt). Başarıda "", hatada açıklama.
+fonk elf_yukle_tampon(sayi s, sayi t, sayi n, liste[metin] arg, liste[metin] ortam, metin yol) -> metin {
+    sayi ka = g_surec[s].ka;
+    eger (ka == 0) { don "bellek yetersiz (adres alanı kurulamadı)"; }
+    eger (upp.tampon.oku32(t, 0) != 0x464C457F) { don "çalıştırılabilir biçim hatası (ELF değil)"; }
+    eger (upp.tampon.oku8(t, 4) != 2 || upp.tampon.oku8(t, 5) != 1) { don "çalıştırılabilir biçim hatası (64 bit küçük sonlu ELF değil)"; }
+    eger (upp.tampon.oku16(t, 18) != 62) { don "çalıştırılabilir biçim hatası (x86-64 değil)"; }
+    sayi tur = upp.tampon.oku16(t, 16);
+    eger (tur != 2 && tur != 3) { don "çalıştırılabilir biçim hatası (çalıştırılabilir dosya değil)"; }
+    sayi phoff = upp.tampon.oku64(t, 32);
+    sayi phent = upp.tampon.oku16(t, 54);
+    sayi phnum = upp.tampon.oku16(t, 56);
+    eger (phent != 56 || phnum == 0 || phoff < 0 || phoff + phnum * 56 > n) { don "çalıştırılabilir biçim hatası (program başlıkları)"; }
+    sayi taban = 0;
+    eger (tur == 3) { taban = PIE_TABAN; }
+    sayi son = 0;
+    sayi phdr = 0;
+    sayi yuklenen = 0;
+    // 1) bölümleri yazılabilir eşle ve dosyadan doldur
+    her (sayi i in 0..phnum) {
+        sayi o = phoff + i * 56;
+        sayi pt = upp.tampon.oku32(t, o);
+        eger (pt == 3) { don "dinamik bağlı ELF desteklenmiyor (statik derleyin: gcc -static)"; }
+        eger (pt != 1) { devam; }
+        sayi off = upp.tampon.oku64(t, o + 8);
+        sayi va = upp.tampon.oku64(t, o + 16) + taban;
+        sayi fsz = upp.tampon.oku64(t, o + 32);
+        sayi msz = upp.tampon.oku64(t, o + 40);
+        eger (msz == 0) { devam; }
+        eger (fsz > msz || off < 0 || fsz < 0 || off + fsz > n || va < 0x10000 || va + msz > MMAP_UST) {
+            don "çalıştırılabilir biçim hatası (geçersiz yükleme bölümü)";
+        }
+        eger (!upp.cekirdek.kullanici_esle(ka, va, msz, 3)) { don "bellek yetersiz"; }
+        eger (fsz > 0 && !upp.cekirdek.kullanici_yaz(ka, va, t, off, fsz)) { don "yükleme hatası"; }
+        eger (off <= phoff && phoff < off + fsz) { phdr = va + (phoff - off); }
+        eger (va + msz > son) { son = va + msz; }
+        yuklenen += 1;
+    }
+    eger (yuklenen == 0) { don "çalıştırılabilir biçim hatası (yüklenecek bölüm yok)"; }
+    // 2) son izinler: önce salt okunur, sonra her bölümün izni eklenir (ortak sayfalar birleşir)
+    her (sayi i in 0..phnum) {
+        sayi o = phoff + i * 56;
+        eger (upp.tampon.oku32(t, o) != 1 || upp.tampon.oku64(t, o + 40) == 0) { devam; }
+        upp.cekirdek.kullanici_koruma(ka, upp.tampon.oku64(t, o + 16) + taban, upp.tampon.oku64(t, o + 40), 1, yanlis);
+    }
+    her (sayi i in 0..phnum) {
+        sayi o = phoff + i * 56;
+        eger (upp.tampon.oku32(t, o) != 1 || upp.tampon.oku64(t, o + 40) == 0) { devam; }
+        upp.cekirdek.kullanici_koruma(ka, upp.tampon.oku64(t, o + 16) + taban, upp.tampon.oku64(t, o + 40), elf_koruma(upp.tampon.oku32(t, o + 4)), dogru);
+    }
+    g_surec[s].giris = upp.tampon.oku64(t, 24) + taban;
+    g_surec[s].brk_bas = sayfa_yukari(son);
+    g_surec[s].brk = g_surec[s].brk_bas;
+    eger (!upp.cekirdek.kullanici_esle(ka, YIGIN_UST - YIGIN_BOY, YIGIN_BOY, 3)) { don "bellek yetersiz (yığın)"; }
+    sayi rsp = yigin_kur(s, arg, ortam, yol, phdr, phnum, g_surec[s].giris);
+    eger (rsp < 0) { don "argüman listesi çok uzun"; }
+    g_surec[s].yigin = rsp;
+    don "";
+}
+
+// SysV x86-64 ilk yığını: argc, argv[], NULL, envp[], NULL, auxv[], AT_NULL,
+// ardından dizgiler. rsp argc'de ve 16 bayt hizalıdır.
+fonk yigin_kur(sayi s, liste[metin] arg, liste[metin] ortam, metin yol, sayi phdr, sayi phnum, sayi giris) -> sayi {
+    sayi ust = YIGIN_UST;
+    ust -= 16;
+    sayi rastgele_adr = ust;
+    ust -= bayt_say(yol) + 1;
+    sayi yol_adr = ust;
+    liste[sayi] o_adr;
+    her (oto e in ortam) {
+        ust -= bayt_say(e) + 1;
+        o_adr.ekle(ust);
+    }
+    liste[sayi] a_adr;
+    her (oto a in arg) {
+        ust -= bayt_say(a) + 1;
+        a_adr.ekle(ust);
+    }
+    ust = ust - ust % 16;
+    // auxv: AT_PHDR 3, AT_PHENT 4, AT_PHNUM 5, AT_PAGESZ 6, AT_BASE 7, AT_FLAGS 8,
+    // AT_ENTRY 9, AT_UID 11, AT_EUID 12, AT_GID 13, AT_EGID 14, AT_SECURE 23,
+    // AT_RANDOM 25, AT_EXECFN 31, AT_NULL 0
+    liste[sayi] aux;
+    aux.ekle(3); aux.ekle(phdr);
+    aux.ekle(4); aux.ekle(56);
+    aux.ekle(5); aux.ekle(phnum);
+    aux.ekle(6); aux.ekle(SAYFA);
+    aux.ekle(7); aux.ekle(0);
+    aux.ekle(8); aux.ekle(0);
+    aux.ekle(9); aux.ekle(giris);
+    aux.ekle(11); aux.ekle(0);
+    aux.ekle(12); aux.ekle(0);
+    aux.ekle(13); aux.ekle(0);
+    aux.ekle(14); aux.ekle(0);
+    aux.ekle(23); aux.ekle(0);
+    aux.ekle(25); aux.ekle(rastgele_adr);
+    aux.ekle(31); aux.ekle(yol_adr);
+    aux.ekle(0); aux.ekle(0);
+    sayi kelime = 1 + arg.uzunluk() + 1 + ortam.uzunluk() + 1 + aux.uzunluk();
+    sayi rsp = ust - kelime * 8;
+    rsp = rsp - rsp % 16;
+    sayi toplam = YIGIN_UST - rsp;
+    eger (toplam > 262144) { don -1; }
+    sayi t = upp.tampon.yeni(toplam);
+    upp.tampon.doldur(t, 0, toplam, 0);
+    sayi o = 0;
+    upp.tampon.yaz64(t, o, arg.uzunluk());
+    o += 8;
+    her (oto p in a_adr) {
+        upp.tampon.yaz64(t, o, p);
+        o += 8;
+    }
+    o += 8;
+    her (oto p in o_adr) {
+        upp.tampon.yaz64(t, o, p);
+        o += 8;
+    }
+    o += 8;
+    her (oto v in aux) {
+        upp.tampon.yaz64(t, o, v);
+        o += 8;
+    }
+    her (sayi i in 0..arg.uzunluk()) { upp.tampon.metin_yaz(t, a_adr[i] - rsp, arg[i]); }
+    her (sayi i in 0..ortam.uzunluk()) { upp.tampon.metin_yaz(t, o_adr[i] - rsp, ortam[i]); }
+    upp.tampon.metin_yaz(t, yol_adr - rsp, yol);
+    her (sayi i in 0..16) { upp.tampon.yaz8(t, rastgele_adr - rsp + i, rastgele() % 256); }
+    mantik ok = upp.cekirdek.kullanici_yaz(g_surec[s].ka, rsp, t, 0, toplam);
+    upp.tampon.birak(t);
+    eger (!ok) { don -1; }
+    don rsp;
+}
+
+fonk elf_mi(metin icerik) -> mantik => upp.metin.baslar(icerik, "\x7fELF");
+
+// Ortam: kabuğun değişkenleri "AD=değer" olarak.
+fonk ortam_listesi() -> liste[metin] {
+    liste[metin] L;
+    her (oto k in g_ortam.anahtarlar()) { L.ekle(k + "=" + g_ortam.al(k)); }
+    don L;
+}
+
+// Kabuktan: ELF dosyasını bu görevde ring 3'te çalıştırır, çıkış kodunu döndürür.
+fonk elf_calistir(sayi no, liste[metin] a, metin girdi) -> sayi {
+    metin ad = a[0];
+    eger (!upp.cekirdek.kullanici_destekli()) {
+        hata_bildir("uppsh: {ad}: kullanıcı programları yalnızca Limine ile açılışta çalışır (64-bit üst yarı çekirdek gerekir)");
+        don 126;
+    }
+    sayi s = surec_yeni(yol_ad(fs_yol(no)), girdi);
+    metin veri = fs_oku(no);
+    sayi n = bayt_say(veri);
+    metin h = "çalıştırılabilir biçim hatası";
+    eger (n >= 64) {
+        sayi t = upp.tampon.yeni(n);
+        upp.tampon.metin_yaz(t, 0, veri);
+        h = elf_yukle_tampon(s, t, n, a, ortam_listesi(), fs_yol(no));
+        upp.tampon.birak(t);
+    }
+    eger (h != "") {
+        hata_bildir("uppsh: {ad}: {h}");
+        surec_bitir(s, dogru);
+        don 126;
+    }
+    klog_sessiz("süreç {g_surec[s].pid}: {g_surec[s].ad} (giriş {onaltilik(g_surec[s].giris)})");
+    // Ön plandaki süreç (kabuğun kendi görevi) Ctrl-C ile SIGINT alır.
+    upp.cekirdek.kullanici_on_plan(upp.cekirdek.gorev_kimlik() == 1);
+    sayi kod = upp.cekirdek.kullanici_calistir(g_surec[s].ka, g_surec[s].giris, g_surec[s].yigin);
+    metin neden = upp.cekirdek.kullanici_son_hata();
+    surec_bitir(s, dogru);
+    eger (neden == "^C") {
+        terminale_yaz("^C\n");
+    } yoksa eger (neden != "") {
+        hata_bildir(neden);
+    }
+    eger (kod < 0) {
+        hata_bildir("uppsh: {ad}: süreç başlatılamadı");
+        don 126;
+    }
+    don kod;
+}
+
+fonk onaltilik(sayi v) -> metin {
+    metin h = "0123456789abcdef";
+    metin s = "";
+    eger (v == 0) { don "0x0"; }
+    iken (v > 0) {
+        s = upp.metin.kes(h, v % 16, 1) + s;
+        v = v / 16;
+    }
+    don "0x" + s;
+}

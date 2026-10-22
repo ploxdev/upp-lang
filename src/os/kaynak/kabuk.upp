@@ -358,6 +358,7 @@ fonk dosya_calistir(sayi no, liste[metin] a, metin girdi) -> sayi {
         don 126;
     }
     metin icerik = fs_oku(no);
+    eger (elf_mi(icerik)) { don elf_calistir(no, a, girdi); }
     metin y = yerlesik_ad(icerik);
     eger (y != "" && g_komut.var_mi(y)) {
         don g_komut.al(y)(a, girdi);

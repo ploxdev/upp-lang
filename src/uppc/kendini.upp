@@ -46,17 +46,23 @@ fonk kd_gomulu_runtime(metin runtime, metin fn_adi, metin kaynak_adi) -> metin {
     don o;
 }
 
-// Çalışma zamanı paketi: ön dosya + çekirdek + platform katmanı (LF'e normalleştirilmiş).
-fonk kd_paket(metin kok, metin on, metin platform) -> metin {
+// Çalışma zamanı paketi: ön dosya + çekirdek + platform katmanı (+ ek katman),
+// LF'e normalleştirilmiş. Serbest pakette ek katman kullanıcı kipidir.
+fonk kd_paket(metin kok, metin on, metin platform, metin ek) -> metin {
     metin o = "/* OTOMATİK ÜRETİLDİ (uppc kendini-derle) — düzenlemeyin.\n * Kaynak: ";
     o += on;
     o += " + upp_cekirdek.c + ";
     o += platform;
+    eger (ek != "") {
+        o += " + ";
+        o += ek;
+    }
     o += " */\n";
     liste[metin] parcalar;
     parcalar.ekle(on);
     parcalar.ekle("upp_cekirdek.c");
     parcalar.ekle(platform);
+    eger (ek != "") { parcalar.ekle(ek); }
     sayi i = 0;
     iken (i < parcalar.uzunluk()) {
         oto icerik = upp.dosya.oku(kd_yol(kok, "src/runtime/" + parcalar.al(i)));
@@ -170,8 +176,8 @@ fonk kendini_derle(metin kok, mantik hizli) -> sayi {
         don 1;
     }
     // 1. runtime paketleri ve gömülü modülleri
-    oto paket_b = kd_paket(kok, "upp_on_barindirilan.c", "upp_barindirilan.c");
-    oto paket_s = kd_paket(kok, "upp_on_serbest.c", "upp_serbest.c");
+    oto paket_b = kd_paket(kok, "upp_on_barindirilan.c", "upp_barindirilan.c", "");
+    oto paket_s = kd_paket(kok, "upp_on_serbest.c", "upp_serbest.c", "upp_kullanici.c");
     eger (metin_esit(paket_b, "") || metin_esit(paket_s, "")) { don 1; }
     kd_degisirse_yaz(kd_yol(kok, "src/runtime/upp_runtime.c"), paket_b);
     kd_degisirse_yaz(kd_yol(kok, "src/runtime/upp_runtime_serbest.c"), paket_s);

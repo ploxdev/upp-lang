@@ -542,8 +542,8 @@ Doğrudan işlemci kayıtçılarına, G/Ç portlarına veya fiziksel adreslere d
 | :--- | :--- | :--- |
 | `port_yaz8 / 16 / 32(port, deger)` | `(sayi, sayi) -> bos` | x86 donanım G/Ç portuna (`outb`, `outw`, `outl`) veri yazar |
 | `port_oku8 / 16 / 32(port)` | `(sayi) -> sayi` | x86 donanım G/Ç portundan (`inb`, `inw`, `inl`) veri okur |
-| `bellek_yaz8 / 16 / 32 / 64(adres, deger)` | `(sayi, sayi) -> bos` | Fiziksel/sanal adrese `volatile` MMIO yazması yapar |
-| `bellek_oku8 / 16 / 32 / 64(adres)` | `(sayi) -> sayi` | Fiziksel/sanal adresten `volatile` MMIO okuması yapar |
+| `bellek_yaz8 / 16 / 32 / 64(adres, deger)` | `(sayi, sayi) -> bos` | Fiziksel adrese `volatile` MMIO yazması yapar (Limine'de HHDM üzerinden; üst yarıdaki bir çekirdek adresi olduğu gibi kullanılır) |
+| `bellek_oku8 / 16 / 32 / 64(adres)` | `(sayi) -> sayi` | Fiziksel adresten `volatile` MMIO okuması yapar (Limine'de HHDM üzerinden) |
 | `dur()`, `kesme_kapat()`, `kesme_ac()` | `() -> bos` | İşlemci yönergeleri: `hlt` (bekle), `cli` (kesmeleri kapat), `sti` (kesmeleri aç) |
 | `yigin_kur(adres, boyut)` | `(sayi, sayi) -> bos` | Çalışma zamanı yığın ayırıcısına (heap) yeni bellek bölgesi tanımlar |
 
@@ -575,12 +575,35 @@ Aşağıdaki çekirdek servisleri ise **güvenli koddan** doğrudan çağrılabi
 | `disk_oku(d, lba, adet, tampon, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Diskten `lba` sektöründen başlayarak `adet` sektörü `upp.tampon` içindeki `ofs` ofsetine okur |
 | `disk_yaz(d, lba, adet, tampon, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Tampondaki veriyi diske yazar ve donanım önbelleğini boşaltır (LBA28/LBA48 PIO) |
 
+#### Kullanıcı kipi (ring 3) *(Yalnızca `--onyukleyici limine`)*
+
+Mekanizma çekirdekte (C), politika işletim sisteminde (u++) durur: süreç tablosu, ELF yükleme ve sistem çağrılarının anlamı u++'ta yazılır. Uppix bunları Linux x86_64 ABI'siyle kullanır (bkz. [`src/os/README.md`](../src/os/README.md)). `ka`, bir adres alanının tutamacıdır (PML4'ün fiziksel adresi). `koruma` Linux `PROT_*` bitleridir: 1 okuma, 2 yazma, 4 yürütme.
+
+| Fonksiyon | İmza | Açıklama |
+| :--- | :--- | :--- |
+| `kullanici_destekli()` | `() -> mantik` | Kullanıcı kipi kurulu mu (Limine/HHDM) |
+| `kullanici_alan_yeni()` / `kullanici_alan_sil(ka)` | `() -> sayi` / `(sayi) -> bos` | Boş alt yarılı yeni adres alanı (bellek yoksa `0`) / tüm sayfalarıyla silme |
+| `kullanici_esle(ka, adres, uzunluk, koruma)` | `(sayi, sayi, sayi, sayi) -> mantik` | Aralığı sıfırlanmış yeni sayfalarla eşler; zaten eşli sayfaların izinleri birleşir |
+| `kullanici_esleme_kaldir(ka, adres, uzunluk)` | `(sayi, sayi, sayi) -> bos` | Sayfaları kaldırır ve süreçin çerçevelerini bırakır |
+| `kullanici_koruma(ka, adres, uzunluk, koruma, birlestir)` | `(sayi, sayi, sayi, sayi, mantik) -> bos` | İzinleri ayarlar (mprotect mekanizması); `birlestir` yalnızca ekler |
+| `kullanici_bos_mu(ka, adres, uzunluk)` | `(sayi, sayi, sayi) -> mantik` | Aralıkta eşli sayfa yoksa `dogru` |
+| `kullanici_fiziksel_esle(ka, adres, fiziksel, uzunluk, koruma)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Aygıt belleğini (ör. çerçeve tamponu) write-combining eşler. *`guvensiz` gerektirir* |
+| `kullanici_oku(ka, adres, tampon, ofs, n)` / `kullanici_yaz(...)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Kullanıcı belleği ↔ `upp.tampon`. Her sayfanın izni denetlenir; hatalı adreste `yanlis` (EFAULT) |
+| `kullanici_metin(ka, adres, en_cok)` | `(sayi, sayi, sayi) -> metin` | NUL ile biten kullanıcı dizgisi; hatalı adreste ya da sınırda `yok` |
+| `kullanici_calistir(ka, giris, yigin)` | `(sayi, sayi, sayi) -> sayi` | Süreci bu görevde ring 3'te çalıştırır; bitince çıkış kodunu döndürür (sinyalde 128 + sinyal) |
+| `kullanici_cikis_iste(kod)` | `(sayi) -> bos` | Sistem çağrısı işleyicisi dönünce süreç `kod` ile biter (exit) |
+| `kullanici_on_plan(v)` | `(mantik) -> bos` | Süreç ön planda mı (Ctrl-C SIGINT ile sonlandırır) |
+| `kullanici_son_hata()` | `() -> metin` | Son sonlanmanın nedeni (`"Bölümleme hatası (SIGSEGV): ..."`, `"^C"`; normal çıkışta `""`) |
+| `sistem_cagrisi_kur(f)` | `(fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi) -> bos` | `SYSCALL` işleyicisi: `f(no, a1, ..., a6)`; dönüş rax'a yazılır (hata: `-errno`) |
+| `ekran_bilgi(alan)` | `(sayi) -> sayi` | 0 çerçeve tamponu fiziksel adresi, 1 boyu, 2-3 piksel genişlik/yükseklik, 4 satır adımı, 5 bpp, 6-11 renk alanları, 12-13 sütun/satır |
+| `cerceve_bilgi(alan)` | `(sayi) -> sayi` | Kullanıcı çerçeve havuzu: 0 toplam, 1 kullanılan, 2 boş (bayt) |
+
 > [!NOTE]
 > **Çekirdek Ortamı Notları:**
-> - **Bellek:** Açılışta yığın ayırıcı (heap), bellek haritasındaki en büyük boş RAM bölgesine otomatik olarak kurulur (Multiboot'ta ilk 1 GiB, Limine'de 1 MiB–4 GiB arası; 128 MiB QEMU'da ~122 MiB).
+> - **Bellek:** Açılışta yığın ayırıcı (heap), bellek haritasındaki en büyük boş RAM bölgesine otomatik olarak kurulur (Multiboot'ta ilk 1 GiB içinde; Limine'de en büyük bölgenin dörtte üçü, dörtte biri kullanıcı süreçlerinin çerçeve havuzu olur).
 > - **Konsol:** Multiboot ile VGA metin ekranı (CP437 Türkçe eşleme), Limine ile çerçeve tamponuna çizilen metin konsolu (Terminus 8x16 yazı tipi, Türkçe karakterler dahil) kullanılır. İkisi de kutu çizim ve gölge karakterlerini (`├ └ │ ─ █ ░ ▒ ▓`) ve ANSI kaçış dizilerini destekler: renk (`\e[1;32m`), temizleme (`\e[2J`, `\e[K`), imleç konumu (`\e[H`, `\e[satır;sütunH`, `\e[nC`/`\e[nD`) ve imleci gizleme/gösterme (`\e[?25l` / `\e[?25h`).
-> - **Limine:** `--onyukleyici limine` ile çekirdek `0xffffffff80000000`'da duran bir ELF64 olur (`-mcmodel=kernel`). Açılışta Limine protokolü (taban revizyon 6) istekleriyle bellek haritası, çerçeve tamponu, HHDM ve çekirdek adresi alınır; çekirdek kendi GDT'sini ve sayfa tablolarını (ilk 4 GiB birebir + çekirdek) kurar, SSE'yi açar ve 8259 PIC kesmeleri için yerel APIC'i kapatır.
-> - **İstisnalar:** İşlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe istisna adı, `RIP` ve `CR2` adresiyle panik verir.
+> - **Limine:** `--onyukleyici limine` ile çekirdek `0xffffffff80000000`'da duran bir ELF64 olur (`-mcmodel=kernel`). Açılışta Limine protokolü (taban revizyon 6) istekleriyle bellek haritası, çerçeve tamponu, HHDM ve çekirdek adresi alınır; çekirdek kendi sayfa tablolarını kurar: çekirdek görüntüsü ve tüm fiziksel bellek (HHDM) üst yarıda, alt yarı kullanıcı süreçleri için boş. GDT/TSS, `SYSCALL`, SSE, NX/SMEP/SMAP açılır ve 8259 PIC kesmeleri için yerel APIC kapatılır.
+> - **İstisnalar:** Çekirdekteki işlemci istisnaları (sıfıra bölme, sayfa hatası vb.) Türkçe istisna adı, `RIP` ve `CR2` adresiyle panik verir. Ring 3'teki bir istisna ise yalnızca o süreci sonlandırır.
 
 ### `upp.tampon.*` — Güvenli İkili Bayt Tamponları *(Tüm Hedeflerde)*
 

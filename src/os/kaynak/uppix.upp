@@ -16,16 +16,28 @@ kullan "komut_metin.upp";
 kullan "komut_sistem.upp";
 kullan "komut_disk.upp";
 kullan "komut_oyun.upp";
+kullan "surec.upp";
+kullan "sistem_cagrisi.upp";
 
-sabit metin UPPIX_SURUM = "0.3.0";
+sabit metin UPPIX_SURUM = "0.4.0";
 
 liste[metin] g_dmesg;
 
-fonk klog(metin m) -> bos {
+fonk dmesg_satiri(metin m) -> metin {
     sayi t = upp.zaman();
-    metin z = "[" + sag_hizala("{t / 1000}", 5) + "." + sifir_doldur(t % 1000, 3) + "] " + m;
+    don "[" + sag_hizala("{t / 1000}", 5) + "." + sifir_doldur(t % 1000, 3) + "] " + m;
+}
+
+// Açılış iletileri: hem ekrana hem dmesg'e.
+fonk klog(metin m) -> bos {
+    metin z = dmesg_satiri(m);
     g_dmesg.ekle(z);
     upp.satir_yaz("\e[90m" + z + "\e[0m");
+}
+
+// Çalışma sırasındaki iletiler (süreç başlangıcı vb.): yalnızca dmesg.
+fonk klog_sessiz(metin m) -> bos {
+    g_dmesg.ekle(dmesg_satiri(m));
 }
 
 fonk komutlari_kur() -> bos {
@@ -273,6 +285,7 @@ fonk uppix_baslat() -> bos {
     eger (!disk_kok) { klog("rootfs: kalıcı değil; değişiklikler kapatınca kaybolur"); }
     klog("uppsh: {g_komut.uzunluk()} yerleşik komut /bin altında");
     klog("görevler: işbirlikçi zamanlayıcı hazır (en çok 32 görev)");
+    sistem_cagrilari_kur();
     g_cwd = fs_coz("/root");
     liste[metin] profil_arg;
     profil_arg.ekle("source");

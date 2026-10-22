@@ -686,6 +686,10 @@ fonk fs_sanal_kur() -> bos {
     fs_aygit(dev, "console", "konsol");
     fs_aygit(dev, "tty", "konsol");
     fs_aygit(dev, "random", "rastgele");
+    eger (upp.cekirdek.ekran_bilgi(1) > 0) {
+        sayi fb = fs_aygit(dev, "fb0", "fb");
+        g_fs[fb].kip = 432;
+    }
     her (oto b in g_blok) {
         sayi a = fs_aygit(dev, b.ad, "blok");
         g_fs[a].kip = 432;

@@ -49,6 +49,8 @@ fonk k_kill(liste[metin] a, metin girdi) -> sayi {
         eger (!upp.cekirdek.gorev_oldur(pid)) {
             hata_bildir("kill: ({x}): böyle bir süreç yok");
             kod = 1;
+        } yoksa {
+            surec_gorev_oldu(pid);
         }
     }
     don kod;

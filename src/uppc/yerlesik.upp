@@ -204,6 +204,25 @@ fonk yerlesik_kur() -> bos {
     yk("cekirdek.islemci", "", "metin", "upp_cekirdek_islemci", 64);
     yk("cekirdek.onyukleyici", "", "metin", "upp_cekirdek_onyukleyici", 64);
     yk("cekirdek.ekran", "", "metin", "upp_cekirdek_ekran", 64);
+    yk("cekirdek.ekran_bilgi", "sayi", "sayi", "upp_cekirdek_ekran_bilgi", 64);
+    // ---- kullanıcı kipi (ring 3): mekanizma; politika işletim sisteminde ----
+    yk("cekirdek.kullanici_destekli", "", "mantik", "upp_cekirdek_kullanici_destekli", 64);
+    yk("cekirdek.kullanici_alan_yeni", "", "sayi", "upp_cekirdek_kullanici_alan_yeni", 64);
+    yk("cekirdek.kullanici_alan_sil", "sayi", "bos", "upp_cekirdek_kullanici_alan_sil", 64);
+    yk("cekirdek.kullanici_esle", "sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_esle", 64);
+    yk("cekirdek.kullanici_esleme_kaldir", "sayi,sayi,sayi", "bos", "upp_cekirdek_kullanici_esleme_kaldir", 64);
+    yk("cekirdek.kullanici_koruma", "sayi,sayi,sayi,sayi,mantik", "bos", "upp_cekirdek_kullanici_koruma", 64);
+    yk("cekirdek.kullanici_bos_mu", "sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_bos_mu", 64);
+    yk("cekirdek.kullanici_fiziksel_esle", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_fiziksel_esle", 65);
+    yk("cekirdek.kullanici_oku", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_oku", 64);
+    yk("cekirdek.kullanici_yaz", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_yaz", 64);
+    yk("cekirdek.kullanici_metin", "sayi,sayi,sayi", "metin", "upp_cekirdek_kullanici_metin", 64);
+    yk("cekirdek.kullanici_calistir", "sayi,sayi,sayi", "sayi", "upp_cekirdek_kullanici_calistir", 64);
+    yk("cekirdek.kullanici_cikis_iste", "sayi", "bos", "upp_cekirdek_kullanici_cikis_iste", 64);
+    yk("cekirdek.kullanici_on_plan", "mantik", "bos", "upp_cekirdek_kullanici_on_plan", 64);
+    yk("cekirdek.kullanici_son_hata", "", "metin", "upp_cekirdek_kullanici_son_hata", 64);
+    yk("cekirdek.sistem_cagrisi_kur", "fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi", "bos", "upp_cekirdek_sistem_cagrisi_kur", 64);
+    yk("cekirdek.cerceve_bilgi", "sayi", "sayi", "upp_cekirdek_cerceve_bilgi", 64);
     yk("cekirdek.disk_var", "sayi", "mantik", "upp_cekirdek_disk_var", 64);
     yk("cekirdek.disk_sektor", "sayi", "sayi", "upp_cekirdek_disk_sektor", 64);
     yk("cekirdek.disk_model", "sayi", "metin", "upp_cekirdek_disk_model", 64);
@@ -256,16 +275,19 @@ fonk yerlesik_guvensiz_mi(sayi yi) -> mantik {
     don yi != 0 && (yerlesik_bayrak(yi) & 1) != 0;
 }
 
-// "metin,sayi" → parça sayısı / k'ıncı parça
+// "metin,sayi" → parça sayısı / k'ıncı parça. Ayırıcı yalnızca parantez dışındaki
+// virgüldür: "fonk(sayi,sayi)->sayi" ve "harita[metin,sayi]" tek parçadır.
 fonk yerlesik_param_say(sayi yi) -> sayi {
     oto p = yerlesik_param_metin(yi);
     eger (metin_esit(p, "")) { don 0; }
     sayi n = 1;
-    sayi i = 0;
+    sayi derin = 0;
     sayi m = metin_uzun(p);
-    iken (i < m) {
-        eger (metin_cp(p, i) == 44) { n = n + 1; }
-        i = i + 1;
+    dongu (sayi i = 0; i < m; i += 1) {
+        sayi c = metin_cp(p, i);
+        eger (c == 40 || c == 91) { derin = derin + 1; }
+        yoksa eger (c == 41 || c == 93) { derin = derin - 1; }
+        yoksa eger (c == 44 && derin == 0) { n = n + 1; }
     }
     don n;
 }
@@ -273,16 +295,19 @@ fonk yerlesik_param_say(sayi yi) -> sayi {
 fonk yerlesik_param_tur(sayi yi, sayi k) -> metin {
     oto p = yerlesik_param_metin(yi);
     sayi m = metin_uzun(p);
-    sayi i = 0;
     sayi bas = 0;
     sayi say = 0;
-    iken (i <= m) {
-        eger (i == m || metin_cp(p, i) == 44) {
+    sayi derin = 0;
+    dongu (sayi i = 0; i <= m; i += 1) {
+        sayi c = -1;
+        eger (i < m) { c = metin_cp(p, i); }
+        eger (c == 40 || c == 91) { derin = derin + 1; }
+        yoksa eger (c == 41 || c == 93) { derin = derin - 1; }
+        yoksa eger (i == m || (c == 44 && derin == 0)) {
             eger (say == k) { don intern_dilim(p, bas, i); }
             say = say + 1;
             bas = i + 1;
         }
-        i = i + 1;
     }
     don "";
 }

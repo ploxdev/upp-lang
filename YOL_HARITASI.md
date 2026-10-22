@@ -66,7 +66,8 @@
 - [x] Uppix: `snake` yılan oyunu (otopilot `-o`, kalıcı rekor). Konsol: `\e[satır;sütunH`, `\e[?25l/h`, çerçeve tamponunda `░▒▓` (`tests/cekirdek/12_uppix_snake.upp`).
 - [x] Dil: karakter sabitleri (`'a'`, kaçışlar, Türkçe), `her (sayi i in a..b)` aralık döngüsü, `upp.metin.ingkucuk` / `ingbuyuk` (ASCII). İnterpolasyon `{...}` içi ham kaynaktan ayrıştırılır (`"{'\n'}"`).
 - [x] Dil: `c_harici` C fonksiyonu bildirimleri (asm etiketiyle; başlık prototipiyle çakışmaz) ve `cmetin` türü; `@paketli`, `@hizali(N)`, `@bolum("ad")` nitelikleri; `uppc --guvenlik-denetimi[=is]` (ASan + UBSan / TSan; Windows'ta UBSan tuzağı).
-- [ ] Sonraki: ext4 günlüğü ve büyük dosyalar için extent ağacı yazımı, AHCI/virtio-blk, kesintili zamanlama (runtime kilitleri), kullanıcı modu + sistem çağrıları + ELF yükleyici, `uppc`'nin Uppix içinde çalışması (doğrudan makine kodu arka ucu).
+- [x] Uppix 0.4: **ring 3 ve Linux x86_64 uyumlu sistem çağrıları**. Çekirdek tamamen üst yarıda (HHDM), süreç başına PML4, NX/SMEP/SMAP, GDT/TSS, `SYSCALL`/`SYSRET`, ayrı fiziksel çerçeve havuzu. ELF64 yükleyici ve SysV ilk yığını (auxv dahil). Sistem çağrıları: read, write, open, close, stat, fstat, lseek, mmap (`/dev/fb0` dahil), munmap, brk, ioctl (`TIOCGWINSZ`, `TCGETS`, `FBIOGET_*`), nanosleep, exit. Ring 3 istisnası yalnızca süreci sonlandırır; ring 3 kodu zaman dilimiyle kesilir; Ctrl-C ile SIGINT. Mekanizma C'de (`upp_kullanici.c`), politika u++'ta (`surec.upp`, `sistem_cagrisi.upp`). `sctest`'in çıktısı gerçek Linux'takiyle birebir aynı (`tests/cekirdek/13_uppix_kullanici.upp`). Çerçeve tamponu konsolu artık kaydırırken aygıt belleğinden okumuyor (yalnızca değişen hücreler, PAT write-combining).
+- [ ] Sonraki: `fork`/`execve`/`wait`, sinyal işleyicileri, `arch_prctl` (TLS) ile musl/glibc statik programları, sayfa hatasıyla büyüyen yığın, ext4 günlüğü ve büyük dosyalar için extent ağacı yazımı, AHCI/virtio-blk, `uppc`'nin Uppix içinde çalışması (doğrudan makine kodu arka ucu).
 
 ## Faz 4 — Derleme asistanı ✅
 
@@ -75,5 +76,5 @@
 
 ## Faz 5 — Belgeler ve testler
 
-- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 136 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
+- [x] README, OGREN, API (TR/EN), derleyici.md güncel. 137 test (QEMU çekirdek testleri, Uppix ve disk/dosya sistemi testleri dahil); Linux'ta ASan ve UBSan temiz.
 - [x] Eklenti sözlüğü `yerlesik.upp`'den üretilir (`eklenti/src/yerlesik_uretilen.ts`); iç içe ad alanı tamamlaması; sözdizimi `upp.*`'yi listesiz tanır.

@@ -1,0 +1,611 @@
+// Uppix — Linux x86_64 uyumlu sistem çağrıları.
+// Numaralar, bayraklar, errno değerleri ve yapı düzenleri (struct stat,
+// winsize, timespec, termios, fb_var/fix_screeninfo) Linux'takiyle aynıdır:
+// -nostdlib ile derlenmiş statik bir Linux programı Uppix'te değiştirilmeden
+// çalışır. Hata dönüşü -errno'dur. Çekirdek bu işleyiciyi SYSCALL girişinden,
+// sürecin kendi görevinde çağırır (bkz. upp_kullanici.c).
+
+// errno
+sabit sayi EPERM = 1;
+sabit sayi ENOENT = 2;
+sabit sayi EINTR = 4;
+sabit sayi EIO = 5;
+sabit sayi EBADF = 9;
+sabit sayi ENOMEM = 12;
+sabit sayi EACCES = 13;
+sabit sayi EFAULT = 14;
+sabit sayi EEXIST = 17;
+sabit sayi ENODEV = 19;
+sabit sayi ENOTDIR = 20;
+sabit sayi EISDIR = 21;
+sabit sayi EINVAL = 22;
+sabit sayi EMFILE = 24;
+sabit sayi ENOTTY = 25;
+sabit sayi ESPIPE = 29;
+sabit sayi EROFS = 30;
+sabit sayi ENAMETOOLONG = 36;
+sabit sayi ENOSYS = 38;
+
+// open bayrakları
+sabit sayi O_ERISIM = 3;      // O_RDONLY 0, O_WRONLY 1, O_RDWR 2
+sabit sayi O_CREAT = 64;
+sabit sayi O_EXCL = 128;
+sabit sayi O_TRUNC = 512;
+sabit sayi O_APPEND = 1024;
+sabit sayi O_DIRECTORY = 65536;
+sabit sayi AT_FDCWD = -100;
+
+// mmap
+sabit sayi MAP_SHARED = 1;
+sabit sayi MAP_PRIVATE = 2;
+sabit sayi MAP_FIXED = 16;
+sabit sayi MAP_ANONYMOUS = 32;
+
+// ioctl
+sabit sayi TCGETS = 0x5401;
+sabit sayi TIOCGWINSZ = 0x5413;
+sabit sayi FBIOGET_VSCREENINFO = 0x4600;
+sabit sayi FBIOGET_FSCREENINFO = 0x4602;
+
+harita[sayi, mantik] g_sc_bildirildi; // desteklenmeyen çağrı günlüğe bir kez yazılır
+
+fonk sistem_cagrilari_kur() -> bos {
+    eger (upp.cekirdek.kullanici_destekli()) {
+        upp.cekirdek.sistem_cagrisi_kur(sistem_cagrisi);
+        klog("kullanıcı kipi: ring 3, SYSCALL/SYSRET, Linux x86_64 sistem çağrıları");
+    }
+}
+
+fonk sistem_cagrisi(sayi no, sayi a1, sayi a2, sayi a3, sayi a4, sayi a5, sayi a6) -> sayi {
+    sayi s = surec_simdi();
+    eger (s < 0) { don -ENOSYS; }
+    eger (no == 0) { don sc_read(s, a1, a2, a3); }
+    eger (no == 1) { don sc_write(s, a1, a2, a3); }
+    eger (no == 2) { don sc_open(s, a1, a2, a3); }
+    eger (no == 3) { don sc_close(s, a1); }
+    eger (no == 4 || no == 6) { don sc_stat(s, a1, a2); }
+    eger (no == 5) { don sc_fstat(s, a1, a2); }
+    eger (no == 8) { don sc_lseek(s, a1, a2, a3); }
+    eger (no == 9) { don sc_mmap(s, a1, a2, a3, a4, a5, a6); }
+    eger (no == 11) { don sc_munmap(s, a1, a2); }
+    eger (no == 12) { don sc_brk(s, a1); }
+    eger (no == 16) { don sc_ioctl(s, a1, a2, a3); }
+    eger (no == 35) { don sc_nanosleep(s, a1, a2); }
+    eger (no == 60 || no == 231) {
+        // exit / exit_group (tek iş parçacıklı süreçte aynıdır)
+        upp.cekirdek.kullanici_cikis_iste(a1 % 256);
+        don 0;
+    }
+    eger (no == 257) {
+        // openat(AT_FDCWD, ...): libc'lerin open() karşılığı
+        eger (a1 != AT_FDCWD) { don -EINVAL; }
+        don sc_open(s, a2, a3, a4);
+    }
+    eger (!g_sc_bildirildi.var_mi(no)) {
+        g_sc_bildirildi.koy(no, dogru);
+        klog_sessiz("sistem çağrısı desteklenmiyor: {no} (süreç {g_surec[s].pid} {g_surec[s].ad})");
+    }
+    don -ENOSYS;
+}
+
+// ---- yardımcılar ----
+
+fonk sc_yol(sayi s, sayi adres) -> metin => upp.cekirdek.kullanici_metin(g_surec[s].ka, adres, 4096);
+
+// Kullanıcı belleğinden n bayt metin (bayt korunur); hatalı adreste yok.
+fonk sc_oku_metin(sayi s, sayi adres, sayi n) -> metin {
+    eger (n == 0) { don ""; }
+    sayi t = upp.tampon.yeni(n);
+    metin m = yok;
+    eger (upp.cekirdek.kullanici_oku(g_surec[s].ka, adres, t, 0, n)) { m = upp.tampon.metin(t, 0, n); }
+    upp.tampon.birak(t);
+    don m;
+}
+
+// Metnin bayt aralığını kullanıcı belleğine yazar.
+fonk sc_yaz_metin(sayi s, sayi adres, metin m, sayi bas, sayi n) -> mantik {
+    eger (n <= 0) { don dogru; }
+    sayi t = upp.tampon.yeni(bayt_say(m) + 1);
+    upp.tampon.metin_yaz(t, 0, m);
+    mantik ok = upp.cekirdek.kullanici_yaz(g_surec[s].ka, adres, t, bas, n);
+    upp.tampon.birak(t);
+    don ok;
+}
+
+// Kullanıcıya bir yapı yazar ve tamponu bırakır.
+fonk sc_yapi_ver(sayi s, sayi adres, sayi t, sayi n) -> sayi {
+    mantik ok = upp.cekirdek.kullanici_yaz(g_surec[s].ka, adres, t, 0, n);
+    upp.tampon.birak(t);
+    eger (!ok) { don -EFAULT; }
+    don 0;
+}
+
+fonk sc_on_planda(sayi s) -> mantik => g_surec[s].gorev == 1;
+
+// Ön plandaki süreç Ctrl-C ile SIGINT alır (çıkış 130).
+fonk sc_kesme(sayi s) -> sayi {
+    upp.cekirdek.kullanici_cikis_iste(130);
+    terminale_yaz("^C\n");
+    don -EINTR;
+}
+
+// ---- read ----
+
+// Terminalden kanonik satır: yankı, geri silme, Ctrl-D (boş satırda EOF), Ctrl-C.
+fonk sc_terminal_satir(sayi s) -> metin {
+    metin satir_m = "";
+    iken (dogru) {
+        sayi c = tus_al();
+        eger (c == 3) { don yok; }
+        eger (c == 4) {
+            eger (satir_m == "") { don ""; }
+            devam;
+        }
+        eger (c == '\r' || c == '\n') {
+            terminale_yaz("\n");
+            don satir_m + "\n";
+        }
+        eger (c == 8 || c == 127) {
+            eger (upp.uzunluk(satir_m) > 0) {
+                satir_m = upp.metin.kes(satir_m, 0, upp.uzunluk(satir_m) - 1);
+                terminale_yaz("\x08 \x08");
+            }
+            devam;
+        }
+        metin k = upp.metin.karakter(c);
+        satir_m += k;
+        eger (c == 27) { terminale_yaz("^["); } yoksa { terminale_yaz(k); }
+    }
+    don "";
+}
+
+fonk sc_read(sayi s, sayi fd, sayi buf, sayi n) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    eger (n < 0) { don -EINVAL; }
+    eger (n == 0) { don 0; }
+    sayi y = fd_yer(s, fd);
+    sayi tur = g_fd_tur[y];
+    eger (tur == FD_NULL) { don 0; }
+    eger (tur == FD_DIZIN) { don -EISDIR; }
+    eger (tur == FD_FB) { don -EINVAL; }
+    eger (g_fd_bayrak[y] % 4 == 1) { don -EBADF; }
+    eger (tur == FD_TERMINAL) {
+        eger (g_surec[s].satir_artik == "") {
+            metin satir_m = sc_terminal_satir(s);
+            eger (satir_m == yok) { don sc_kesme(s); }
+            eger (satir_m == "") { don 0; }
+            g_surec[s].satir_artik = satir_m;
+        }
+        metin artik = g_surec[s].satir_artik;
+        sayi var = bayt_say(artik);
+        sayi k = n;
+        eger (k > var) { k = var; }
+        eger (!sc_yaz_metin(s, buf, artik, 0, k)) { don -EFAULT; }
+        eger (k == var) {
+            g_surec[s].satir_artik = "";
+        } yoksa {
+            sayi t = upp.tampon.yeni(var);
+            upp.tampon.metin_yaz(t, 0, artik);
+            g_surec[s].satir_artik = upp.tampon.metin(t, k, var - k);
+            upp.tampon.birak(t);
+        }
+        don k;
+    }
+    // Kabuktan girdi ya da dosya: içeriğin konumdan itibaren baytları
+    metin icerik = "";
+    sayi konum = 0;
+    eger (tur == FD_GIRDI) {
+        icerik = g_surec[s].girdi;
+        konum = g_surec[s].girdi_konum;
+    } yoksa {
+        icerik = fs_oku(g_fd_no[y]);
+        konum = g_fd_konum[y];
+    }
+    sayi toplam = bayt_say(icerik);
+    eger (konum >= toplam) { don 0; }
+    sayi k = n;
+    eger (k > toplam - konum) { k = toplam - konum; }
+    eger (!sc_yaz_metin(s, buf, icerik, konum, k)) { don -EFAULT; }
+    eger (tur == FD_GIRDI) { g_surec[s].girdi_konum = konum + k; } yoksa { g_fd_konum.yaz(y, konum + k); }
+    don k;
+}
+
+// ---- write ----
+
+fonk sc_write(sayi s, sayi fd, sayi buf, sayi n) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    eger (n < 0) { don -EINVAL; }
+    sayi y = fd_yer(s, fd);
+    sayi tur = g_fd_tur[y];
+    eger (tur == FD_DIZIN) { don -EISDIR; }
+    eger (tur == FD_FB) { don -EINVAL; }
+    eger (tur == FD_GIRDI || g_fd_bayrak[y] % 4 == 0) { don -EBADF; }
+    eger (n == 0) { don 0; }
+    eger (tur == FD_NULL) { don n; }
+    metin veri = sc_oku_metin(s, buf, n);
+    eger (veri == yok) { don -EFAULT; }
+    eger (tur == FD_TERMINAL) {
+        // stdout boruya/yönlendirmeye yakalanır; stderr doğrudan terminale gider
+        eger (fd == 2 || g_fd_no[y] == -2) {
+            eger (!g_hata_sustur) { terminale_yaz(veri); }
+        } yoksa {
+            yaz(veri);
+        }
+        don n;
+    }
+    sayi no = g_fd_no[y];
+    sayi konum = g_fd_konum[y];
+    sayi mevcut = fs_boyut(no);
+    eger ((g_fd_bayrak[y] & O_APPEND) != 0) { konum = mevcut; }
+    mantik ok = yanlis;
+    eger (konum == mevcut) {
+        ok = fs_yaz(no, veri, dogru);
+    } yoksa {
+        // Ortaya yazma: eski içerik + yeni baytlar (gerekirse sıfırlarla doldurulur)
+        metin eski = fs_oku(no);
+        sayi eski_n = bayt_say(eski);
+        sayi yeni_n = konum + n;
+        eger (eski_n > yeni_n) { yeni_n = eski_n; }
+        sayi t = upp.tampon.yeni(yeni_n);
+        upp.tampon.doldur(t, 0, yeni_n, 0);
+        upp.tampon.metin_yaz(t, 0, eski);
+        upp.tampon.metin_yaz(t, konum, veri);
+        ok = fs_yaz(no, upp.tampon.metin(t, 0, yeni_n), yanlis);
+        upp.tampon.birak(t);
+    }
+    eger (!ok) {
+        eger (fs_salt_okunur(no)) { don -EROFS; }
+        don -EIO;
+    }
+    g_fd_konum.yaz(y, konum + n);
+    don n;
+}
+
+// ---- open / close ----
+
+fonk sc_open(sayi s, sayi yol_adr, sayi bayrak, sayi kip) -> sayi {
+    metin yol = sc_yol(s, yol_adr);
+    eger (yol == yok) { don -EFAULT; }
+    eger (yol == "") { don -ENOENT; }
+    sayi erisim = bayrak % 4;
+    eger (erisim == 3) { don -EINVAL; }
+    sayi no = fs_coz(yol);
+    eger (no < 0) {
+        eger ((bayrak & O_CREAT) == 0) { don -ENOENT; }
+        sayi ust = fs_coz(yol_dizin(yol));
+        eger (ust < 0) { don -ENOENT; }
+        eger (!fs_dizin_mi(ust)) { don -ENOTDIR; }
+        metin ad = yol_ad(yol);
+        eger (bayt_say(ad) > 255) { don -ENAMETOOLONG; }
+        no = fs_yeni(ust, ad, D_DOSYA, kip & 4077); // kip & 07755 (umask 022)
+        eger (no < 0) {
+            eger (fs_salt_okunur(ust)) { don -EROFS; }
+            don -EACCES;
+        }
+    } yoksa {
+        eger ((bayrak & O_CREAT) != 0 && (bayrak & O_EXCL) != 0) { don -EEXIST; }
+    }
+    sayi tur = FD_DOSYA;
+    sayi dt = g_fs[no].tur;
+    eger (dt == D_DIZIN) {
+        eger (erisim != 0) { don -EISDIR; }
+        tur = FD_DIZIN;
+    } yoksa eger ((bayrak & O_DIRECTORY) != 0) {
+        don -ENOTDIR;
+    } yoksa eger (dt == D_AYGIT) {
+        metin a = g_fs[no].aygit;
+        eger (a == "null") { tur = FD_NULL; }
+        yoksa eger (a == "konsol") { tur = FD_TERMINAL; }
+        yoksa eger (a == "fb") { tur = FD_FB; }
+        yoksa eger (a != "rastgele") { don -EACCES; }
+    } yoksa {
+        eger (erisim != 0 && (dt == D_SANAL || fs_salt_okunur(no))) {
+            eger (fs_salt_okunur(no)) { don -EROFS; }
+            don -EACCES;
+        }
+        eger (erisim != 0 && (bayrak & O_TRUNC) != 0) { fs_yaz(no, "", yanlis); }
+    }
+    sayi fd = fd_ayir(s);
+    eger (fd < 0) { don -EMFILE; }
+    fd_kur(s, fd, tur, no, bayrak);
+    eger (tur == FD_TERMINAL) { g_fd_no.yaz(fd_yer(s, fd), -2); }
+    don fd;
+}
+
+fonk sc_close(sayi s, sayi fd) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    fd_kur(s, fd, FD_KAPALI, -1, 0);
+    don 0;
+}
+
+// ---- stat / fstat ----
+
+// struct stat (x86_64, 144 bayt) tamponu.
+fonk sc_stat_tampon(sayi mod, sayi ino, sayi aygit, sayi nlink, sayi uzunluk, sayi zaman) -> sayi {
+    sayi t = upp.tampon.yeni(144);
+    upp.tampon.doldur(t, 0, 144, 0);
+    upp.tampon.yaz64(t, 0, aygit);      // st_dev
+    upp.tampon.yaz64(t, 8, ino);        // st_ino
+    upp.tampon.yaz64(t, 16, nlink);     // st_nlink
+    upp.tampon.yaz32(t, 24, mod);       // st_mode
+    upp.tampon.yaz32(t, 28, 0);         // st_uid
+    upp.tampon.yaz32(t, 32, 0);         // st_gid
+    upp.tampon.yaz64(t, 48, uzunluk);   // st_size
+    upp.tampon.yaz64(t, 56, 4096);      // st_blksize
+    upp.tampon.yaz64(t, 64, (uzunluk + 511) / 512); // st_blocks
+    upp.tampon.yaz64(t, 72, zaman);     // st_atime
+    upp.tampon.yaz64(t, 88, zaman);     // st_mtime
+    upp.tampon.yaz64(t, 104, zaman);    // st_ctime
+    don t;
+}
+
+fonk sc_dugum_stat(sayi no) -> sayi {
+    sayi dt = g_fs[no].tur;
+    sayi mod = 32768;                         // S_IFREG
+    sayi nlink = 1;
+    eger (dt == D_DIZIN) {
+        mod = 16384;                          // S_IFDIR
+        nlink = 2;
+    }
+    eger (dt == D_AYGIT) { mod = 8192; }      // S_IFCHR
+    mod += g_fs[no].kip % 4096;
+    sayi ino = g_fs[no].ino;
+    eger (ino <= 0) { ino = no + 1; }
+    sayi uzunluk = 0;
+    eger (dt == D_DOSYA || dt == D_DIZIN) { uzunluk = fs_boyut(no); }
+    don sc_stat_tampon(mod, ino, g_fs[no].bag + 1, nlink, uzunluk, g_fs[no].zaman);
+}
+
+fonk sc_stat(sayi s, sayi yol_adr, sayi buf) -> sayi {
+    metin yol = sc_yol(s, yol_adr);
+    eger (yol == yok) { don -EFAULT; }
+    eger (yol == "") { don -ENOENT; }
+    sayi no = fs_coz(yol);
+    eger (no < 0) { don -ENOENT; }
+    don sc_yapi_ver(s, buf, sc_dugum_stat(no), 144);
+}
+
+fonk sc_fstat(sayi s, sayi fd, sayi buf) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    sayi y = fd_yer(s, fd);
+    sayi tur = g_fd_tur[y];
+    eger (tur == FD_DOSYA || tur == FD_DIZIN || tur == FD_NULL || tur == FD_FB) {
+        eger (g_fd_no[y] >= 0) { don sc_yapi_ver(s, buf, sc_dugum_stat(g_fd_no[y]), 144); }
+    }
+    eger (tur == FD_GIRDI) {
+        // boru: S_IFIFO | 0600
+        don sc_yapi_ver(s, buf, sc_stat_tampon(4096 + 384, 1, 1, 1, 0, simdi()), 144);
+    }
+    // terminal: S_IFCHR | 0620
+    don sc_yapi_ver(s, buf, sc_stat_tampon(8192 + 400, 1, 1, 1, 0, simdi()), 144);
+}
+
+// ---- lseek ----
+
+fonk sc_lseek(sayi s, sayi fd, sayi ofs, sayi nereden) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    sayi y = fd_yer(s, fd);
+    sayi tur = g_fd_tur[y];
+    eger (tur == FD_TERMINAL || tur == FD_GIRDI) { don -ESPIPE; }
+    eger (tur == FD_NULL || tur == FD_FB) { don 0; }
+    sayi yeni = 0;
+    eger (nereden == 0) {
+        yeni = ofs;
+    } yoksa eger (nereden == 1) {
+        yeni = g_fd_konum[y] + ofs;
+    } yoksa eger (nereden == 2) {
+        yeni = fs_boyut(g_fd_no[y]) + ofs;
+    } yoksa {
+        don -EINVAL;
+    }
+    eger (yeni < 0) { don -EINVAL; }
+    g_fd_konum.yaz(y, yeni);
+    don yeni;
+}
+
+// ---- mmap / munmap / brk ----
+
+// mmap için boş bir bölge: üst sınırdan aşağı doğru.
+fonk sc_mmap_yer(sayi s, sayi uzunluk) -> sayi {
+    sayi ka = g_surec[s].ka;
+    sayi aday = sayfa_asagi(g_surec[s].mmap_ust - uzunluk);
+    iken (aday > g_surec[s].brk + 16777216) {
+        eger (upp.cekirdek.kullanici_bos_mu(ka, aday, uzunluk)) {
+            g_surec[s].mmap_ust = aday;
+            don aday;
+        }
+        aday -= SAYFA;
+    }
+    don -1;
+}
+
+fonk sc_mmap(sayi s, sayi adres, sayi uzunluk, sayi koruma, sayi bayrak, sayi fd, sayi ofs) -> sayi {
+    sayi ka = g_surec[s].ka;
+    // Denetim sırası Linux'taki gibi: ofset hizası, tanımlayıcı, uzunluk, eşleme türü.
+    eger (ofs < 0 || ofs % SAYFA != 0) { don -EINVAL; }
+    mantik anonim = (bayrak & MAP_ANONYMOUS) != 0;
+    mantik sabit_yer = (bayrak & MAP_FIXED) != 0;
+    sayi fd_tur = FD_KAPALI;
+    sayi y = 0;
+    eger (!anonim) {
+        eger (!fd_gecerli(s, fd)) { don -EBADF; }
+        y = fd_yer(s, fd);
+        fd_tur = g_fd_tur[y];
+    }
+    eger (uzunluk <= 0) { don -EINVAL; }
+    sayi paylasim = bayrak % 4;
+    eger (paylasim != MAP_SHARED && paylasim != MAP_PRIVATE) { don -EINVAL; }
+    eger (!anonim) {
+        eger (fd_tur != FD_DOSYA && fd_tur != FD_FB) { don -ENODEV; }
+        eger (g_fd_bayrak[y] % 4 == 1) { don -EACCES; }
+    }
+    sayi n = sayfa_yukari(uzunluk);
+    // yerleşim
+    sayi a = -1;
+    eger (sabit_yer) {
+        eger (adres % SAYFA != 0 || adres < 0x10000 || adres + n > YIGIN_UST) { don -EINVAL; }
+        upp.cekirdek.kullanici_esleme_kaldir(ka, adres, n);
+        a = adres;
+    } yoksa eger (adres >= 0x10000 && adres % SAYFA == 0 && adres + n <= MMAP_UST && upp.cekirdek.kullanici_bos_mu(ka, adres, n)) {
+        a = adres;
+    } yoksa {
+        a = sc_mmap_yer(s, n);
+    }
+    eger (a < 0) { don -ENOMEM; }
+    // çerçeve tamponu: aygıt belleği doğrudan (önbelleksiz) eşlenir
+    eger (fd_tur == FD_FB) {
+        sayi fb_boy = upp.cekirdek.ekran_bilgi(1);
+        eger (paylasim != MAP_SHARED || ofs + n > sayfa_yukari(fb_boy)) { don -EINVAL; }
+        mantik ok = yanlis;
+        guvensiz {
+            ok = upp.cekirdek.kullanici_fiziksel_esle(ka, a, upp.cekirdek.ekran_bilgi(0) + ofs, n, koruma);
+        }
+        eger (!ok) { don -ENOMEM; }
+        don a;
+    }
+    // anonim ya da dosya: sıfırlanmış sayfalar (dosya içeriği kopyalanır)
+    sayi ilk = koruma;
+    eger (!anonim) { ilk = 3; }
+    eger (!upp.cekirdek.kullanici_esle(ka, a, n, ilk)) {
+        upp.cekirdek.kullanici_esleme_kaldir(ka, a, n);
+        don -ENOMEM;
+    }
+    eger (!anonim) {
+        metin icerik = fs_oku(g_fd_no[y]);
+        sayi toplam = bayt_say(icerik);
+        eger (ofs < toplam) {
+            sayi k = toplam - ofs;
+            eger (k > n) { k = n; }
+            sc_yaz_metin(s, a, icerik, ofs, k);
+        }
+        upp.cekirdek.kullanici_koruma(ka, a, n, koruma, yanlis);
+    }
+    don a;
+}
+
+fonk sc_munmap(sayi s, sayi adres, sayi uzunluk) -> sayi {
+    eger (adres % SAYFA != 0 || uzunluk <= 0 || adres < 0 || adres + uzunluk > YIGIN_UST) { don -EINVAL; }
+    eger (adres < 0x10000) { don 0; }
+    upp.cekirdek.kullanici_esleme_kaldir(g_surec[s].ka, adres, sayfa_yukari(uzunluk));
+    don 0;
+}
+
+// brk(0) şimdiki sınırı verir; büyütme/küçültme başarısızsa eski sınır döner.
+fonk sc_brk(sayi s, sayi yeni) -> sayi {
+    sayi eski = g_surec[s].brk;
+    eger (yeni == 0 || yeni < g_surec[s].brk_bas) { don eski; }
+    sayi ka = g_surec[s].ka;
+    sayi eski_s = sayfa_yukari(eski);
+    sayi yeni_s = sayfa_yukari(yeni);
+    eger (yeni_s > eski_s) {
+        eger (yeni_s + 16777216 > g_surec[s].mmap_ust) { don eski; }
+        eger (!upp.cekirdek.kullanici_bos_mu(ka, eski_s, yeni_s - eski_s)) { don eski; }
+        eger (!upp.cekirdek.kullanici_esle(ka, eski_s, yeni_s - eski_s, 3)) {
+            upp.cekirdek.kullanici_esleme_kaldir(ka, eski_s, yeni_s - eski_s);
+            don eski;
+        }
+    } yoksa eger (yeni_s < eski_s) {
+        upp.cekirdek.kullanici_esleme_kaldir(ka, yeni_s, eski_s - yeni_s);
+    }
+    g_surec[s].brk = yeni;
+    don yeni;
+}
+
+// ---- ioctl ----
+
+fonk sc_ioctl(sayi s, sayi fd, sayi istek, sayi arg) -> sayi {
+    eger (!fd_gecerli(s, fd)) { don -EBADF; }
+    sayi tur = g_fd_tur[fd_yer(s, fd)];
+    eger (tur == FD_TERMINAL) {
+        eger (istek == TIOCGWINSZ) {
+            // struct winsize { ws_row, ws_col, ws_xpixel, ws_ypixel } (u16)
+            sayi t = upp.tampon.yeni(8);
+            upp.tampon.yaz16(t, 0, upp.cekirdek.ekran_bilgi(13));
+            upp.tampon.yaz16(t, 2, upp.cekirdek.ekran_bilgi(12));
+            upp.tampon.yaz16(t, 4, upp.cekirdek.ekran_bilgi(2));
+            upp.tampon.yaz16(t, 6, upp.cekirdek.ekran_bilgi(3));
+            don sc_yapi_ver(s, arg, t, 8);
+        }
+        eger (istek == TCGETS) {
+            // struct termios (60 bayt): kanonik kip, yankı, ISIG; isatty() bunu kullanır
+            sayi t = upp.tampon.yeni(60);
+            upp.tampon.doldur(t, 0, 60, 0);
+            upp.tampon.yaz32(t, 0, 0x500);     // c_iflag: ICRNL | IXON
+            upp.tampon.yaz32(t, 4, 0x5);       // c_oflag: OPOST | ONLCR
+            upp.tampon.yaz32(t, 8, 0xBF);      // c_cflag: B38400 | CS8 | CREAD
+            upp.tampon.yaz32(t, 12, 0x8A3B);   // c_lflag: ISIG ICANON ECHO ECHOE ECHOK ECHOCTL ECHOKE IEXTEN
+            upp.tampon.yaz8(t, 17, 3);         // VINTR = ^C
+            upp.tampon.yaz8(t, 19, 127);       // VERASE
+            upp.tampon.yaz8(t, 21, 4);         // VEOF = ^D
+            upp.tampon.yaz8(t, 23, 1);         // VMIN
+            don sc_yapi_ver(s, arg, t, 60);
+        }
+        don -ENOTTY;
+    }
+    eger (tur == FD_FB && istek == FBIOGET_VSCREENINFO) {
+        // struct fb_var_screeninfo (160 bayt)
+        sayi gen = upp.cekirdek.ekran_bilgi(2);
+        sayi yuk = upp.cekirdek.ekran_bilgi(3);
+        sayi t = upp.tampon.yeni(160);
+        upp.tampon.doldur(t, 0, 160, 0);
+        upp.tampon.yaz32(t, 0, gen);           // xres
+        upp.tampon.yaz32(t, 4, yuk);           // yres
+        upp.tampon.yaz32(t, 8, gen);           // xres_virtual
+        upp.tampon.yaz32(t, 12, yuk);          // yres_virtual
+        upp.tampon.yaz32(t, 24, upp.cekirdek.ekran_bilgi(5)); // bits_per_pixel
+        upp.tampon.yaz32(t, 32, upp.cekirdek.ekran_bilgi(7)); // red.offset
+        upp.tampon.yaz32(t, 36, upp.cekirdek.ekran_bilgi(6)); // red.length
+        upp.tampon.yaz32(t, 44, upp.cekirdek.ekran_bilgi(9)); // green.offset
+        upp.tampon.yaz32(t, 48, upp.cekirdek.ekran_bilgi(8)); // green.length
+        upp.tampon.yaz32(t, 56, upp.cekirdek.ekran_bilgi(11)); // blue.offset
+        upp.tampon.yaz32(t, 60, upp.cekirdek.ekran_bilgi(10)); // blue.length
+        upp.tampon.yaz32(t, 88, 0xFFFFFFFF);  // height (mm): bilinmiyor
+        upp.tampon.yaz32(t, 92, 0xFFFFFFFF);  // width (mm)
+        don sc_yapi_ver(s, arg, t, 160);
+    }
+    eger (tur == FD_FB && istek == FBIOGET_FSCREENINFO) {
+        // struct fb_fix_screeninfo (80 bayt)
+        sayi t = upp.tampon.yeni(80);
+        upp.tampon.doldur(t, 0, 80, 0);
+        upp.tampon.metin_yaz(t, 0, "uppixfb");
+        upp.tampon.yaz64(t, 16, upp.cekirdek.ekran_bilgi(0)); // smem_start
+        upp.tampon.yaz32(t, 24, upp.cekirdek.ekran_bilgi(1)); // smem_len
+        upp.tampon.yaz32(t, 28, 0);                           // type: FB_TYPE_PACKED_PIXELS
+        upp.tampon.yaz32(t, 36, 2);                           // visual: FB_VISUAL_TRUECOLOR
+        upp.tampon.yaz32(t, 48, upp.cekirdek.ekran_bilgi(4)); // line_length
+        don sc_yapi_ver(s, arg, t, 80);
+    }
+    don -ENOTTY;
+}
+
+// ---- nanosleep ----
+
+fonk sc_nanosleep(sayi s, sayi istek, sayi kalan) -> sayi {
+    sayi t = upp.tampon.yeni(16);
+    eger (!upp.cekirdek.kullanici_oku(g_surec[s].ka, istek, t, 0, 16)) {
+        upp.tampon.birak(t);
+        don -EFAULT;
+    }
+    sayi sn = upp.tampon.oku64(t, 0);
+    sayi ns = upp.tampon.oku64(t, 8);
+    upp.tampon.birak(t);
+    eger (sn < 0 || ns < 0 || ns >= 1000000000) { don -EINVAL; }
+    sayi bitis = upp.zaman() + sn * 1000 + (ns + 999999) / 1000000;
+    iken (upp.zaman() < bitis) {
+        sayi k = bitis - upp.zaman();
+        eger (k > 20) { k = 20; }
+        upp.uyut(k);
+        eger (sc_on_planda(s) && kesme_istendi_mi()) {
+            eger (kalan != 0) {
+                sayi r = upp.tampon.yeni(16);
+                sayi kms = bitis - upp.zaman();
+                eger (kms < 0) { kms = 0; }
+                upp.tampon.yaz64(r, 0, kms / 1000);
+                upp.tampon.yaz64(r, 8, kms % 1000 * 1000000);
+                sc_yapi_ver(s, kalan, r, 16);
+            }
+            don sc_kesme(s);
+        }
+    }
+    don 0;
+}
