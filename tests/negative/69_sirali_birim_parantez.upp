@@ -1,0 +1,10 @@
+// Negatif: veri taşımayan varyant çağrılamaz.
+// @icerir: [u++ HATA]
+// @icerir: 'Durum.Bekliyor' veri taşımaz; parantezsiz yazın.
+
+sirali Durum { Bekliyor, Yukleniyor(sayi yuzde) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Bekliyor();
+    don 0;
+}

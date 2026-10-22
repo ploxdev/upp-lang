@@ -1,0 +1,10 @@
+// Negatif: varyant kurucusuna alan sayısı kadar değer verilir.
+// @icerir: [u++ HATA]
+// @icerir: 'Durum.Hata' 2 değer bekler, 1 verildi.
+
+sirali Durum { Bekliyor, Hata(metin mesaj, sayi kod) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Hata("x");
+    don 0;
+}

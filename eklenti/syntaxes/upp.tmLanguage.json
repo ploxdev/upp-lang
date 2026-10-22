@@ -104,7 +104,7 @@
     },
     "keywords": {
       "name": "keyword.control.upp",
-      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|kendi|oto|c_ekle|c_harici|kullan|olarak|sabit|ertele|hata_ertele)\\b"
+      "match": "\\b(fonk|don|eger|yoksa|iken|dongu|her|in|dur|devam|secim|durum|varsayilan|arkaplan|guvensiz|guvenli|sinif|secenek|sirali|kendi|oto|c_ekle|c_harici|kullan|olarak|sabit|ertele|hata_ertele)\\b"
     },
     "types": {
       "name": "storage.type.upp",

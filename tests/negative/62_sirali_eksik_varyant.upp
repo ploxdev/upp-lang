@@ -1,0 +1,14 @@
+// Negatif: sirali secim'i 'varsayilan' olmadan tüm varyantları kapsamalıdır.
+// @icerir: [u++ HATA]
+// @icerir: 'secim' tüm 'Durum' varyantlarını kapsamalı; eksik: Hata, Bitti
+
+sirali Durum { Bekliyor, Yukleniyor(sayi yuzde), Hata(metin mesaj), Bitti }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Yukleniyor(5);
+    secim (d) {
+        durum Bekliyor: upp.satir_yaz("b");
+        durum Yukleniyor(y): upp.satir_yaz("{y}");
+    }
+    don 0;
+}

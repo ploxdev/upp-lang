@@ -1,0 +1,13 @@
+// Negatif: kalıpta olmayan varyant.
+// @icerir: [u++ HATA]
+// @icerir: 'Durum' içinde 'Bitti' varyantı yok (varyantlar: Bekliyor, Yukleniyor).
+
+sirali Durum { Bekliyor, Yukleniyor(sayi yuzde) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Bekliyor;
+    secim (d) {
+        durum Bitti: don 1;
+        varsayilan: don 0;
+    }
+}

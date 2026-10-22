@@ -1,0 +1,10 @@
+// Negatif: veri taşıyan varyant değerleri olmadan yazılamaz.
+// @icerir: [u++ HATA]
+// @icerir: 'Durum.Yukleniyor' veri taşır; değerleriyle yazın: Durum.Yukleniyor(...).
+
+sirali Durum { Bekliyor, Yukleniyor(sayi yuzde) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Yukleniyor;
+    don 0;
+}

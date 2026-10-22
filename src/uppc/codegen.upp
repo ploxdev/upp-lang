@@ -1180,16 +1180,53 @@ fonk uret_metot(sayi expr) -> metin {
             mi = mi + 1;
         }
     }
-    metin s = kat5(cn, "_", dugum_ad(member), "(&(", uret_lvalue(dugum_a(member)));
-    s = kat(s, ")");
+    sayi alici_e = dugum_a(member);
+    oto alici = uret_lvalue(alici_e);
+    metin arglar = "";
     eger (method != 0) {
         eger (liste_uzunluk(dugum_liste(method)) > 0) {
-            s = kat3(s, ", ", uret_args_fn(method, dugum_liste(expr)));
+            arglar = kat(", ", uret_args_fn(method, dugum_liste(expr)));
         }
     } yoksa eger (liste_uzunluk(dugum_liste(expr)) > 0) {
-        s = kat3(s, ", ", uret_args(dugum_liste(expr)));
+        arglar = kat(", ", uret_args(dugum_liste(expr)));
     }
-    don kat(s, ")");
+    eger (!alici_adreslenir(alici_e, alici)) {
+        don uret_gecici_alici_cagri(alici_e, alici, kat3(cn, "_", dugum_ad(member)), arglar, method);
+    }
+    don kat5(cn, "_", dugum_ad(member), "(&(", kat3(alici, ")", kat(arglar, ")")));
+}
+
+// Metot alıcısının C'de adresi alınabilir mi? Çağrı sonucu gibi geçici değerler
+// (kökü değişken, alan ya da indeks olmayan ifadeler) alınamaz. Codegen'in
+// zaten bir geçiciye kaldırdığı sonuçlar düz C adıdır.
+fonk alici_adreslenir(sayi e, metin c) -> mantik {
+    eger (c_tanimlayici_mi(c)) { don dogru; }
+    sayi k = e;
+    iken (k != 0 && dugum_tur(k) == DugumTur.D_UYE) {
+        sayi ot = tip_ifade(dugum_a(k));
+        eger (dugum_ptrd(ot) > 0) { don dogru; }
+        k = dugum_a(k);
+    }
+    eger (k == 0) { don dogru; }
+    sayi t = dugum_tur(k);
+    don t == DugumTur.D_KIMLIK || t == DugumTur.D_INDIS || t == DugumTur.D_TEKIL;
+}
+
+// Geçici alıcı: GNU deyim ifadesinde adreslenebilir bir kopyaya konur; sahipli
+// sınıfsa çağrıdan sonra bırakılır. Her bağlamda (ternary, for artımı) geçerlidir.
+fonk uret_gecici_alici_cagri(sayi e, metin alici, metin fn, metin arglar, sayi method) -> metin {
+    sayi rt = tip_ifade(e);
+    oto tn = kat("_upp_al", sayi_metin(tmp_yeni()));
+    oto bas = kat5("({ ", uret_ctur(rt), " ", tn, kat3(" = ", alici, "; "));
+    oto cagri = kat5(fn, "(&", tn, arglar, ")");
+    sayi cls = tur_sahip(rt);
+    eger (cls == 0) { don kat3(bas, cagri, "; })"); }
+    oto birak = kat4(sahip_birak(cls), "(&", tn, ");");
+    eger (method == 0 || tip_void_mi(dugum_a(method))) {
+        don kat5(bas, cagri, "; ", birak, " })");
+    }
+    oto rn = kat("_upp_ar", sayi_metin(tmp_yeni()));
+    don kat5(bas, kat5(uret_ctur(dugum_a(method)), " ", rn, " = ", cagri), "; ", birak, kat3(" ", rn, "; })"));
 }
 
 fonk uret_dizi_idx(sayi arr_t, sayi idx_e) -> metin {

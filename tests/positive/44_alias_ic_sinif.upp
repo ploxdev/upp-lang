@@ -1,0 +1,27 @@
+// Pozitif: takma adlı modül ('kullan … olarak m') kendi sınıf ve seçeneklerini
+// içeride nitelemeden kullanır; dışarıdan 'm.Ad' ile erişilir.
+// @stdout
+// 5
+// 3 0 10 20
+// 42
+// 6 12
+// 9
+// güney kuzey
+
+kullan "_lib_alias_sinif.upp" olarak m;
+
+fonk ana() -> sayi {
+    m.Kutu k = m.kutu(5);
+    upp.satir_yaz("{k.v}");
+    liste[m.Kutu] l = m.kutular(3);
+    upp.satir_yaz("{l.uzunluk()} {l[0].v} {l[1].v} {l[2].v}");
+    harita[metin, m.Kutu] h = m.adli("x", 42);
+    upp.satir_yaz("{h.al(\"x\").v}");
+    m.Cift c0 = m.cift(3);
+    m.Cift c = c0.iki_kat();
+    upp.satir_yaz("{m.cift(6).a} {c.iki_kat().a}");
+    upp.satir_yaz("{m.uygula(fonk(m.Kutu x) -> sayi { don x.v + 4; }, k)}");
+    m.Yon y = m.ters(m.Yon.Kuzey);
+    upp.satir_yaz("{m.yon_ad(y)} {m.yon_ad(m.ters(y))}");
+    don 0;
+}

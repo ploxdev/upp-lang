@@ -181,6 +181,7 @@ fonk anahtar_mi(metin s) -> mantik {
     eger (metin_esit(s, "her")) { don dogru; }
     eger (metin_esit(s, "in")) { don dogru; }
     eger (metin_esit(s, "secenek")) { don dogru; }
+    eger (metin_esit(s, "sirali")) { don dogru; }
     eger (metin_esit(s, "kullan")) { don dogru; }
     eger (metin_esit(s, "olarak")) { don dogru; }
     eger (metin_esit(s, "sabit")) { don dogru; }

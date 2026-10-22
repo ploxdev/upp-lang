@@ -69,6 +69,99 @@ fonk kullan_coz(metin spec, metin dahil_yol, sayi satir, sayi sutun) -> metin {
     don "";
 }
 
+// Takma adlı modülde ('kullan ... olarak m') sınıf/secenek/sirali 'm.Ad' olarak
+// kaydedilir; modülün kendi gövdelerindeki nitelenmemiş adlar da 'm.Ad'a çevrilir.
+harita[metin, mantik] g_alias_adlar;
+harita[sayi, mantik] g_alias_gorulen;
+metin g_alias = "";
+
+fonk alias_ad_karakteri_mi(sayi c) -> mantik {
+    don c >= 128 || c == 95 || (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+}
+
+// Tür yazımındaki ("liste[Kutu]", "fonk(Kutu)->sayi") nitelenmemiş modül adları.
+fonk alias_tur_metni(metin s) -> metin {
+    sayi L = metin_uzun(s);
+    metin r = "";
+    mantik degisti = yanlis;
+    sayi i = 0;
+    iken (i < L) {
+        eger (!alias_ad_karakteri_mi(metin_cp(s, i))) {
+            r = kat(r, intern_dilim(s, i, i + 1));
+            i = i + 1;
+            devam;
+        }
+        sayi j = i;
+        iken (j < L && alias_ad_karakteri_mi(metin_cp(s, j))) { j = j + metin_adv(s, j); }
+        oto parca = intern_dilim(s, i, j);
+        mantik nitelikli = (i > 0 && metin_cp(s, i - 1) == 46) || (j < L && metin_cp(s, j) == 46);
+        eger (!nitelikli && g_alias_adlar.var_mi(parca)) {
+            r = kat3(r, g_alias, ".");
+            degisti = dogru;
+        }
+        r = kat(r, parca);
+        i = j;
+    }
+    eger (!degisti) { don s; }
+    don intern(r);
+}
+
+fonk alias_liste_cevir(sayi L) -> bos {
+    eger (L == 0) { don; }
+    her (sayi i in 0..liste_uzunluk(L)) { alias_cevir(liste_al(L, i)); }
+}
+
+// Tür düğümleri ile 'Kutu(...)', 'Renk.X', 'Durum.V(...)' biçimlerindeki
+// tür adı ifadeleri çevrilir. 'durum V(x)' kalıbının başı varyant adıdır.
+fonk alias_cevir(sayi n) -> bos {
+    eger (n == 0 || g_alias_gorulen.var_mi(n)) { don; }
+    g_alias_gorulen.koy(n, dogru);
+    sayi t = dugum_tur(n);
+    eger (t == DugumTur.D_TUR) {
+        dugum_yaz_ad(n, alias_tur_metni(dugum_ad(n)));
+        don;
+    }
+    eger (t == DugumTur.D_DURUM && dugum_a(n) != 0 && dugum_tur(dugum_a(n)) == DugumTur.D_CAGRI) {
+        sayi p = dugum_a(n);
+        g_alias_gorulen.koy(p, dogru);
+        alias_cevir(dugum_a(p));
+    }
+    eger (t == DugumTur.D_UYE || t == DugumTur.D_CAGRI) {
+        sayi a = dugum_a(n);
+        eger (a != 0 && dugum_tur(a) == DugumTur.D_KIMLIK && g_alias_adlar.var_mi(dugum_ad(a))) {
+            sayi al = kimlik_dugum(dugum_satir(a), dugum_sutun(a), g_alias);
+            g_alias_gorulen.koy(al, dogru);
+            dugum_yaz_tur(a, DugumTur.D_UYE);
+            dugum_yaz_a(a, al);
+        }
+    }
+    alias_cevir(dugum_a(n));
+    alias_cevir(dugum_b(n));
+    alias_cevir(dugum_c(n));
+    alias_cevir(dugum_d(n));
+    alias_liste_cevir(dugum_liste(n));
+    alias_liste_cevir(dugum_liste2(n));
+}
+
+fonk alias_birim_cevir(sayi decls, metin alias) -> bos {
+    g_alias = alias;
+    g_alias_adlar.temizle();
+    g_alias_gorulen.temizle();
+    mantik bulundu = yanlis;
+    her (sayi i in 0..liste_uzunluk(decls)) {
+        sayi d = liste_al(decls, i);
+        eger (dugum_tur(d) == DugumTur.D_SINIF || dugum_tur(d) == DugumTur.D_SECENEK) {
+            g_alias_adlar.koy(dugum_ad(d), dogru);
+            bulundu = dogru;
+        }
+    }
+    eger (!bulundu) { don; }
+    her (sayi i in 0..liste_uzunluk(decls)) {
+        sayi d = liste_al(decls, i);
+        eger (dugum_tur(d) != DugumTur.D_KULLAN) { alias_cevir(d); }
+    }
+}
+
 fonk yukle_birim(metin kaynak, metin yol, sayi kutuphane, sayi seen, sayi stack, sayi merged, metin alias) -> bos {
     oto gercek = intern(yol);
     eger (os_dosya_var(yol)) {
@@ -149,6 +242,9 @@ fonk yukle_birim(metin kaynak, metin yol, sayi kutuphane, sayi seen, sayi stack,
             }
         }
         i = i + 1;
+    }
+    eger (!metin_esit(alias, "") && !hata_var()) {
+        alias_birim_cevir(decls, alias);
     }
     liste_kisalt(stack);
 }

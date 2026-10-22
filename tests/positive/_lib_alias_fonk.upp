@@ -1,0 +1,43 @@
+// 46_alias_ic_fonk.upp için: takma adla katılan modül kendi fonksiyonlarını,
+// küresellerini ve sabitlerini nitelemeden kullanır.
+
+sabit sayi TABAN = 10;
+sabit sayi IKI_TABAN = TABAN * 2;
+sayi g_cagri = 0;
+
+fonk iki(sayi x) -> sayi {
+    g_cagri += 1;
+    don x * 2;
+}
+
+fonk dort(sayi x) -> sayi => iki(iki(x));
+
+// özyineleme
+fonk faktoriyel(sayi n) -> sayi {
+    eger (n <= 1) { don 1; }
+    don n * faktoriyel(n - 1);
+}
+
+// fonksiyon değeri olarak modül fonksiyonu
+fonk uygula(fonk(sayi) -> sayi f, sayi x) -> sayi => f(x);
+
+fonk iki_kez_iki(sayi x) -> sayi => uygula(iki, uygula(iki, x));
+
+// parametre modül fonksiyonunu gölgeler
+fonk golge(sayi iki) -> sayi => iki + TABAN;
+
+sinif Sayac {
+    sayi n;
+    fonk artir() -> bos {
+        kendi.n = iki(kendi.n) + 1;
+    }
+}
+
+fonk sayac_yap() -> Sayac {
+    Sayac s;
+    s.n = TABAN;
+    s.artir();
+    don s;
+}
+
+fonk cagri_sayisi() -> sayi => g_cagri;

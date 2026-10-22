@@ -1,0 +1,61 @@
+// Pozitif: geçici değer (çağrı sonucu) üzerinde metot çağrısı. Sahipsiz ve
+// sahipli (metin alanlı) sınıflar, metin ve bos dönüş, ternary ve dongu
+// artımı içinde, zincirleme; sahipli geçici çağrıdan sonra bırakılır.
+// @bayrak: --guvenlik-denetimi
+// @stdout
+// 6 7
+// selam dünya!
+// bos metot
+// üçlü: 8
+// artım: 0 1 3 7
+// zincir: 11
+// adlı: Ayşe(31)
+
+sinif Kutu {
+    sayi v;
+    fonk iki_kat() -> sayi { don kendi.v * 2; }
+    fonk arti(sayi k) -> sayi { don kendi.v + k; }
+    fonk sonraki() -> Kutu {
+        Kutu y;
+        y.v = kendi.v * 2 + 1;
+        don y;
+    }
+}
+
+sinif Ad {
+    metin ad;
+    sayi yas;
+    fonk tanit() -> metin { don "{kendi.ad}({kendi.yas})"; }
+    fonk selamla(metin ek) -> metin { don kendi.ad + ek; }
+    fonk yaz() -> bos { upp.satir_yaz("bos metot"); }
+}
+
+fonk kutu(sayi v) -> Kutu {
+    Kutu k;
+    k.v = v;
+    don k;
+}
+
+fonk ad_yap(metin a, sayi y) -> Ad {
+    Ad d;
+    d.ad = a;
+    d.yas = y;
+    don d;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("{kutu(3).iki_kat()} {kutu(3).arti(4)}");
+    upp.satir_yaz(ad_yap("selam", 1).selamla(" dünya!"));
+    ad_yap("x", 2).yaz();
+    sayi a = 4;
+    sayi u = a > 3 ? kutu(a).iki_kat() : 0;
+    upp.satir_yaz("üçlü: {u}");
+    metin s = "artım:";
+    dongu (sayi i = 0; i < 10; i = kutu(i).sonraki().v) {
+        s += " {i}";
+    }
+    upp.satir_yaz(s);
+    upp.satir_yaz("zincir: {kutu(2).sonraki().sonraki().v}");
+    upp.satir_yaz("adlı: " + ad_yap("Ayşe", 31).tanit());
+    don 0;
+}

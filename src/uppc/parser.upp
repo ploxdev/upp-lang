@@ -2053,6 +2053,8 @@ fonk ayristir_bildirim(sayi decls) -> bos {
         liste_ekle(decls, ayristir_sinif());
     } yoksa eger (kw_mi("secenek")) {
         liste_ekle(decls, ayristir_secenek());
+    } yoksa eger (kw_mi("sirali")) {
+        ayristir_sirali(decls);
     } yoksa eger (kw_mi("fonk") && bak_tur_at(1) != JetonTur.J_PARANTEZ_AC) {
         liste_ekle(decls, ayristir_fonksiyon(""));
     } yoksa eger (kw_mi("oto") || tur_baslangici_mi()) {
@@ -2063,7 +2065,7 @@ fonk ayristir_bildirim(sayi decls) -> bos {
         }
     } yoksa {
         hata_fmt_basla();
-        hata_fmt_yaz("Üst düzeyde 'c_ekle', 'c_harici', 'kullan', 'sabit', değişken, 'sinif', 'secenek' veya 'fonk' bekleniyordu, '");
+        hata_fmt_yaz("Üst düzeyde 'c_ekle', 'c_harici', 'kullan', 'sabit', değişken, 'sinif', 'secenek', 'sirali' veya 'fonk' bekleniyordu, '");
         hata_fmt_yaz(bak_deger());
         hata_fmt_yaz("' bulundu.");
         hata_fmt_ver(bak_satir(), bak_sutun());

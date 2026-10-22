@@ -1,0 +1,43 @@
+// 45_alias_sirali.upp için: takma adla katılan modülde sirali (kurucular,
+// secim kalıpları ve alan türü olarak modülün kendi sınıfı).
+
+sinif Nokta {
+    sayi x;
+    sayi y;
+}
+
+sirali Durum { Bos, Sayi(sayi n), Konum(Nokta p), Mesaj(metin yazi) }
+
+sirali Renk { Kirmizi, Mavi }
+
+fonk konum(sayi x, sayi y) -> Durum {
+    Nokta p;
+    p.x = x;
+    p.y = y;
+    don Durum.Konum(p);
+}
+
+fonk bos_durum() -> Durum => Durum.Bos;
+
+fonk liste_yap() -> liste[Durum] {
+    liste[Durum] l;
+    l.ekle(Durum.Mesaj("selam"));
+    l.ekle(Durum.Sayi(3));
+    don l;
+}
+
+fonk aciklama(Durum d) -> metin {
+    secim (d) {
+        durum Bos: don "boş";
+        durum Sayi(n): don "sayı {n}";
+        durum Durum.Konum(p): don "konum {p.x},{p.y}";
+        durum Mesaj(y): don "mesaj {y}";
+    }
+}
+
+fonk renk_ad(Renk r) -> metin {
+    secim (r) {
+        durum Kirmizi: don "kırmızı";
+        durum Renk.Mavi: don "mavi";
+    }
+}

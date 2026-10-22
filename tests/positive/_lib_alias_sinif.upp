@@ -1,0 +1,61 @@
+// 44_alias_ic_sinif.upp için: takma adla katılan modül kendi sınıflarını ve
+// seçeneklerini nitelemeden kullanır (tür, kurucu, liste/harita/fonk türleri).
+
+sinif Kutu {
+    sayi v;
+}
+
+sinif Cift {
+    sayi a;
+
+    fonk olustur(sayi x) {
+        kendi.a = x;
+    }
+
+    fonk iki_kat() -> Cift {
+        don Cift(kendi.a * 2);
+    }
+}
+
+secenek Yon { Kuzey, Guney }
+
+fonk kutu(sayi v) -> Kutu {
+    Kutu k;
+    k.v = v;
+    don k;
+}
+
+fonk kutular(sayi n) -> liste[Kutu] {
+    liste[Kutu] l;
+    her (sayi i in 0..n) {
+        Kutu k;
+        k.v = i * 10;
+        l.ekle(k);
+    }
+    don l;
+}
+
+fonk adli(metin ad, sayi v) -> harita[metin, Kutu] {
+    harita[metin, Kutu] h;
+    Kutu k;
+    k.v = v;
+    h.koy(ad, k);
+    don h;
+}
+
+fonk cift(sayi x) -> Cift => Cift(x);
+
+fonk uygula(fonk(Kutu) -> sayi f, Kutu k) -> sayi => f(k);
+
+fonk yon_ad(Yon y) -> metin {
+    secim (y) {
+        durum Yon.Kuzey: don "kuzey";
+        durum Yon.Guney: don "güney";
+    }
+    don "?";
+}
+
+fonk ters(Yon y) -> Yon {
+    eger (y == Yon.Kuzey) { don Yon.Guney; }
+    don Yon.Kuzey;
+}

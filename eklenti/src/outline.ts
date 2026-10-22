@@ -1,4 +1,4 @@
-export type SembolTur = "fonk" | "sinif" | "secenek";
+export type SembolTur = "fonk" | "sinif" | "secenek" | "sirali";
 
 export type Sembol = {
   ad: string;
@@ -7,7 +7,7 @@ export type Sembol = {
   sutun: number;
 };
 
-const SATIR = /^(?:fonk|sinif|secenek)\b/;
+const SATIR = /^(?:fonk|sinif|secenek|sirali)\b/;
 
 export function outlineSemboller(kaynak: string): Sembol[] {
   const out: Sembol[] = [];
@@ -18,7 +18,7 @@ export function outlineSemboller(kaynak: string): Sembol[] {
     if (!SATIR.test(s)) {
       continue;
     }
-    const m = s.match(/^(fonk|sinif|secenek)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    const m = s.match(/^(fonk|sinif|secenek|sirali)\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (!m) {
       continue;
     }

@@ -1,0 +1,687 @@
+// sirali: veri taşıyabilen numaralandırma (etiketli birleşim, Rust/Swift enum'u).
+//
+//   sirali Renk { Kirmizi, Yesil, Mavi }                  // düz: secenek gibi
+//   sirali Durum { Bekliyor, Yukleniyor(sayi yuzde), Hata(metin mesaj) }
+//
+//   Durum d = Durum.Yukleniyor(40);    Durum b = Durum.Bekliyor;
+//   secim (d) {
+//       durum Bekliyor: ...
+//       durum Yukleniyor(y): ...       // alanlar kalıptaki adlara kopyalanır
+//       durum Hata(m): ...
+//   }
+//
+// Kurallar: kollar birbirine düşmez; 'varsayilan' yoksa tüm varyantlar
+// kapsanmalıdır (eksikler derleme hatasıdır); veri taşıyan bir değerin alanlarına
+// doğrudan erişilemez, yalnızca 'secim' ile açılır. Varsayılan değer (ilk
+// atamasız bildirim) ilk varyanttır.
+//
+// İndirgeme: hiçbir varyantı veri taşımıyorsa sirali bir D_SECENEK'tir. Veri
+// taşıyorsa ayrıştırıcı bir değer sınıfı (etiket + varyant başına alanlar) ve
+// varyant başına bir kurucu fonksiyon üretir; bunlar sıradan u++ kaynağı olarak
+// sözcüklenip ayrıştırılır, böylece metin sahipliği, kopyalama, listeler ve
+// codegen sınıflarınkiyle aynıdır. Tür denetimi 'Durum.V(...)' ve 'Durum.V'yi
+// kurucu çağrısına, 'secim'i etiket üzerinde tamsayı 'secim'ine çevirir.
+
+// Sirali tablosu (indeks: sirali numarası)
+liste[metin] g_sr_ad;
+liste[sayi] g_sr_veri;         // 1: veri taşıyan (sınıf), 0: düz (secenek)
+liste[sayi] g_sr_v_bas;        // ilk varyantın g_sv_* indeksi
+liste[sayi] g_sr_v_say;
+// Varyantlar
+liste[metin] g_sv_ad;
+liste[sayi] g_sv_a_bas;        // ilk alanın g_sa_* indeksi
+liste[sayi] g_sv_a_say;
+liste[mantik] g_sv_parantez;   // varyant parantezle (veriyle) mi bildirildi
+// Alanlar
+liste[metin] g_sa_ad;
+// Sınıf / secenek düğümü → sirali numarası
+harita[sayi, sayi] g_sr_dugum;
+// İndirgemenin ürettiği alan erişimleri (kullanıcıya kapalı alanlara izin)
+harita[sayi, mantik] g_sr_sentetik;
+sayi g_sr_tmp = 0;
+// Kalıp çözümleme sonucu
+sayi g_sr_kalip_v = -1;
+sayi g_sr_kalip_args = 0;
+
+fonk sirali_sifirla() -> bos {
+    g_sr_ad.temizle();
+    g_sr_veri.temizle();
+    g_sr_v_bas.temizle();
+    g_sr_v_say.temizle();
+    g_sv_ad.temizle();
+    g_sv_a_bas.temizle();
+    g_sv_a_say.temizle();
+    g_sv_parantez.temizle();
+    g_sa_ad.temizle();
+    g_sr_dugum.temizle();
+    g_sr_sentetik.temizle();
+    g_sr_tmp = 0;
+}
+
+fonk sirali_kurucu_ad(sayi sr, sayi v) -> metin => intern(kat4("_upp_sirali_", g_sr_ad[sr], "_", g_sv_ad[v]));
+
+fonk sirali_alan_ad(sayi v, sayi a) -> metin => intern(kat4("_upp_", g_sv_ad[v], "_", g_sa_ad[a]));
+
+// sr içinde adı ad olan varyantın g_sv_* indeksi; yoksa -1.
+fonk sirali_varyant(sayi sr, metin ad) -> sayi {
+    sayi bas = g_sr_v_bas[sr];
+    sayi son = bas + g_sr_v_say[sr];
+    her (sayi v in bas..son) {
+        eger (metin_esit(g_sv_ad[v], ad)) { don v; }
+    }
+    don -1;
+}
+
+fonk sirali_varyant_listesi(sayi sr) -> metin {
+    metin s = "";
+    sayi bas = g_sr_v_bas[sr];
+    sayi son = bas + g_sr_v_say[sr];
+    her (sayi v in bas..son) {
+        eger (v > bas) { s = kat(s, ", "); }
+        s = kat(s, g_sv_ad[v]);
+    }
+    don s;
+}
+
+// ---- ayrıştırma ----
+
+// Jeton aralığının metni (tür yazımını üretilen kaynağa taşımak için).
+fonk sirali_jeton_metni(sayi bas, sayi son) -> metin {
+    metin s = "";
+    her (sayi i in bas..son) {
+        eger (i > bas) { s = kat(s, " "); }
+        s = kat(s, jeton_deger(i));
+    }
+    don s;
+}
+
+// Üretilen u++ kaynağını sözcükler ve bildirimlerini decls'e ekler. Jetonlar
+// mevcut dosyanın sonuna eklenir ve sirali'nin konumunu taşır (hata iletileri
+// için); ayrıştırma bitince imleç geri döner.
+fonk sirali_kaynak_ayristir(metin kaynak, sayi decls, sayi satir, sayi sutun) -> bos {
+    sayi geri_i = ayristir_i_al();
+    metin s_kaynak = g_kaynak;
+    sayi s_cp = g_cp_i;
+    sayi s_satir = g_lex_satir;
+    sayi s_sutun = g_lex_sutun;
+    metin s_ad = g_kaynak_ad;
+    sayi bas = jeton_sayisi();
+    kaynak_ayarla(kaynak, s_ad);
+    lex_tara();
+    g_kaynak = s_kaynak;
+    g_cp_i = s_cp;
+    g_lex_satir = s_satir;
+    g_lex_sutun = s_sutun;
+    g_kaynak_ad = s_ad;
+    eger (hata_var()) { don; }
+    sayi son = jeton_sayisi();
+    her (sayi i in bas..son) {
+        j_satir.yaz(i, satir);
+        j_sutun.yaz(i, sutun);
+    }
+    ayristir_i_yaz(bas);
+    iken (bak_tur() != JetonTur.J_EOF && !hata_var()) {
+        ayristir_bildirim(decls);
+    }
+    ayristir_i_yaz(geri_i);
+}
+
+fonk sirali_ad_hatasi(metin ad, metin ne, sayi satir, sayi sutun) -> bos {
+    hata_fmt_basla();
+    hata_fmt_yaz("'");
+    hata_fmt_yaz(ad);
+    hata_fmt_yaz("' ");
+    hata_fmt_yaz(ne);
+    hata_fmt_ver(satir, sutun);
+}
+
+fonk ayristir_sirali(sayi decls) -> bos {
+    sayi kw = beklenen_kw("sirali");
+    eger (g_nb_say > 0) {
+        hata_ver(g_nb_satir, g_nb_sutun, "'sirali' nitelik almaz.");
+        don;
+    }
+    sayi nm = beklenen_kimlik(yanlis);
+    oto ad = jeton_deger(nm);
+    eger (tur_adi_mi(ad) || metin_esit(ad, "upp") || metin_esit(ad, "ana") || metin_esit(ad, "main")) {
+        sirali_ad_hatasi(ad, "sirali adı olarak kullanılamaz.", jeton_satir(nm), jeton_sutun(nm));
+        don;
+    }
+    beklenen_tur(JetonTur.J_SLUS_AC, "{");
+    sayi sr = g_sr_ad.uzunluk();
+    sayi v_bas = g_sv_ad.uzunluk();
+    sayi a_bas = g_sa_ad.uzunluk();
+    liste[metin] alan_tur;          // a_bas'tan itibaren alanların tür yazımı
+    liste[sayi] degerler;
+    mantik veri = yanlis;
+    mantik acik_deger = yanlis;
+    sayi sonraki = 0;
+    iken (bak_tur() != JetonTur.J_SLUS_KAPA && bak_tur() != JetonTur.J_EOF && !hata_var()) {
+        sayi vt = beklenen_kimlik(yanlis);
+        oto vad = jeton_deger(vt);
+        sayi onceki_v = g_sv_ad.uzunluk();
+        her (sayi k in v_bas..onceki_v) {
+            eger (metin_esit(g_sv_ad[k], vad)) {
+                sirali_ad_hatasi(vad, "varyantı birden fazla kez tanımlandı.", jeton_satir(vt), jeton_sutun(vt));
+                don;
+            }
+        }
+        g_sv_ad.ekle(vad);
+        g_sv_a_bas.ekle(g_sa_ad.uzunluk());
+        sayi alan_n = 0;
+        mantik parantez = yanlis;
+        eger (esles_tur(JetonTur.J_PARANTEZ_AC)) {
+            parantez = dogru;
+            veri = dogru;
+            eger (bak_tur() == JetonTur.J_PARANTEZ_KAPA) {
+                sirali_ad_hatasi(vad, "boş parantezle yazılamaz; veri taşımıyorsa parantezsiz yazın.", jeton_satir(vt), jeton_sutun(vt));
+                don;
+            }
+            sayi ilk_alan = g_sa_ad.uzunluk();
+            iken (!hata_var()) {
+                sayi tbas = ayristir_i_al();
+                ayristir_tur();
+                sayi tson = ayristir_i_al();
+                eger (hata_var()) { don; }
+                sayi fn = beklenen_kimlik(yanlis);
+                eger (hata_var()) { don; }
+                oto fad = jeton_deger(fn);
+                eger (metin_esit(fad, "kendi")) {
+                    hata_ver(jeton_satir(fn), jeton_sutun(fn), "'kendi' alan adı olarak kullanılamaz.");
+                    don;
+                }
+                sayi simdiki_a = g_sa_ad.uzunluk();
+                her (sayi k in ilk_alan..simdiki_a) {
+                    eger (metin_esit(g_sa_ad[k], fad)) {
+                        sirali_ad_hatasi(fad, "alanı bu varyantta birden fazla kez tanımlandı.", jeton_satir(fn), jeton_sutun(fn));
+                        don;
+                    }
+                }
+                g_sa_ad.ekle(fad);
+                alan_tur.ekle(sirali_jeton_metni(tbas, tson));
+                alan_n += 1;
+                eger (!esles_tur(JetonTur.J_VIRGUL)) { dur; }
+            }
+            beklenen_tur(JetonTur.J_PARANTEZ_KAPA, ")");
+        }
+        g_sv_a_say.ekle(alan_n);
+        g_sv_parantez.ekle(parantez);
+        sayi deger = sonraki;
+        eger (esles_tur(JetonTur.J_ATAMA)) {
+            sayi num = beklenen_tur(JetonTur.J_SAYI, "tam sayı");
+            deger = hex_deger(jeton_deger(num));
+            acik_deger = dogru;
+        }
+        degerler.ekle(deger);
+        sonraki = deger + 1;
+        eger (!esles_tur(JetonTur.J_VIRGUL)) { dur; }
+    }
+    beklenen_tur(JetonTur.J_SLUS_KAPA, "}");
+    eger (hata_var()) { don; }
+    sayi v_say = g_sv_ad.uzunluk() - v_bas;
+    eger (v_say == 0) {
+        sirali_ad_hatasi(ad, "en az bir varyant içermelidir.", jeton_satir(nm), jeton_sutun(nm));
+        don;
+    }
+    eger (veri && acik_deger) {
+        sirali_ad_hatasi(ad, "veri taşıyor; varyantlarına sayı değeri verilemez.", jeton_satir(nm), jeton_sutun(nm));
+        don;
+    }
+    g_sr_ad.ekle(ad);
+    g_sr_v_bas.ekle(v_bas);
+    g_sr_v_say.ekle(v_say);
+    eger (!veri) {
+        g_sr_veri.ekle(0);
+        sayi L = liste_yeni();
+        her (sayi i in 0..v_say) {
+            sayi u = dugum_yeni(DugumTur.D_SECENEK_UYE, jeton_satir(nm), jeton_sutun(nm));
+            dugum_yaz_ad(u, g_sv_ad[v_bas + i]);
+            dugum_yaz_sayi(u, degerler[i]);
+            liste_ekle(L, u);
+        }
+        sayi n = dugum_yeni(DugumTur.D_SECENEK, jeton_satir(kw), jeton_sutun(kw));
+        dugum_yaz_ad(n, ad);
+        dugum_yaz_liste(n, L);
+        g_sr_dugum.koy(n, sr);
+        liste_ekle(decls, n);
+        don;
+    }
+    g_sr_veri.ekle(1);
+    // değer sınıfı: etiket + her varyantın alanları
+    metin k = kat3("sinif ", ad, " {\n    sayi _upp_etiket;\n");
+    sayi v_son = v_bas + v_say;
+    her (sayi v in v_bas..v_son) {
+        sayi ab = g_sv_a_bas[v];
+        sayi as = ab + g_sv_a_say[v];
+        her (sayi a in ab..as) {
+            k = kat(k, kat5("    ", alan_tur[a - a_bas], " ", sirali_alan_ad(v, a), ";\n"));
+        }
+    }
+    k = kat(k, "}\n");
+    // varyant başına kurucu
+    her (sayi v in v_bas..v_son) {
+        sayi ab = g_sv_a_bas[v];
+        sayi as = ab + g_sv_a_say[v];
+        metin params = "";
+        metin atamalar = "";
+        her (sayi a in ab..as) {
+            eger (a > ab) { params = kat(params, ", "); }
+            params = kat(params, kat3(alan_tur[a - a_bas], " ", g_sa_ad[a]));
+            atamalar = kat(atamalar, kat5("    _upp_d.", sirali_alan_ad(v, a), " = ", g_sa_ad[a], ";\n"));
+        }
+        k = kat(k, kat5("fonk ", sirali_kurucu_ad(sr, v), "(", params, ") -> "));
+        k = kat(k, kat5(ad, " {\n    ", ad, " _upp_d;\n    _upp_d._upp_etiket = ", sayi_metin(v - v_bas)));
+        k = kat(k, kat3(";\n", atamalar, "    don _upp_d;\n}\n"));
+    }
+    sayi ilk = liste_uzunluk(decls);
+    sirali_kaynak_ayristir(k, decls, jeton_satir(kw), jeton_sutun(kw));
+    eger (hata_var()) { don; }
+    g_sr_dugum.koy(liste_al(decls, ilk), sr);
+}
+
+// ---- tür denetimi ----
+
+// d bir sirali tür adını gösteriyorsa (Durum ya da modul.Durum) sirali numarası; değilse -1.
+fonk sirali_ad_ifadesi(sayi d) -> sayi {
+    eger (d == 0) { don -1; }
+    metin anahtar = "";
+    // yerel değişkenler tür ve modül adlarını gölgeler
+    eger (dugum_tur(d) == DugumTur.D_KIMLIK) {
+        eger (kapsam_bul(dugum_ad(d)) != 0) { don -1; }
+        anahtar = dugum_ad(d);
+    } yoksa eger (dugum_tur(d) == DugumTur.D_UYE && dugum_a(d) != 0 && dugum_tur(dugum_a(d)) == DugumTur.D_KIMLIK) {
+        oto alias = dugum_ad(dugum_a(d));
+        eger (kapsam_bul(alias) != 0) { don -1; }
+        eger (tablo_bul(3, intern(kat("modul.", alias))) == 0) { don -1; }
+        anahtar = intern(kat3(alias, ".", dugum_ad(d)));
+    } yoksa {
+        don -1;
+    }
+    don sirali_tur_adindan(anahtar);
+}
+
+// Tür adı (sınıf ya da secenek anahtarı) bir sirali ise numarası; değilse -1.
+fonk sirali_tur_adindan(metin anahtar) -> sayi {
+    sayi c = tablo_bul(0, anahtar);
+    eger (c == 0) { c = tablo_bul(2, anahtar); }
+    eger (c != 0 && g_sr_dugum.var_mi(c)) { don g_sr_dugum.al(c); }
+    don -1;
+}
+
+// Tür adını ifade düğümüne çevirir: "Durum" → Durum, "m.Durum" → m.Durum.
+fonk sirali_tur_ifadesi(metin tur_ad, sayi satir, sayi sutun) -> sayi {
+    sayi nokta = -1;
+    sayi n = metin_uzun(tur_ad);
+    her (sayi i in 0..n) {
+        eger (metin_cp(tur_ad, i) == 46) { nokta = i; }
+    }
+    eger (nokta < 0) { don kimlik_dugum(satir, sutun, tur_ad); }
+    sayi u = dugum_yeni(DugumTur.D_UYE, satir, sutun);
+    dugum_yaz_a(u, kimlik_dugum(satir, sutun, intern_dilim(tur_ad, 0, nokta)));
+    dugum_yaz_ad(u, intern_dilim(tur_ad, nokta + 1, n));
+    don u;
+}
+
+// obj (tür adı ifadesi) ile aynı modüldeki kurucu fonksiyonun çağrılabilir düğümü.
+fonk sirali_kurucu_dugum(sayi obj, sayi sr, sayi v) -> sayi {
+    oto ad = sirali_kurucu_ad(sr, v);
+    eger (dugum_tur(obj) == DugumTur.D_KIMLIK) {
+        don kimlik_dugum(dugum_satir(obj), dugum_sutun(obj), ad);
+    }
+    sayi u = dugum_yeni(DugumTur.D_UYE, dugum_satir(obj), dugum_sutun(obj));
+    dugum_yaz_a(u, kimlik_dugum(dugum_satir(obj), dugum_sutun(obj), dugum_ad(dugum_a(obj))));
+    dugum_yaz_ad(u, ad);
+    don u;
+}
+
+fonk sirali_varyant_yok_hatasi(sayi sr, metin vad, sayi satir, sayi sutun) -> bos {
+    hata_fmt_basla();
+    hata_fmt_yaz("'");
+    hata_fmt_yaz(g_sr_ad[sr]);
+    hata_fmt_yaz("' içinde '");
+    hata_fmt_yaz(vad);
+    hata_fmt_yaz("' varyantı yok (varyantlar: ");
+    hata_fmt_yaz(sirali_varyant_listesi(sr));
+    hata_fmt_yaz(").");
+    hata_fmt_ver(satir, sutun);
+}
+
+// Durum.V(a, b) çağrısı: callee kurucuya çevrilir. Hata olursa yanlis.
+fonk sirali_kurucu_cevir(sayi expr, sayi sr) -> mantik {
+    sayi callee = dugum_a(expr);
+    oto vad = dugum_ad(callee);
+    sayi v = sirali_varyant(sr, vad);
+    eger (v < 0) {
+        sirali_varyant_yok_hatasi(sr, vad, dugum_satir(callee), dugum_sutun(callee));
+        don yanlis;
+    }
+    sayi istenen = g_sv_a_say[v];
+    sayi verilen = liste_uzunluk(dugum_liste(expr));
+    eger (!g_sv_parantez[v]) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'");
+        hata_fmt_yaz(g_sr_ad[sr]);
+        hata_fmt_yaz(".");
+        hata_fmt_yaz(vad);
+        hata_fmt_yaz("' veri taşımaz; parantezsiz yazın.");
+        hata_fmt_ver(dugum_satir(expr), dugum_sutun(expr));
+        don yanlis;
+    }
+    eger (istenen != verilen) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'");
+        hata_fmt_yaz(g_sr_ad[sr]);
+        hata_fmt_yaz(".");
+        hata_fmt_yaz(vad);
+        hata_fmt_yaz("' ");
+        hata_fmt_yaz(sayi_metin(istenen));
+        hata_fmt_yaz(" değer bekler, ");
+        hata_fmt_yaz(sayi_metin(verilen));
+        hata_fmt_yaz(" verildi.");
+        hata_fmt_ver(dugum_satir(expr), dugum_sutun(expr));
+        don yanlis;
+    }
+    dugum_yaz_a(expr, sirali_kurucu_dugum(dugum_a(callee), sr, v));
+    don dogru;
+}
+
+// Durum.V (çağrısız): veri taşımayan varyant kurucu çağrısına dönüşür. Düğüm
+// yerinde D_CAGRI olur; dönüş: türü (hata olursa 0).
+fonk sirali_birim_deger(sayi expr, sayi sr) -> sayi {
+    oto vad = dugum_ad(expr);
+    sayi v = sirali_varyant(sr, vad);
+    eger (v < 0) {
+        sirali_varyant_yok_hatasi(sr, vad, dugum_satir(expr), dugum_sutun(expr));
+        don 0;
+    }
+    eger (g_sv_parantez[v]) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'");
+        hata_fmt_yaz(g_sr_ad[sr]);
+        hata_fmt_yaz(".");
+        hata_fmt_yaz(vad);
+        hata_fmt_yaz("' veri taşır; değerleriyle yazın: ");
+        hata_fmt_yaz(g_sr_ad[sr]);
+        hata_fmt_yaz(".");
+        hata_fmt_yaz(vad);
+        hata_fmt_yaz("(...).");
+        hata_fmt_ver(dugum_satir(expr), dugum_sutun(expr));
+        don 0;
+    }
+    sayi kurucu = sirali_kurucu_dugum(dugum_a(expr), sr, v);
+    dugum_yaz_tur(expr, DugumTur.D_CAGRI);
+    dugum_yaz_a(expr, kurucu);
+    dugum_yaz_ad(expr, "");
+    dugum_yaz_liste(expr, liste_yeni());
+    don tip_ifade(expr);
+}
+
+// Veri taşıyan sirali değerinin alanlarına yalnızca indirgemenin ürettiği
+// erişimler ve kurucular dokunabilir.
+fonk sirali_alan_izinli(sayi expr) -> mantik {
+    eger (g_sr_sentetik.var_mi(expr)) { don dogru; }
+    sayi fn = cur_fn_al();
+    eger (fn == 0) { don yanlis; }
+    oto ad = dugum_ad(fn);
+    don metin_uzun(ad) > 12 && metin_esit(intern_dilim(ad, 0, 12), "_upp_sirali_");
+}
+
+fonk sirali_alan_hatasi(sayi expr, metin tur_ad) -> bos {
+    hata_fmt_basla();
+    hata_fmt_yaz("'");
+    hata_fmt_yaz(tur_ad);
+    hata_fmt_yaz("' bir sirali; alanlarına doğrudan erişilemez. Değeri 'secim' ile açın: durum Varyant(a, b): ...");
+    hata_fmt_ver(dugum_satir(expr), dugum_sutun(expr));
+}
+
+fonk sirali_sentetik_uye(metin nesne, metin alan, sayi satir, sayi sutun) -> sayi {
+    sayi u = dugum_yeni(DugumTur.D_UYE, satir, sutun);
+    dugum_yaz_a(u, kimlik_dugum(satir, sutun, nesne));
+    dugum_yaz_ad(u, alan);
+    g_sr_sentetik.koy(u, dogru);
+    don u;
+}
+
+// 'durum' kalıbını çözer: V, Tur.V, V(a, b), Tur.V(a, b). Sonuç g_sr_kalip_v
+// (varyant) ve g_sr_kalip_args (bağlama listesi; parantez yoksa 0).
+fonk sirali_kalip(sayi p, sayi sr) -> mantik {
+    g_sr_kalip_v = -1;
+    g_sr_kalip_args = 0;
+    sayi ad_d = p;
+    eger (dugum_tur(p) == DugumTur.D_CAGRI) {
+        ad_d = dugum_a(p);
+        g_sr_kalip_args = dugum_liste(p);
+    }
+    metin vad = "";
+    eger (dugum_tur(ad_d) == DugumTur.D_KIMLIK) {
+        vad = dugum_ad(ad_d);
+    } yoksa eger (dugum_tur(ad_d) == DugumTur.D_UYE && sirali_ad_ifadesi(dugum_a(ad_d)) == sr) {
+        vad = dugum_ad(ad_d);
+    } yoksa {
+        hata_fmt_basla();
+        hata_fmt_yaz("'durum' bir '");
+        hata_fmt_yaz(g_sr_ad[sr]);
+        hata_fmt_yaz("' varyantı bekler: Varyant, Varyant(a, b) ya da ");
+        hata_fmt_yaz(g_sr_ad[sr]);
+        hata_fmt_yaz(".Varyant.");
+        hata_fmt_ver(dugum_satir(p), dugum_sutun(p));
+        don yanlis;
+    }
+    sayi v = sirali_varyant(sr, vad);
+    eger (v < 0) {
+        sirali_varyant_yok_hatasi(sr, vad, dugum_satir(p), dugum_sutun(p));
+        don yanlis;
+    }
+    g_sr_kalip_v = v;
+    eger (g_sr_kalip_args == 0) { don dogru; }
+    eger (!g_sv_parantez[v]) {
+        sirali_ad_hatasi(vad, "veri taşımaz; kalıpta parantez yazılmaz.", dugum_satir(p), dugum_sutun(p));
+        don yanlis;
+    }
+    sayi n = liste_uzunluk(g_sr_kalip_args);
+    eger (n != g_sv_a_say[v]) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'");
+        hata_fmt_yaz(vad);
+        hata_fmt_yaz("' ");
+        hata_fmt_yaz(sayi_metin(g_sv_a_say[v]));
+        hata_fmt_yaz(" alan taşır; kalıpta ");
+        hata_fmt_yaz(sayi_metin(n));
+        hata_fmt_yaz(" ad var (atlamak için '_' yazın).");
+        hata_fmt_ver(dugum_satir(p), dugum_sutun(p));
+        don yanlis;
+    }
+    her (sayi i in 0..n) {
+        sayi b = liste_al(g_sr_kalip_args, i);
+        eger (dugum_tur(b) != DugumTur.D_KIMLIK) {
+            hata_ver(dugum_satir(b), dugum_sutun(b), "Kalıpta yalnızca bağlanacak adlar ya da '_' yazılabilir.");
+            don yanlis;
+        }
+        eger (metin_esit(dugum_ad(b), "_")) { devam; }
+        her (sayi j in 0..i) {
+            eger (metin_esit(dugum_ad(liste_al(g_sr_kalip_args, j)), dugum_ad(b))) {
+                sirali_ad_hatasi(dugum_ad(b), "kalıpta birden fazla kez bağlandı.", dugum_satir(b), dugum_sutun(b));
+                don yanlis;
+            }
+        }
+    }
+    don dogru;
+}
+
+// Kolun son cümlesi denetimi başka yere taşıyorsa (don, dur, devam) 'dur' gerekmez.
+fonk sirali_kol_kapali(sayi L) -> mantik {
+    sayi n = liste_uzunluk(L);
+    eger (n == 0) { don yanlis; }
+    sayi t = dugum_tur(liste_al(L, n - 1));
+    don t == DugumTur.D_DON || t == DugumTur.D_DUR || t == DugumTur.D_DEVAM;
+}
+
+fonk sirali_eksik_hatasi(sayi stmt, sayi sr, liste[mantik] kapsandi) -> bos {
+    metin eksik = "";
+    sayi bas = g_sr_v_bas[sr];
+    her (sayi i in 0..kapsandi.uzunluk()) {
+        eger (!kapsandi[i]) {
+            eger (!metin_esit(eksik, "")) { eksik = kat(eksik, ", "); }
+            eksik = kat(eksik, g_sv_ad[bas + i]);
+        }
+    }
+    hata_fmt_basla();
+    hata_fmt_yaz("'secim' tüm '");
+    hata_fmt_yaz(g_sr_ad[sr]);
+    hata_fmt_yaz("' varyantlarını kapsamalı; eksik: ");
+    hata_fmt_yaz(eksik);
+    hata_fmt_yaz(". Eksikleri ekleyin ya da 'varsayilan:' yazın.");
+    hata_fmt_ver(dugum_satir(stmt), dugum_sutun(stmt));
+}
+
+fonk sirali_tekrar_hatasi(sayi c, metin vad) -> bos {
+    sirali_ad_hatasi(vad, "bu 'secim' içinde birden fazla kez eşleştirildi.", dugum_satir(c), dugum_sutun(c));
+}
+
+// 'secim' bir sirali üzerindeyse hazırlar. Dönüş: 0 sirali değil (olduğu gibi
+// denetlenir), 1 bloğa indirgendi (çağıran bloğu denetler), 2 düz sirali:
+// kalıplar seçenek üyelerine çevrildi, kollar kapatıldı (olağan denetim sürer).
+fonk sirali_secim(sayi stmt, sayi sw_t) -> sayi {
+    eger (sw_t == 0 || dugum_ptrd(sw_t) != 0 || dugum_dims(sw_t) != 0) { don 0; }
+    oto tur_ad = dugum_ad(sw_t);
+    sayi sr = sirali_tur_adindan(tur_ad);
+    eger (sr < 0) { don 0; }
+    sayi v_say = g_sr_v_say[sr];
+    sayi v_bas = g_sr_v_bas[sr];
+    liste[mantik] kapsandi;
+    her (sayi i in 0..v_say) { kapsandi.ekle(yanlis); }
+    mantik varsayilan_var = yanlis;
+    sayi L = dugum_liste(stmt);
+    sayi n = liste_uzunluk(L);
+    eger (g_sr_veri[sr] == 0) {
+        her (sayi i in 0..n) {
+            sayi c = liste_al(L, i);
+            sayi p = dugum_a(c);
+            eger (p == 0) {
+                varsayilan_var = dogru;
+            } yoksa {
+                eger (!sirali_kalip(p, sr)) { don 2; }
+                sayi v = g_sr_kalip_v;
+                eger (kapsandi[v - v_bas]) {
+                    sirali_tekrar_hatasi(c, g_sv_ad[v]);
+                    don 2;
+                }
+                kapsandi.yaz(v - v_bas, dogru);
+                // seçenek üyesi: Tur.V
+                dugum_yaz_a(c, sirali_uye_ifadesi(tur_ad, g_sv_ad[v], dugum_satir(p), dugum_sutun(p)));
+            }
+            sayi sl = dugum_liste(c);
+            eger (!sirali_kol_kapali(sl)) { liste_ekle(sl, dugum_yeni(DugumTur.D_DUR, dugum_satir(c), dugum_sutun(c))); }
+        }
+        eger (!varsayilan_var) {
+            eger (!sirali_hepsi(kapsandi)) {
+                sirali_eksik_hatasi(stmt, sr, kapsandi);
+                don 2;
+            }
+            // tümü kapsandı: son kol 'varsayilan' olur (dönüş çözümlemesi için)
+            eger (n > 0) { dugum_yaz_a(liste_al(L, n - 1), 0); }
+        }
+        don 2;
+    }
+    // veri taşıyan: { [T _upp_skN = konu;] secim (konu._upp_etiket) { ... } }
+    sayi satir = dugum_satir(stmt);
+    sayi sutun = dugum_sutun(stmt);
+    sayi konu = dugum_a(stmt);
+    sayi blok_L = liste_yeni();
+    metin konu_ad = "";
+    eger (dugum_tur(konu) == DugumTur.D_KIMLIK && (kapsam_bul(dugum_ad(konu)) != 0 || tablo_bul(3, dugum_ad(konu)) != 0)) {
+        konu_ad = dugum_ad(konu);
+    } yoksa {
+        g_sr_tmp += 1;
+        konu_ad = intern(kat("_upp_sk", sayi_metin(g_sr_tmp)));
+        sayi vd = dugum_yeni(DugumTur.D_DEGISKEN, satir, sutun);
+        dugum_yaz_ad(vd, konu_ad);
+        dugum_yaz_a(vd, tur_kopya(sw_t));
+        dugum_yaz_c(vd, konu);
+        liste_ekle(blok_L, vd);
+    }
+    sayi yeni_L = liste_yeni();
+    her (sayi i in 0..n) {
+        sayi c = liste_al(L, i);
+        sayi p = dugum_a(c);
+        sayi govde = dugum_yeni(DugumTur.D_BLOK, dugum_satir(c), dugum_sutun(c));
+        sayi gL = liste_yeni();
+        dugum_yaz_liste(govde, gL);
+        sayi yc = dugum_yeni(DugumTur.D_DURUM, dugum_satir(c), dugum_sutun(c));
+        sayi cL = liste_yeni();
+        dugum_yaz_liste(yc, cL);
+        eger (p == 0) {
+            varsayilan_var = dogru;
+        } yoksa {
+            eger (!sirali_kalip(p, sr)) { don 1; }
+            sayi v = g_sr_kalip_v;
+            eger (kapsandi[v - v_bas]) {
+                sirali_tekrar_hatasi(c, g_sv_ad[v]);
+                don 1;
+            }
+            kapsandi.yaz(v - v_bas, dogru);
+            dugum_yaz_a(yc, sabit_sayi(dugum_satir(p), dugum_sutun(p), v - v_bas));
+            // bağlamalar: T ad = konu._upp_V_alan;
+            sayi args = g_sr_kalip_args;
+            eger (args != 0) {
+                sayi cls = tablo_bul(0, tur_ad);
+                sayi ab = g_sv_a_bas[v];
+                her (sayi j in 0..liste_uzunluk(args)) {
+                    sayi b = liste_al(args, j);
+                    eger (metin_esit(dugum_ad(b), "_")) { devam; }
+                    oto alan = sirali_alan_ad(v, ab + j);
+                    sayi vd = dugum_yeni(DugumTur.D_DEGISKEN, dugum_satir(b), dugum_sutun(b));
+                    dugum_yaz_ad(vd, dugum_ad(b));
+                    dugum_yaz_a(vd, tur_kopya(sirali_alan_turu(cls, alan)));
+                    dugum_yaz_c(vd, sirali_sentetik_uye(konu_ad, alan, dugum_satir(b), dugum_sutun(b)));
+                    liste_ekle(gL, vd);
+                }
+            }
+        }
+        sayi sl = dugum_liste(c);
+        her (sayi j in 0..liste_uzunluk(sl)) { liste_ekle(gL, liste_al(sl, j)); }
+        liste_ekle(cL, govde);
+        eger (!sirali_kol_kapali(sl)) { liste_ekle(cL, dugum_yeni(DugumTur.D_DUR, dugum_satir(c), dugum_sutun(c))); }
+        liste_ekle(yeni_L, yc);
+    }
+    eger (!varsayilan_var) {
+        eger (!sirali_hepsi(kapsandi)) {
+            sirali_eksik_hatasi(stmt, sr, kapsandi);
+            don 1;
+        }
+        eger (n > 0) { dugum_yaz_a(liste_al(yeni_L, n - 1), 0); }
+    }
+    sayi sw = dugum_yeni(DugumTur.D_SECIM, satir, sutun);
+    dugum_yaz_a(sw, sirali_sentetik_uye(konu_ad, "_upp_etiket", satir, sutun));
+    dugum_yaz_liste(sw, yeni_L);
+    liste_ekle(blok_L, sw);
+    dugum_yaz_tur(stmt, DugumTur.D_BLOK);
+    dugum_yaz_a(stmt, 0);
+    dugum_yaz_bayrak(stmt, 0);
+    dugum_yaz_liste(stmt, blok_L);
+    don 1;
+}
+
+fonk sirali_hepsi(liste[mantik] kapsandi) -> mantik {
+    her (oto k in kapsandi) {
+        eger (!k) { don yanlis; }
+    }
+    don dogru;
+}
+
+fonk sirali_uye_ifadesi(metin tur_ad, metin uye, sayi satir, sayi sutun) -> sayi {
+    sayi u = dugum_yeni(DugumTur.D_UYE, satir, sutun);
+    dugum_yaz_a(u, sirali_tur_ifadesi(tur_ad, satir, sutun));
+    dugum_yaz_ad(u, uye);
+    don u;
+}
+
+// Sınıfta alanın tür düğümü.
+fonk sirali_alan_turu(sayi cls, metin alan) -> sayi {
+    sayi F = dugum_liste(cls);
+    her (sayi i in 0..liste_uzunluk(F)) {
+        sayi f = liste_al(F, i);
+        eger (metin_esit(dugum_ad(f), alan)) { don dugum_a(f); }
+    }
+    don 0;
+}

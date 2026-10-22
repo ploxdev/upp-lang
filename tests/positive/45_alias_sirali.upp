@@ -1,0 +1,44 @@
+// Pozitif: takma adlı modülde bildirilen sirali; içeride nitelemesiz, dışarıda
+// 'm.Durum.V(...)', 'm.Durum.V' ve 'secim' kalıplarıyla (V(x), m.Durum.V(x)).
+// @stdout
+// sayı 7
+// boş
+// konum 1,2
+// boş
+// mesaj selam
+// sayı 3
+// dış sayı 7
+// dış mesaj x
+// mavi
+// M
+
+kullan "_lib_alias_sirali.upp" olarak m;
+
+fonk dis(m.Durum d) -> bos {
+    secim (d) {
+        durum Sayi(n): upp.satir_yaz("dış sayı {n}");
+        durum m.Durum.Mesaj(y): upp.satir_yaz("dış mesaj {y}");
+        varsayilan: upp.satir_yaz("dış diğer");
+    }
+}
+
+fonk ana() -> sayi {
+    m.Durum a = m.Durum.Sayi(7);
+    m.Durum b = m.Durum.Bos;
+    upp.satir_yaz(m.aciklama(a));
+    upp.satir_yaz(m.aciklama(b));
+    upp.satir_yaz(m.aciklama(m.konum(1, 2)));
+    upp.satir_yaz(m.aciklama(m.bos_durum()));
+    her (oto d in m.liste_yap()) {
+        upp.satir_yaz(m.aciklama(d));
+    }
+    dis(a);
+    dis(m.Durum.Mesaj("x"));
+    m.Renk r = m.Renk.Mavi;
+    upp.satir_yaz(m.renk_ad(r));
+    secim (r) {
+        durum Kirmizi: upp.satir_yaz("K");
+        durum Mavi: upp.satir_yaz("M");
+    }
+    don 0;
+}

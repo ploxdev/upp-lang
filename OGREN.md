@@ -753,6 +753,27 @@ secenek Yon {
 Yon git = Yon.Kuzey;
 ```
 
+### Veri Taşıyan Seçenekler: `sirali`
+`secenek` yalnızca bir ad listesidir. Bazen her durum yanında bilgi de taşımalıdır: bir indirme *bekliyor* olabilir, *yüzde 40 yüklenmiş* olabilir ya da *bir hata mesajıyla* bitmiş olabilir. `sirali` bunu tek bir türde toplar; parantez açılan durum içinde veri taşır:
+
+```text
+sirali Indirme {
+    Bekliyor,
+    Yukleniyor(sayi yuzde),
+    Hata(metin mesaj)
+}
+
+Indirme i = Indirme.Yukleniyor(40);
+
+secim (i) {
+    durum Bekliyor: upp.satir_yaz("Sırada bekliyor");
+    durum Yukleniyor(y): upp.satir_yaz("Yükleniyor: %{y}");
+    durum Hata(m): upp.satir_yaz("Hata: {m}");
+}
+```
+
+`secim` her durumu açar ve içindeki veriyi adlandırdığınız değişkenlere (`y`, `m`) koyar. Derleyici sizi korur: bir durumu unutursanız (`varsayilan` da yoksa) program derlenmez ve eksik olanları söyler; `i.yuzde` gibi doğrudan erişim de yasaktır, çünkü `i` o an `Hata` olabilir. Hiçbir durumu veri taşımayan bir `sirali` (`sirali Renk { Kirmizi, Yesil }`) sıradan bir `secenek` gibi kullanılır.
+
 ---
 
 ## 12. Modüler Kod Mimarisi: `kullan` ve `.uph` Başlıkları
@@ -795,6 +816,8 @@ fonk ana() -> sayi {
     don 0;
 }
 ```
+
+Dışarıdan her şeye `mat.` ile ulaşılır: fonksiyonlar (`mat.kup_al(4)`, değer olarak `mat.kup_al`), sabitler (`mat.PI`), sınıf ve seçenek türleri (`mat.Nokta`, `mat.Renk.Kirmizi`), `sirali` varyantları (`mat.Durum.Hata("x")`). Takma adla katılan dosyanın **kendi içinde** ise hiçbir şey değişmez: kendi fonksiyonlarını, sabitlerini ve türlerini nitelemeden kullanır. Bir yerel değişken ya da parametre takma adla aynı adı taşırsa (`sayi mat = 5;`) o kapsamda yerel değişken kazanır.
 
 ---
 

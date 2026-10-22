@@ -1,0 +1,33 @@
+// Pozitif: takma adlı modül kendi fonksiyonlarını (özyineleme, fonksiyon değeri,
+// metot içinden), küresellerini ve sabitlerini nitelemeden çağırır; yerel
+// değişken ve parametreler takma adı gölgeler.
+// @stdout
+// dört: 12 iki kez: 12 fak: 120
+// gölge: 17 taban: 10 20
+// sayaç: 21
+// çağrı: 5
+// dış değer: 20
+// yerel m: 6
+// m: 4
+
+kullan "_lib_alias_fonk.upp" olarak m;
+
+fonk artir(sayi m) -> sayi => m + 1;
+
+fonk ana() -> sayi {
+    upp.satir_yaz("dört: {m.dort(3)} iki kez: {m.iki_kez_iki(3)} fak: {m.faktoriyel(5)}");
+    upp.satir_yaz("gölge: {m.golge(7)} taban: {m.TABAN} {m.IKI_TABAN}");
+    m.Sayac s = m.sayac_yap();
+    upp.satir_yaz("sayaç: {s.n}");
+    upp.satir_yaz("çağrı: {m.cagri_sayisi()}");
+    fonk(sayi) -> sayi f = m.iki;
+    upp.satir_yaz("dış değer: {m.uygula(f, 10)}");
+    yerel();
+    upp.satir_yaz("m: {m.iki(2)}");
+    don 0;
+}
+
+fonk yerel() -> bos {
+    sayi m = 5;
+    upp.satir_yaz("yerel m: {artir(m)}");
+}

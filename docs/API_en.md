@@ -44,6 +44,36 @@ For classes that contain `metin` fields, collections, or nested owned classes, t
 - Copying from a variable increments inner reference counts; temporary values (constructor calls or function return values) are moved without copying.
 - Reassignment releases the previous value. Function parameters take ownership on entry, `don` moves the returned value out, and local class instances are released automatically at scope exit.
 
+### Data-Carrying Enums (`sirali`)
+`sirali` defines both plain enumerations and **tagged unions** with a single keyword, like `enum` in Rust and Swift. A variant with parentheses carries data:
+
+```upp
+sirali Renk { Kirmizi, Yesil, Mavi }                 // plain: behaves like secenek
+
+sirali Durum {
+    Bekliyor,
+    Yukleniyor(sayi yuzde),
+    Hata(metin mesaj, sayi kod)
+}
+
+Durum d = Durum.Yukleniyor(40);     // data-carrying variant
+Durum b = Durum.Bekliyor;           // unit variant (no parentheses)
+
+secim (d) {
+    durum Bekliyor: upp.satir_yaz("waiting");
+    durum Yukleniyor(y): upp.satir_yaz("%{y}");
+    durum Hata(m, _): upp.satir_yaz("error: {m}");  // '_' skips a field
+}
+```
+
+- **Matching:** A value is opened only with `secim`. A pattern is `Variant`, `Variant(a, b)` or `Type.Variant(...)`; fields are **copied** into fresh variables at the start of the arm (value semantics). A data-carrying variant may also be matched without bindings (`durum Hata:`).
+- **Exhaustiveness:** Without `varsayilan`, every variant must be covered; missing variants are a compile error (`eksik: Hata, Bitti`). A variant cannot be matched twice.
+- **No fallthrough:** Arms of a `secim` over a `sirali` never fall through (no `dur` needed); `dur` still leaves the `secim`, `devam` continues the loop.
+- **Safety:** The fields of a data-carrying value cannot be accessed with `d.field`, so reading the wrong variant's data is impossible. Constructor calls are checked for value count and types.
+- **Value semantics:** Assignment and argument passing behave like owned classes (`metin` fields are reference-counted copies, temporaries are moved). `liste[Durum]`, function returns and nested `sirali` types work. A declaration without an initializer holds the first variant (zero/empty fields).
+- **Plain `sirali`:** If no variant carries data it is a `secenek` (`==`, integer casts, `upp.satir_yaz`); variants may be given `= N` values. Exhaustiveness is still checked in `secim` and arms do not fall through.
+- **C lowering:** A data-carrying `sirali` becomes a tagged `struct` plus one constructor function per variant; `secim` becomes a `switch` on the tag.
+
 ### Views (`&metin` and `&dilim[T]`)
 Zero-allocation, zero-copy, read-only borrows (fat pointers):
 - Example: `fonk yaz_gorunum(&metin v)`, `&dilim[sayi] d = arr[1..4];`
@@ -227,6 +257,7 @@ An unknown attribute, a repeated attribute, or an attribute applied to an unsupp
 | `beklenen[T, H]`, `beklenen[T]` | Tagged `struct` + `union` | Result type holding a value or error (propagated with `?`) |
 | `&metin`, `&dilim[T]` | `upp_ref_metin`, `upp_ref_dilim_*` | Zero-copy, zero-allocation read-only views |
 | `sinif`, `secenek` | `struct`, `enum` | User-defined structure and enumeration types |
+| `sirali` | `enum` or tagged `struct` | Data-carrying enumeration (tagged union) |
 
 ### Explicit Type Casts `(T)x` and `boyut(T)`
 Uses standard C-style prefix cast syntax:

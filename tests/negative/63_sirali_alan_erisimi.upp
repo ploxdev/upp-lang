@@ -1,0 +1,10 @@
+// Negatif: veri taşıyan sirali değerinin alanlarına doğrudan erişilemez.
+// @icerir: [u++ HATA]
+// @icerir: 'Durum' bir sirali; alanlarına doğrudan erişilemez
+
+sirali Durum { Bekliyor, Yukleniyor(sayi yuzde) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Yukleniyor(5);
+    don d._upp_Yukleniyor_yuzde;
+}

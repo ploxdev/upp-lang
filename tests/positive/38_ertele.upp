@@ -21,7 +21,7 @@
 // tamam: 42
 // iç içe: b a
 
-fonk sirali() -> bos {
+fonk sirayla() -> bos {
     ertele upp.satir_yaz("ertele 1");
     ertele {
         upp.satir_yaz("ertele 2");
@@ -67,7 +67,7 @@ fonk ic_ice() -> metin {
 }
 
 fonk ana() -> sayi {
-    sirali();
+    sirayla();
     donguler();
     erken("a");
     upp.satir_yaz("--");

@@ -44,6 +44,36 @@ Bu belge; **u++** dilinin bellek modelini, tür sistemini, hata yönetimi mekani
 - Bir değişkenden kopyalama yapıldığında iç alanların referans sayıları artırılır; geçici değerler (kurucu veya fonksiyon çağrısı sonuçları) kopyalanmadan taşınır (move).
 - Üzerine atama yapıldığında eski değer güvenle bırakılır. Fonksiyon parametreleri girişte sahiplenilir, `don` edilen değerler taşınarak dışarı aktarılır ve yerel sınıf değişkenleri kapsam sonunda otomatik olarak temizlenir.
 
+### Veri Taşıyan Numaralandırmalar (`sirali`)
+`sirali`, Rust ve Swift'teki `enum` gibi tek bir anahtar sözcükle hem düz numaralandırmayı hem de **etiketli birleşimi** (tagged union) tanımlar. Parantez açılan varyant içinde veri taşır:
+
+```upp
+sirali Renk { Kirmizi, Yesil, Mavi }                 // düz: secenek gibi davranır
+
+sirali Durum {
+    Bekliyor,
+    Yukleniyor(sayi yuzde),
+    Hata(metin mesaj, sayi kod)
+}
+
+Durum d = Durum.Yukleniyor(40);     // veri taşıyan varyant
+Durum b = Durum.Bekliyor;           // veri taşımayan varyant (parantezsiz)
+
+secim (d) {
+    durum Bekliyor: upp.satir_yaz("bekliyor");
+    durum Yukleniyor(y): upp.satir_yaz("%{y}");
+    durum Hata(m, _): upp.satir_yaz("hata: {m}");   // '_' alanı atlar
+}
+```
+
+- **Eşleştirme:** Değer yalnızca `secim` ile açılır. Kalıp `Varyant`, `Varyant(a, b)` ya da `Tur.Varyant(...)` olabilir; alanlar kolun başında yeni değişkenlere **kopyalanır** (değer anlamı). Veri taşıyan bir varyant bağlama yapılmadan da yazılabilir (`durum Hata:`).
+- **Tamlık:** `varsayilan` yoksa tüm varyantlar kapsanmalıdır; eksikler derleme hatasıdır (`eksik: Hata, Bitti`). Aynı varyant iki kez eşleştirilemez.
+- **Düşme yok:** `sirali` üzerindeki `secim` kolları birbirine düşmez (`dur` gerekmez); `dur` yine `secim`'den çıkar, `devam` döngüyü sürdürür.
+- **Güvenlik:** Veri taşıyan bir değerin alanlarına `d.alan` ile erişilemez; yanlış varyantın verisini okumak bu yüzden imkânsızdır. Kurucu çağrısında değer sayısı ve türleri denetlenir.
+- **Değer anlamı:** Atama ve parametre geçişi sahipli sınıflar gibidir (metin alanları referans sayımlı kopyalanır, geçiciler taşınır). `liste[Durum]`, fonksiyon dönüşü, iç içe `sirali` desteklenir. Atamasız bildirimin değeri ilk varyanttır (alanları sıfır/boş).
+- **Düz `sirali`:** Hiçbir varyant veri taşımıyorsa `secenek`'tir (`==`, tamsayı dönüşümü, `upp.satir_yaz`); varyantlara `= N` değeri verilebilir. Yine de `secim`'de tamlık denetlenir ve kollar düşmez.
+- **C karşılığı:** Veri taşıyan `sirali`, etiket alanlı bir `struct`'a ve varyant başına bir kurucu fonksiyona indirgenir; `secim` etiket üzerinde `switch` olur.
+
 ### Görünümler (`&metin` ve `&dilim[T]`)
 Bellek ayırmayan ve kopyalama yapmayan salt okunur ödünç bakışlardır (Fat Pointer / View):
 - Örnek: `fonk yaz_gorunum(&metin v)`, `&dilim[sayi] d = dizi[1..4];`
@@ -226,6 +256,7 @@ Bilinmeyen nitelik, aynı niteliğin iki kez yazılması ve uygun olmayan bildir
 | `beklenen[T, H]`, `beklenen[T]` | Etiketli `struct` + `union` | Değer veya hata taşıyan sonuç türü (`?` ile yayılır) |
 | `&metin`, `&dilim[T]` | `upp_ref_metin`, `upp_ref_dilim_*` | Kopyasız ve sıfır ayırmalı salt okunur görünümler |
 | `sinif`, `secenek` | `struct`, `enum` | Kullanıcı tanımlı yapı ve numaralandırma türleri |
+| `sirali` | `enum` ya da etiketli `struct` | Veri taşıyabilen numaralandırma (etiketli birleşim) |
 
 ### Açık Tür Dönüşümü `(T)x` ve `boyut(T)`
 C dilindeki dönüşüm sözdizimiyle yazılır:

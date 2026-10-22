@@ -1739,6 +1739,7 @@ fonk os_bicim_dosya(metin yol, sayi kontrol) -> sayi {
 }
 
 fonk havuz_sifirla() -> bos {
+    sirali_sifirla();
     d_tur.bosalt();
     d_satir.bosalt();
     d_sutun.bosalt();

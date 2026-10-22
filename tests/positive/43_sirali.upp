@@ -1,0 +1,196 @@
+// Pozitif: sirali — düz numaralandırma ve veri taşıyan varyantlar (etiketli birleşim).
+// Kurma (Tur.V, Tur.V(...)), secim ile eşleştirme ve bağlama, '_' ile atlama,
+// varsayilan, kollar arasında düşmeme, değer anlamı (kopya bağımsız), metin
+// sahipliği, liste[sirali], fonksiyon parametresi/dönüşü, dönüş çözümlemesi.
+// @bayrak: --guvenlik-denetimi
+// @stdout
+// renk: 1 kırmızı mı: dogru
+// adı: yeşil
+// adı: mavi
+// bekliyor
+// yükleniyor %40
+// hata: disk dolu (kod 28)
+// bitti
+// nokta (3, 4) uzaklık²: 25
+// toplam yüzde: 40
+// kopya: hata: ilk (kod 1)
+// asıl: hata: değişti (kod 2)
+// tamam mı: yanlis dogru
+// ifade: (2 + 12) (3 * 4) 5
+// uzun: bilinmeyen
+// iç 7
+// toplam 619
+// sayac 1
+
+sirali Renk {
+    Kirmizi,
+    Yesil,
+    Mavi
+}
+
+sirali Durum {
+    Bekliyor,
+    Yukleniyor(sayi yuzde),
+    Hata(metin mesaj, sayi kod),
+    Bitti
+}
+
+sirali Sekil {
+    Nokta(sayi x, sayi y),
+    Daire(sayi r),
+}
+
+sirali Ifade {
+    Sayi(sayi deger),
+    Topla(liste[sayi] terimler),
+    Carp(sayi a, sayi b)
+}
+
+fonk renk_adi(Renk r) -> metin {
+    secim (r) {
+        durum Kirmizi: don "kırmızı";
+        durum Renk.Yesil: don "yeşil";
+        durum Mavi: don "mavi";
+    }
+}
+
+fonk anlat(Durum d) -> metin {
+    secim (d) {
+        durum Bekliyor: don "bekliyor";
+        durum Yukleniyor(y): don "yükleniyor %{y}";
+        durum Hata(m, k): don "hata: {m} (kod {k})";
+        durum Bitti: don "bitti";
+    }
+}
+
+fonk yuzde(Durum d) -> sayi {
+    secim (d) {
+        durum Yukleniyor(y): don y;
+        varsayilan: don 100;
+    }
+}
+
+fonk tamam_mi(Durum d) -> mantik {
+    mantik sonuc = yanlis;
+    secim (d) {
+        durum Bitti:
+            sonuc = dogru;
+        durum Hata(_, k):
+            // düşme yok: Bitti kolu buraya devam etmez
+            sonuc = k < 0;
+        varsayilan:
+            sonuc = yanlis;
+    }
+    don sonuc;
+}
+
+fonk yeni_hata(metin m) -> Durum => Durum.Hata(m, 1);
+
+fonk uzaklik2(Sekil s) -> sayi {
+    secim (s) {
+        durum Nokta(x, y): don x * x + y * y;
+        durum Daire(r): don r * r;
+    }
+}
+
+fonk ifade_metni(Ifade e) -> metin {
+    secim (e) {
+        durum Sayi(d): don "{d}";
+        durum Topla(t): {
+            metin s = "(";
+            her (sayi i in 0..t.uzunluk()) {
+                eger (i > 0) { s += " + "; }
+                s += "{t[i]}";
+            }
+            don s + ")";
+        }
+        durum Carp(a, b): don "({a} * {b})";
+    }
+}
+
+sirali Ic { A(sayi v), B }
+sirali Dis { Sar(Ic ic), Yalin(sayi n) }
+
+// iç içe sirali, döngüde devam/dur (dur secim'den çıkar), düz sirali'de düşmeme
+fonk ic_ice() -> bos {
+    Dis d = Dis.Sar(Ic.A(7));
+    secim (d) {
+        durum Sar(ic): secim (ic) {
+            durum A(v): upp.satir_yaz("iç {v}");
+            durum B: upp.satir_yaz("iç B");
+        }
+        durum Yalin(n): upp.satir_yaz("{n}");
+    }
+    sayi toplam = 0;
+    her (sayi i in 0..10) {
+        Ic x = Ic.A(i);
+        eger (i % 3 == 0) { x = Ic.B; }
+        secim (x) {
+            durum B: devam;
+            durum A(v): {
+                eger (v > 7) { dur; }
+                toplam += v;
+            }
+        }
+        toplam += 100;
+    }
+    upp.satir_yaz("toplam {toplam}");
+    sayi sayac = 0;
+    Renk r = Renk.Kirmizi;
+    secim (r) {
+        durum Kirmizi: sayac += 1;
+        durum Yesil: sayac += 10;
+        durum Mavi: sayac += 100;
+    }
+    upp.satir_yaz("sayac {sayac}");
+}
+
+fonk ana() -> sayi {
+    Renk r = Renk.Yesil;
+    upp.satir_yaz("renk: {r} kırmızı mı: {r == Renk.Kirmizi || r == Renk.Yesil}");
+    upp.satir_yaz("adı: " + renk_adi(r));
+    upp.satir_yaz("adı: " + renk_adi(Renk.Mavi));
+
+    liste[Durum] L;
+    L.ekle(Durum.Bekliyor);
+    L.ekle(Durum.Yukleniyor(40));
+    L.ekle(Durum.Hata("disk dolu", 28));
+    L.ekle(Durum.Bitti);
+    sayi toplam = 0;
+    her (oto d in L) {
+        upp.satir_yaz(anlat(d));
+        toplam += yuzde(d);
+    }
+
+    Sekil s = Sekil.Nokta(3, 4);
+    upp.satir_yaz("nokta (3, 4) uzaklık²: {uzaklik2(s)}");
+    upp.satir_yaz("toplam yüzde: {toplam - 300}");
+
+    // değer anlamı: kopya bağımsızdır, metin sahipliği doğru
+    Durum a = yeni_hata("ilk");
+    Durum b = a;
+    a = Durum.Hata("değişti", 2);
+    upp.satir_yaz("kopya: " + anlat(b));
+    upp.satir_yaz("asıl: " + anlat(a));
+    upp.satir_yaz("tamam mı: {tamam_mi(a)} {tamam_mi(Durum.Bitti)}");
+
+    liste[sayi] terimler;
+    terimler.ekle(2);
+    terimler.ekle(12);
+    Ifade e = Ifade.Topla(terimler);
+    Ifade c = Ifade.Carp(3, 4);
+    upp.satir_yaz("ifade: " + ifade_metni(e) + " " + ifade_metni(c) + " " + ifade_metni(Ifade.Sayi(5)));
+
+    // ifade konusu (geçici) ve varsayılan değer (ilk varyant)
+    Durum ilk;
+    secim (ilk) {
+        durum Bekliyor: upp.satir_yaz("uzun: bilinmeyen");
+        varsayilan: upp.satir_yaz("olmamalı");
+    }
+    secim (yeni_hata("x")) {
+        durum Hata(m, _): eger (m != "x") { upp.satir_yaz("yanlış bağlama"); }
+        varsayilan: upp.satir_yaz("yanlış kol");
+    }
+    ic_ice();
+    don 0;
+}

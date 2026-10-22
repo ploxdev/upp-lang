@@ -6,6 +6,7 @@ yerlesik.upp
 lexer.upp
 parser.upp
 tur.upp
+sirali.upp
 guvenlik.upp
 codegen.upp
 gomulu_runtime.upp

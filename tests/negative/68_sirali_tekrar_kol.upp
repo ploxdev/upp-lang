@@ -1,0 +1,14 @@
+// Negatif: aynı varyant bir secim'de iki kez eşleştirilemez (düz sirali).
+// @icerir: [u++ HATA]
+// @icerir: 'Yesil' bu 'secim' içinde birden fazla kez eşleştirildi.
+
+sirali Renk { Kirmizi, Yesil }
+
+fonk ana() -> sayi {
+    Renk r = Renk.Yesil;
+    secim (r) {
+        durum Kirmizi: don 0;
+        durum Yesil: don 1;
+        durum Renk.Yesil: don 2;
+    }
+}

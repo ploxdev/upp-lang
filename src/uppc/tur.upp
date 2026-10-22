@@ -733,6 +733,13 @@ fonk tip_harita_uye(sayi expr, metin on) -> sayi {
 }
 
 fonk tip_uye(sayi expr, mantik as_call) -> sayi {
+    // sirali: veri taşımayan varyant değeri (Durum.Bekliyor)
+    sayi sr = sirali_ad_ifadesi(dugum_a(expr));
+    eger (sr >= 0 && g_sr_veri[sr] == 1) {
+        sayi st = sirali_birim_deger(expr, sr);
+        eger (st == 0) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
+        don st;
+    }
     sayi obj_t = tip_ifade(dugum_a(expr));
     eger (hata_var() || obj_t == 0) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
     oto on = dugum_ad(obj_t);
@@ -792,6 +799,11 @@ fonk tip_uye(sayi expr, mantik as_call) -> sayi {
         oto alias = intern_dilim(on, 6, metin_uzun(on));
         oto uye = dugum_ad(expr);
         sayi fn = tablo_bul(1, c_sembol(uye, alias));
+        eger (fn != 0 && !as_call) {
+            // çağrısız 'm.f': fonksiyon değeri (yerel 'f' gibi)
+            harici_cagri_denetle(fn, dugum_satir(expr), dugum_sutun(expr));
+            don tur_dugum(dugum_satir(expr), dugum_sutun(expr), dugum_ad(fonk_imza_tur(fn)), 0, 0);
+        }
         eger (fn != 0) {
             sayi rt = dugum_a(fn);
             don tur_dugum(dugum_satir(fn), dugum_sutun(fn), dugum_ad(rt), dugum_ptrd(rt), 0);
@@ -842,6 +854,10 @@ fonk tip_uye(sayi expr, mantik as_call) -> sayi {
         don tip_harita_uye(expr, on);
     }
     sayi cls = tablo_bul(0, on);
+    eger (cls != 0 && g_sr_dugum.var_mi(cls) && !sirali_alan_izinli(expr)) {
+        sirali_alan_hatasi(expr, on);
+        don tip_bos(dugum_satir(expr), dugum_sutun(expr));
+    }
     eger (cls == 0) {
         hata_fmt_basla();
         hata_fmt_yaz("Sınıf değil; üye erişimi yok: ");
@@ -1445,8 +1461,40 @@ fonk tip_kurucu(sayi cls, sayi expr) -> sayi {
     don tur_dugum(dugum_satir(expr), dugum_sutun(expr), sinif_tur_ad(cls), 0, 0);
 }
 
+// Takma adla katılan modülün ('kullan ... olarak m') kendi gövdesinde nitelemesiz
+// bir fonksiyon ya da küresel ad (yerel değilse) o modüldedir: kimlik düğümü
+// yerinde 'm.ad' üye erişimine çevrilir. Çevrildiyse dogru.
+metin g_tip_global_alias = "";
+
+fonk tip_alias_baglam() -> metin {
+    sayi fn = cur_fn_al();
+    eger (fn != 0) { don dugum_alias_ad(fn); }
+    don g_tip_global_alias;
+}
+
+fonk modul_ici_ad_cevir(sayi e) -> mantik {
+    eger (e == 0 || dugum_tur(e) != DugumTur.D_KIMLIK) { don yanlis; }
+    oto alias = tip_alias_baglam();
+    eger (alias == yok || metin_esit(alias, "")) { don yanlis; }
+    oto ad = dugum_ad(e);
+    eger (kapsam_bul(ad) != 0) { don yanlis; }
+    oto sembol = c_sembol(ad, alias);
+    eger (tablo_bul(1, sembol) == 0 && tablo_bul(3, sembol) == 0) { don yanlis; }
+    dugum_yaz_tur(e, DugumTur.D_UYE);
+    dugum_yaz_a(e, kimlik_dugum(dugum_satir(e), dugum_sutun(e), alias));
+    don dogru;
+}
+
 fonk tip_cagri(sayi expr) -> sayi {
     sayi callee = dugum_a(expr);
+    // sirali kurucusu: Durum.V(a, b)
+    eger (dugum_tur(callee) == DugumTur.D_UYE) {
+        sayi sr = sirali_ad_ifadesi(dugum_a(callee));
+        eger (sr >= 0 && g_sr_veri[sr] == 1) {
+            eger (!sirali_kurucu_cevir(expr, sr)) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
+            callee = dugum_a(expr);
+        }
+    }
     sayi args = dugum_liste(expr);
     sayi fdt = cagri_fonk_turu(expr);
     eger (hata_var()) { don tip_bos(dugum_satir(expr), dugum_sutun(expr)); }
@@ -1668,6 +1716,9 @@ fonk tip_cagri(sayi expr) -> sayi {
             don tur_dugum(dugum_satir(expr), dugum_sutun(expr), intern(kat3("hata[", tur_kanonik_ad(hat), "]")), 0, 0);
         }
         sayi fn = tablo_bul(1, name);
+        eger (fn == 0 && modul_ici_ad_cevir(callee)) {
+            don tip_cagri(expr);
+        }
         eger (fn == 0) {
             hata_fmt_basla();
             hata_fmt_yaz("Tanımsız fonksiyon: '");
@@ -1829,6 +1880,9 @@ fonk tip_ifade(sayi e) -> sayi {
         eger (metin_esit(name, "upp")) {
             don tur_dugum(dugum_satir(e), dugum_sutun(e), "upp", 0, 0);
         }
+        // yerel değişken ve parametreler modül takma adlarını, sınıf ve seçenek adlarını gölgeler
+        sayi yerel = kapsam_bul(name);
+        eger (yerel != 0) { don tur_kopya(yerel); }
         eger (tablo_bul(3, intern(kat("modul.", name))) != 0) {
             don tur_dugum(dugum_satir(e), dugum_sutun(e), intern(kat("modul.", name)), 0, 0);
         }
@@ -1850,6 +1904,9 @@ fonk tip_ifade(sayi e) -> sayi {
         sayi found = kapsam_bul(name);
         eger (found == 0) {
             found = tablo_bul(3, name);
+        }
+        eger (found == 0 && modul_ici_ad_cevir(e)) {
+            don tip_ifade(e);
         }
         eger (found == 0) {
             hata_fmt_basla();
@@ -2358,9 +2415,15 @@ fonk tip_yuru(sayi stmt) -> bos {
     }
     eger (t == DugumTur.D_SECIM) {
         sayi sw_t = tip_ifade(dugum_a(stmt));
+        eger (hata_var()) { don; }
+        sayi sr_kip = sirali_secim(stmt, sw_t);
+        eger (hata_var()) { don; }
+        eger (sr_kip == 1) {
+            tip_yuru(stmt);
+            don;
+        }
         sayi L = dugum_liste(stmt);
         sayi i = 0;
-        eger (hata_var()) { don; }
         eger (!secim_uygun_tur(sw_t)) {
             hata_ver(dugum_satir(stmt), dugum_sutun(stmt), "'secim' tam sayı, metin veya seçenek bekler.");
             don;
@@ -2769,7 +2832,9 @@ fonk tip_calistir_govde(sayi program) -> bos {
                 hata_ver(dugum_satir(d), dugum_sutun(d), "Üst düzey değişken derleme sabiti veya sıfır ile başlatılmalıdır.");
             }
             eger (dugum_c(d) != 0) {
+                g_tip_global_alias = dugum_alias_ad(d);
                 sayi got = tip_ifade(dugum_c(d));
+                g_tip_global_alias = "";
                 eger (!tip_ifade_atanir(dugum_a(d), dugum_c(d))) {
                     atama_uyumsuz_ver(dugum_satir(d), dugum_sutun(d), dugum_a(d), dugum_c(d));
                 }

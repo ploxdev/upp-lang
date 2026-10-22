@@ -1,0 +1,13 @@
+// Negatif: kalıptaki ad sayısı varyantın alan sayısına eşit olmalıdır.
+// @icerir: [u++ HATA]
+// @icerir: 'Hata' 2 alan taşır; kalıpta 1 ad var (atlamak için '_' yazın).
+
+sirali Durum { Bekliyor, Hata(metin mesaj, sayi kod) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Bekliyor;
+    secim (d) {
+        durum Bekliyor: don 0;
+        durum Hata(m): don 1;
+    }
+}

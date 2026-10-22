@@ -27,6 +27,7 @@ export const ANAHTARLAR: Record<string, string> = {
   guvenli: "İç içe güvenli moda dönüş.",
   sinif: "Yapı + metotlar. Alanlarda ham işaretçi yok.",
   secenek: "Adlandırılmış tam sayı kümesi.",
+  sirali: "Veri taşıyabilen numaralandırma (etiketli birleşim): sirali Durum { Bekliyor, Hata(metin mesaj) }; secim ile eşleştirilir.",
   kendi: "Metot alıcısı.",
   oto: "Tür çıkarımı. `oto x = ...;`",
   c_ekle: "Üst düzey C `#include`.",
