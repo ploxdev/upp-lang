@@ -191,7 +191,16 @@ fonk fat_bagla(sayi bag) -> mantik {
 
 fonk fat_ayir(sayi bag) -> bos {
     sayi s = g_bag[bag].dno;
-    eger (s >= 0) { fat_bosalt(s); }
+    eger (s < 0) { don; }
+    fat_bosalt(s);
+    // fat_bagla'da ayrılan 512 baytlık FAT sektör tamponu; g_fat girdisi
+    // yeniden kullanılmadığı için ayırmada bırakılmazsa sızar.
+    eger (g_fat[s].ft != 0) {
+        upp.tampon.birak(g_fat[s].ft);
+        g_fat[s].ft = 0;
+        g_fat[s].ft_sektor = -1;
+        g_fat[s].ft_kirli = yanlis;
+    }
 }
 
 fonk fat_yukle(sayi no) -> bos {

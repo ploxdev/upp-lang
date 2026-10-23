@@ -97,7 +97,7 @@ Kabuk, çalıştırılabilir bir ELF dosyasını (`/usr/bin`'de ya da yol verere
 | 84, 87, 263 | `rmdir`, `unlink`, `unlinkat` | `AT_REMOVEDIR`; `ENOTEMPTY`, `EISDIR`, bağlama noktasında `EBUSY` |
 | 82, 264, 316 | `rename`, `renameat`, `renameat2` | Var olan dosyanın üzerine yazar; dosya/dizin uyuşmazlığında `EISDIR`/`ENOTDIR` |
 | 89, 267 | `readlink`, `readlinkat` | `/proc/self/exe` çalıştırılabilir dosyanın yolunu verir; sembolik bağ yoktur (`EINVAL`) |
-| 9, 11, 12 | `mmap`, `munmap`, `brk` | Anonim, dosyadan (`MAP_PRIVATE` kopyası), `MAP_FIXED`; `/dev/fb0` `MAP_SHARED` ile çerçeve tamponunu doğrudan eşler |
+| 9, 11, 12, 26 | `mmap`, `munmap`, `brk`, `msync` | Anonim, dosyadan, `MAP_FIXED`; dosya destekli `MAP_SHARED` yazmaları `msync`, `munmap` ve süreç sonunda dosyaya yazılır (`MAP_PRIVATE` sürece özel); `/dev/fb0` `MAP_SHARED` ile çerçeve tamponunu doğrudan eşler |
 | 10, 28 | `mprotect`, `madvise` | Sayfa koruması; eşlenmemiş aralıkta `ENOMEM`; `MADV_DONTNEED` sayfayı sıfırlar |
 | 60, 231 | `exit`, `exit_group` | |
 | 39, 186, 110, 218 | `getpid`, `gettid`, `getppid`, `set_tid_address` | |
@@ -222,6 +222,7 @@ Her dosya sistemi sürücüsü fonksiyon değerlerinden oluşan bir `sinif Suruc
 | `tests/cekirdek/09_uppix_disk.upp` | İmajları sıfırdan üretir, üç dosya sistemine yazar, sonra Linux araçlarıyla denetler: `e2fsck -fn`, `debugfs`, `fsck.fat`, `mtype`, `fsck.exfat` |
 | `tests/cekirdek/10_uppix_kalici.upp` | Aynı imajlarla ikinci açılış: yazılanlar yerinde mi |
 | `tests/cekirdek/13_uppix_kullanici.upp` | Ring 3: argv/çıkış kodu, `sctest`, `sctest2`, glibc ile derlenmiş `gmerhaba`, terminal ioctl'u, boru, SIGSEGV, zaman dilimiyle kesilen döngü ve `kill`; üç programın çıktısı gerçek Linux'takiyle `diff` ile karşılaştırılır, ext4 kök sonra `e2fsck` ile denetlenir |
+| `tests/cekirdek/15_uppix_disk_kaynak.upp` | Linux'ta `fallocate` ile ayrılmış (yazılmamış kapsamlı) ext4 dosyası sıfır okunur ve silinince blokları bırakılır; FAT32 art arda ayrılıp yeniden bağlanır; sonra `e2fsck` ve `fsck.fat` |
 | `tests/cekirdek/14_uppix_araclar.upp` | `hexdump`/`hd` biçimleri; tuşları seri porttan gelen `nano` (yazma, kes/yapıştır, arama, kaydetmeyi sorma) ve `vi` (ekleme, `yy p`, `dd`, `:%s`, `:q`'nun reddi, `:wq`) oturumları |
 | `tests/cekirdek/12_uppix_snake.upp` | `snake -o -n 200` otopilotu beklemeden oynatır; rekor dosyası, boru/yönlendirmede reddetme ve seçenek hataları |
 | `tests/cekirdek/11_uppix_limine.upp` | `uppix.img`'i üretir ve Limine ile 64-bit açar; `/boot` ve kökü yazar, sonra iki bölümü `e2fsck`, `fsck.fat` ve `mtype` ile denetler |

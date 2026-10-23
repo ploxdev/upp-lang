@@ -1,0 +1,21 @@
+// Runtime: düz sirali'ye tamsayıdan geçersiz değer verilirse tam kapsayan secim
+// sessizce son kola düşmez, paniğe girer.
+// @cikis: 1
+// @icerir: [u++ HATA]
+// @icerir: gecersiz 'sirali' degeri
+
+sirali Renk { Kirmizi, Yesil, Mavi }
+
+fonk ad(Renk r) -> metin {
+    secim (r) {
+        durum Kirmizi: don "kırmızı";
+        durum Yesil: don "yeşil";
+        durum Mavi: don "mavi";
+    }
+}
+
+fonk ana() -> sayi {
+    Renk r = (Renk)42;
+    upp.satir_yaz(ad(r));
+    don 0;
+}

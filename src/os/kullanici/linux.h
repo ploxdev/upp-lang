@@ -29,6 +29,7 @@ typedef long ssize_t;
 #define SYS_writev 20
 #define SYS_access 21
 #define SYS_madvise 28
+#define SYS_msync 26
 #define SYS_dup 32
 #define SYS_dup2 33
 #define SYS_getpid 39
@@ -87,6 +88,7 @@ typedef long ssize_t;
 #define PROT_READ 1
 #define PROT_WRITE 2
 #define MAP_SHARED 1
+#define MS_SYNC 4
 #define MAP_PRIVATE 2
 #define MAP_ANONYMOUS 0x20
 #define MAP_FAILED ((void*)-1)

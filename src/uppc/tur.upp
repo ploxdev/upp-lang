@@ -471,6 +471,18 @@ fonk bg_ident_ekle(sayi idn, sayi declared, sayi used, sayi yer) -> bos {
         hata_fmt_ver(dugum_satir(yer), dugum_sutun(yer));
         don;
     }
+    // Sahipli sınıf (metin ya da koleksiyon alanı olan; veri taşıyan 'sirali'
+    // dahil) değer olarak yakalanırsa bağlam yapısına sığ kopyalanırdı: dıştaki
+    // nesne bırakılınca iş parçacığı serbest belleği okur. Koleksiyonlar gibi
+    // yasak; sahipli olmayan sınıflar düz kopyayla güvenlidir.
+    eger (tur_sahipli_sinif(ty) != 0) {
+        hata_fmt_basla();
+        hata_fmt_yaz("'arkaplan' sahipli sınıf '");
+        hata_fmt_yaz(ad);
+        hata_fmt_yaz("' yakalayamaz. Gereken alanları ayrı değişkenlere kopyalayın ya da nesneyi iş parçacığı içinde oluşturun.");
+        hata_fmt_ver(dugum_satir(yer), dugum_sutun(yer));
+        don;
+    }
     cap = kimlik_dugum(dugum_satir(yer), dugum_sutun(yer), ad);
     dugum_yaz_a(cap, ty);
     liste_ekle(used, cap);
@@ -635,7 +647,9 @@ fonk her_zaman_doner(sayi stmt) -> mantik {
     eger (t == DugumTur.D_SECIM) {
         sayi L = dugum_liste(stmt);
         eger (liste_uzunluk(L) == 0) { don yanlis; }
-        mantik def = yanlis;
+        // Bayrak 4: tüm 'sirali' varyantları kapsandı; codegen panikleyen bir
+        // 'default' yazdığı için kapsama 'varsayilan' kadar eksiksizdir.
+        mantik def = (dugum_bayrak(stmt) & 4) != 0;
         sayi i = 0;
         iken (i < liste_uzunluk(L)) {
             eger (dugum_a(liste_al(L, i)) == 0) { def = dogru; }

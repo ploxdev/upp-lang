@@ -9,6 +9,13 @@
 static char tampon[512];
 static long tls_blok[8] = {0x1122334455667788L, 7};
 
+static void metin_satir(const char* ad, const char* b, long n) {
+    yaz(ad);
+    yaz(": \"");
+    if (n > 0) sys_write(1, b, (size_t)n);
+    yaz("\"\n");
+}
+
 static int sonu(const char* s, const char* son) {
     size_t a = uzunluk(s), b = uzunluk(son);
     return a >= b && esit(s + a - b, son);
@@ -329,6 +336,37 @@ int main(int argc, char** argv, char** envp) {
         satir("prlimit64 başka süreç", sc6(SYS_prlimit64, 2147483000L, 7, 0, (long)&rl, 0, 0));
         sc1(SYS_umask, 077);
         satir("umask", sc1(SYS_umask, 022));
+    }
+
+    /* MAP_SHARED: yazmalar msync ve munmap ile dosyaya yansır; MAP_PRIVATE yansımaz */
+    {
+        char b[16];
+        long mfd = sc3(SYS_open, "sct2_mm.bin", O_CREAT | O_TRUNC | O_RDWR, 0644);
+        char* p;
+        sc3(SYS_write, mfd, "abcdefgh", 8);
+        p = (char*)sys_mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, (int)mfd, 0);
+        satir("mmap shared", p != MAP_FAILED);
+        p[1] = 'X';
+        satir("msync", sc3(SYS_msync, p, 4096, MS_SYNC));
+        memset(b, 0, sizeof(b));
+        sc6(SYS_pread64, mfd, (long)b, 8, 0, 0, 0);
+        metin_satir("msync sonrası", b, 8);
+        p[2] = 'Y';
+        satir("munmap shared", sys_munmap(p, 4096));
+        memset(b, 0, sizeof(b));
+        sc6(SYS_pread64, mfd, (long)b, 8, 0, 0, 0);
+        metin_satir("munmap sonrası", b, 8);
+        p = (char*)sys_mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE, (int)mfd, 0);
+        p[0] = 'P';
+        sys_munmap(p, 4096);
+        memset(b, 0, sizeof(b));
+        sc6(SYS_pread64, mfd, (long)b, 8, 0, 0, 0);
+        metin_satir("private sonrası", b, 8);
+        satir("shared boyut", (sys_fstat((int)mfd, &st), st.st_size));
+        satir("msync hizasız", sc3(SYS_msync, 4097, 10, MS_SYNC));
+        satir("msync bayrak", sc3(SYS_msync, 0x10000, 4096, 5));
+        sc1(SYS_close, mfd);
+        sc1(SYS_unlink, "sct2_mm.bin");
     }
 
     /* futex */

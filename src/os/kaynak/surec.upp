@@ -168,6 +168,8 @@ fonk surec_yeni(metin ad, metin girdi) -> sayi {
 // zaten silmiştir).
 fonk surec_bitir(sayi s, mantik alan_sil) -> bos {
     eger (s < 0 || g_surec[s].pid == 0) { don; }
+    // Paylaşımlı dosya eşlemeleri dosyaya geri yazılır; alan silinmişse okunamaz.
+    esl_surec_bitti(s, alan_sil && g_surec[s].ka != 0);
     eger (alan_sil && g_surec[s].ka != 0) { upp.cekirdek.kullanici_alan_sil(g_surec[s].ka); }
     her (sayi fd in 0..FD_MAX) { fd_kur(s, fd, FD_KAPALI, -1, 0); }
     g_surec_gorev.sil(g_surec[s].gorev);

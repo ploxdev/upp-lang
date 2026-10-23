@@ -2008,7 +2008,49 @@ fonk golge_ayir(metin ad) -> bos {
     }
 }
 
+// İfade verilen adı okuyor mu? Gereğinden fazla 'dogru' demek yalnızca gereksiz
+// bir geçici üretir, sonucu bozmaz.
+fonk ifade_ad_kullanir(sayi e, metin ad) -> mantik {
+    eger (e == 0) { don yanlis; }
+    eger (dugum_tur(e) == DugumTur.D_KIMLIK && metin_esit(dugum_ad(e), ad)) { don dogru; }
+    eger (ifade_ad_kullanir(dugum_a(e), ad)) { don dogru; }
+    eger (ifade_ad_kullanir(dugum_b(e), ad)) { don dogru; }
+    eger (ifade_ad_kullanir(dugum_c(e), ad)) { don dogru; }
+    eger (ifade_ad_kullanir(dugum_d(e), ad)) { don dogru; }
+    sayi L = dugum_liste(e);
+    sayi i = 0;
+    iken (i < liste_uzunluk(L)) {
+        eger (ifade_ad_kullanir(liste_al(L, i), ad)) { don dogru; }
+        i = i + 1;
+    }
+    don yanlis;
+}
+
+// Dıştaki aynı adlı değişkeni okuyan bir ilk değer, bildirimden önce bir geçiciye
+// alınmalıdır: C'de ad kendi başlatıcısında zaten kapsamdadır, dolayısıyla
+// 'sayi x = x + 1' içteki başlatılmamış x'i okurdu. Tür çözümlemesi ifadeyi
+// bağlamadan önce çözdüğü için doğru anlam dıştaki değişkendir.
+fonk golge_gecici_gerekli(sayi d) -> mantik {
+    sayi ty = dugum_a(d);
+    eger (ty == 0 || dugum_c(d) == 0) { don yanlis; }
+    // diziler, 'gorunum' ve derleme zamanı sabitleri geçiciye alınamaz
+    eger (dugum_b(d) != 0 || (dugum_bayrak(d) & 8) != 0 || dugum_dims(ty) > 0) { don yanlis; }
+    eger ((dugum_bayrak(d) & 16) != 0) { don yanlis; }
+    eger (tip_gorunum_mi(ty) || tip_ref_metin_mi(ty) || tip_ref_dilim_mi(ty)) { don yanlis; }
+    eger (kapsam_bul(dugum_ad(d)) == 0) { don yanlis; }
+    don ifade_ad_kullanir(dugum_c(d), dugum_ad(d));
+}
+
 fonk uret_var(sayi d, mantik kuresel) -> bos {
+    eger (!kuresel && golge_gecici_gerekli(d)) {
+        oto tad = intern(kat("_upp_gi", sayi_metin(tmp_yeni())));
+        sayi td = dugum_yeni(DugumTur.D_DEGISKEN, dugum_satir(d), dugum_sutun(d));
+        dugum_yaz_ad(td, tad);
+        dugum_yaz_a(td, tur_kopya(dugum_a(d)));
+        dugum_yaz_c(td, dugum_c(d));
+        uret_var(td, yanlis);
+        dugum_yaz_c(d, kimlik_dugum(dugum_satir(d), dugum_sutun(d), tad));
+    }
     eger (!kuresel) { golge_ayir(dugum_ad(d)); }
     sayi ty = dugum_a(d);
     metin s = uret_ctur(ty);
@@ -2090,6 +2132,27 @@ fonk uret_var(sayi d, mantik kuresel) -> bos {
     eger (!kuresel && kilit_hazir_gerekli(d)) {
         emit(kat3("upp_kilit_hazir(&", ad, ");"));
     }
+}
+
+// metin secim'inde bir kolun gövdesi; 'dur' atlanır (kollar if/else zinciri olduğu
+// için düşme yoktur).
+fonk uret_metin_secim_kolu(sayi c) -> bos {
+    emit("{");
+    indent_ekle(1);
+    drop_cerceve_ac();
+    sayi sl = dugum_liste(c);
+    sayi j = 0;
+    iken (j < liste_uzunluk(sl)) {
+        sayi s = liste_al(sl, j);
+        eger (dugum_tur(s) != DugumTur.D_DUR) {
+            uret_cumle(s);
+        }
+        j = j + 1;
+    }
+    emit_drop_cerceve();
+    drop_cerceve_pop();
+    indent_ekle(-1);
+    emit("}");
 }
 
 fonk uret_cumle(sayi stmt) -> bos {
@@ -2223,10 +2286,14 @@ fonk uret_cumle(sayi stmt) -> bos {
             sayi L = dugum_liste(stmt);
             sayi i = 0;
             mantik first = dogru;
+            // 'varsayilan' kaynakta nerede olursa olsun zincirin sonuna 'else'
+            // olarak yazılır; başta ya da ortada yazılırsa C'de 'else' without
+            // a previous 'if' olurdu.
+            sayi vars_kol = 0;
             iken (i < liste_uzunluk(L)) {
                 sayi c = liste_al(L, i);
                 eger (dugum_a(c) == 0) {
-                    emit("else");
+                    vars_kol = c;
                 } yoksa {
                     oto cond = kat4("upp_metin_esit(", swv, ", ", kat(uret_ifade(dugum_a(c)), ")"));
                     eger (first) {
@@ -2235,24 +2302,13 @@ fonk uret_cumle(sayi stmt) -> bos {
                         emit(kat3("else if (", cond, ")"));
                     }
                     first = yanlis;
+                    uret_metin_secim_kolu(c);
                 }
-                emit("{");
-                indent_ekle(1);
-                drop_cerceve_ac();
-                sayi sl = dugum_liste(c);
-                sayi j = 0;
-                iken (j < liste_uzunluk(sl)) {
-                    sayi s = liste_al(sl, j);
-                    eger (dugum_tur(s) != DugumTur.D_DUR) {
-                        uret_cumle(s);
-                    }
-                    j = j + 1;
-                }
-                emit_drop_cerceve();
-                drop_cerceve_pop();
-                indent_ekle(-1);
-                emit("}");
                 i = i + 1;
+            }
+            eger (vars_kol != 0) {
+                eger (!first) { emit("else"); }
+                uret_metin_secim_kolu(vars_kol);
             }
             emit(kat(sw_son, ": ;"));
             kir_cek();
@@ -2287,6 +2343,20 @@ fonk uret_cumle(sayi stmt) -> bos {
             indent_ekle(-1);
             emit("}");
             i = i + 1;
+        }
+        // Bayrak 4: 'sirali' varyantlarının tümü kapsandı ama 'varsayilan' yok.
+        // Tanımsız bir etiket (ör. tamsayıdan dönüştürülmüş) sessizce son kola
+        // düşmesin diye panikleyen bir 'default' yazılır. upp_panik 'noreturn'
+        // imzalı olmadığından akışın bittiğini __builtin_unreachable bildirir;
+        // aksi halde değer döndüren fonksiyonlarda -Wreturn-type uyarırdı.
+        eger ((dugum_bayrak(stmt) & 4) != 0) {
+            emit("default:");
+            emit("{");
+            indent_ekle(1);
+            emit("upp_panik(\"gecersiz 'sirali' degeri\");");
+            emit("__builtin_unreachable();");
+            indent_ekle(-1);
+            emit("}");
         }
         kir_cek();
         indent_ekle(-1);

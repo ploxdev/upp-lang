@@ -1,0 +1,17 @@
+// Negatif: veri taşıyan sirali metin alanı varsa sahiplidir; arkaplan yakalayamaz.
+// @icerir: [u++ HATA]
+// @icerir: 'arkaplan' sahipli sınıf 'd' yakalayamaz.
+
+sirali Durum { Bos, Mesaj(metin m) }
+
+fonk ana() -> sayi {
+    Durum d = Durum.Mesaj("x");
+    ArkaplanIs is = arkaplan {
+        secim (d) {
+            durum Mesaj(m): upp.satir_yaz(m);
+            durum Bos: upp.satir_yaz("boş");
+        }
+    };
+    is.bekle();
+    don 0;
+}

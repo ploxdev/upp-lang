@@ -109,6 +109,7 @@ fonk sistem_cagrisi(sayi no, sayi a1, sayi a2, sayi a3, sayi a4, sayi a5, sayi a
     eger (no == 9) { don sc_mmap(s, a1, a2, a3, a4, a5, a6); }
     eger (no == 10) { don sc_mprotect(s, a1, a2, a3); }
     eger (no == 11) { don sc_munmap(s, a1, a2); }
+    eger (no == 26) { don sc_msync(s, a1, a2, a3); }
     eger (no == 12) { don sc_brk(s, a1); }
     // süreç, zaman, TLS
     eger (no == 60 || no == 231) {
@@ -353,17 +354,8 @@ fonk sc_write(sayi s, sayi fd, sayi buf, sayi n) -> sayi {
     eger (konum == mevcut) {
         ok = fs_yaz(no, veri, dogru);
     } yoksa {
-        // Ortaya yazma: eski içerik + yeni baytlar (gerekirse sıfırlarla doldurulur)
-        metin eski = fs_oku(no);
-        sayi eski_n = bayt_say(eski);
-        sayi yeni_n = konum + n;
-        eger (eski_n > yeni_n) { yeni_n = eski_n; }
-        sayi t = upp.tampon.yeni(yeni_n);
-        upp.tampon.doldur(t, 0, yeni_n, 0);
-        upp.tampon.metin_yaz(t, 0, eski);
-        upp.tampon.metin_yaz(t, konum, veri);
-        ok = fs_yaz(no, upp.tampon.metin(t, 0, yeni_n), yanlis);
-        upp.tampon.birak(t);
+        // Ortaya yazma: gerekirse sıfırlarla doldurup aralığı günceller.
+        ok = fs_yaz_aralik(no, konum, veri);
     }
     eger (!ok) {
         eger (fs_salt_okunur(no)) { don -EROFS; }
@@ -520,7 +512,95 @@ fonk sc_lseek(sayi s, sayi fd, sayi ofs, sayi nereden) -> sayi {
     don yeni;
 }
 
-// ---- mmap / munmap / brk ----
+// ---- mmap / munmap / msync / brk ----
+
+sabit sayi MS_ASYNC = 1;
+sabit sayi MS_INVALIDATE = 2;
+sabit sayi MS_SYNC = 4;
+
+// Dosya destekli MAP_SHARED eşlemeleri. Bu eşlemelere yapılan yazmalar dosyaya
+// yansımalıdır; sayfalar dosyadan kopyalandığı için geri yazmayı msync, munmap
+// ve süreç sonu tetikler. (MAP_PRIVATE'te değişiklikler sürece özeldir.)
+liste[sayi] g_esl_s;      // g_surec yuvası; -1 = boş girdi
+liste[sayi] g_esl_adres;
+liste[sayi] g_esl_boy;
+liste[sayi] g_esl_no;     // VFS düğümü
+liste[sayi] g_esl_ofs;    // eşlemenin dosyadaki başlangıcı
+
+fonk esl_ekle(sayi s, sayi adres, sayi boy, sayi no, sayi ofs) -> bos {
+    her (sayi i in 0..g_esl_s.uzunluk()) {
+        eger (g_esl_s[i] < 0) {
+            g_esl_s.yaz(i, s);
+            g_esl_adres.yaz(i, adres);
+            g_esl_boy.yaz(i, boy);
+            g_esl_no.yaz(i, no);
+            g_esl_ofs.yaz(i, ofs);
+            don;
+        }
+    }
+    g_esl_s.ekle(s);
+    g_esl_adres.ekle(adres);
+    g_esl_boy.ekle(boy);
+    g_esl_no.ekle(no);
+    g_esl_ofs.ekle(ofs);
+}
+
+// Eşlemenin [bas, son) ile kesişen bölümünü dosyaya geri yazar.
+fonk esl_geri_yaz(sayi i, sayi bas, sayi son) -> bos {
+    sayi a = g_esl_adres[i];
+    sayi b = a + g_esl_boy[i];
+    eger (bas > a) { a = bas; }
+    eger (son < b) { b = son; }
+    eger (b <= a) { don; }
+    sayi dosya_ofs = g_esl_ofs[i] + (a - g_esl_adres[i]);
+    sayi dosya_son = fs_boyut(g_esl_no[i]);
+    // Eşleme dosyadan büyük olabilir; EOF ötesini yazmak dosyayı şişirirdi.
+    eger (dosya_ofs >= dosya_son) { don; }
+    sayi k = b - a;
+    eger (dosya_ofs + k > dosya_son) { k = dosya_son - dosya_ofs; }
+    metin veri = sc_oku_metin(g_esl_s[i], a, k);
+    eger (veri == yok) { don; }
+    fs_yaz_aralik(g_esl_no[i], dosya_ofs, veri);
+}
+
+// s sürecinin [bas, son) ile kesişen paylaşımlı eşlemelerini geri yazar; kaldir
+// doğruysa kayıtları da kırpar/siler. Kesişen eşleme sayısını döndürür.
+fonk esl_bosalt(sayi s, sayi bas, sayi son, mantik kaldir) -> sayi {
+    sayi bulundu = 0;
+    her (sayi i in 0..g_esl_s.uzunluk()) {
+        eger (g_esl_s[i] != s) { devam; }
+        sayi a = g_esl_adres[i];
+        sayi b = a + g_esl_boy[i];
+        eger (b <= bas || a >= son) { devam; }
+        bulundu += 1;
+        esl_geri_yaz(i, bas, son);
+        eger (kaldir) {
+            eger (bas <= a && son >= b) {
+                g_esl_s.yaz(i, -1);
+            } yoksa eger (bas <= a) {
+                g_esl_ofs.yaz(i, g_esl_ofs[i] + (son - a));
+                g_esl_adres.yaz(i, son);
+                g_esl_boy.yaz(i, b - son);
+            } yoksa {
+                // sondan ya da ortadan kaldırma: baştaki kısım izlenmeye devam
+                // eder, kalan kuyruk için geri yazma bırakılır (yanlış belleği
+                // okumaktansa yazmamak yeğdir)
+                g_esl_boy.yaz(i, bas - a);
+            }
+        }
+    }
+    don bulundu;
+}
+
+// Süreç yuvası boşalırken çağrılır. yaz: adres alanı hâlâ geçerli mi (görev
+// öldürüldüyse çekirdek alanı zaten sildiği için okunamaz).
+fonk esl_surec_bitti(sayi s, mantik yaz) -> bos {
+    her (sayi i in 0..g_esl_s.uzunluk()) {
+        eger (g_esl_s[i] != s) { devam; }
+        eger (yaz) { esl_geri_yaz(i, g_esl_adres[i], g_esl_adres[i] + g_esl_boy[i]); }
+        g_esl_s.yaz(i, -1);
+    }
+}
 
 // mmap için boş bir bölge: üst sınırdan aşağı doğru.
 fonk sc_mmap_yer(sayi s, sayi uzunluk) -> sayi {
@@ -561,6 +641,7 @@ fonk sc_mmap(sayi s, sayi adres, sayi uzunluk, sayi koruma, sayi bayrak, sayi fd
     sayi a = -1;
     eger (sabit_yer) {
         eger (adres % SAYFA != 0 || adres < 0x10000 || adres + n > YIGIN_UST) { don -EINVAL; }
+        esl_bosalt(s, adres, adres + n, dogru);
         upp.cekirdek.kullanici_esleme_kaldir(ka, adres, n);
         a = adres;
     } yoksa eger (adres >= 0x10000 && adres % SAYFA == 0 && adres + n <= MMAP_UST && upp.cekirdek.kullanici_bos_mu(ka, adres, n)) {
@@ -588,14 +669,14 @@ fonk sc_mmap(sayi s, sayi adres, sayi uzunluk, sayi koruma, sayi bayrak, sayi fd
         don -ENOMEM;
     }
     eger (!anonim) {
-        metin icerik = fs_oku(g_fd_no[y]);
-        sayi toplam = bayt_say(icerik);
-        eger (ofs < toplam) {
-            sayi k = toplam - ofs;
-            eger (k > n) { k = n; }
-            sc_yaz_metin(s, a, icerik, ofs, k);
-        }
+        metin icerik = fs_oku_aralik(g_fd_no[y], ofs, n);
+        sayi k = bayt_say(icerik);
+        eger (k > 0) { sc_yaz_metin(s, a, icerik, 0, k); }
         upp.cekirdek.kullanici_koruma(ka, a, n, koruma, yanlis);
+        // MAP_SHARED: yazmalar dosyaya yansımalı; geri yazabilmek için izlenir
+        eger (paylasim == MAP_SHARED && g_fd_bayrak[y] % 4 != 0) {
+            esl_ekle(s, a, n, g_fd_no[y], ofs);
+        }
     }
     don a;
 }
@@ -603,7 +684,23 @@ fonk sc_mmap(sayi s, sayi adres, sayi uzunluk, sayi koruma, sayi bayrak, sayi fd
 fonk sc_munmap(sayi s, sayi adres, sayi uzunluk) -> sayi {
     eger (adres % SAYFA != 0 || uzunluk <= 0 || adres < 0 || adres + uzunluk > YIGIN_UST) { don -EINVAL; }
     eger (adres < 0x10000) { don 0; }
-    upp.cekirdek.kullanici_esleme_kaldir(g_surec[s].ka, adres, sayfa_yukari(uzunluk));
+    sayi n = sayfa_yukari(uzunluk);
+    esl_bosalt(s, adres, adres + n, dogru);
+    upp.cekirdek.kullanici_esleme_kaldir(g_surec[s].ka, adres, n);
+    don 0;
+}
+
+fonk sc_msync(sayi s, sayi adres, sayi uzunluk, sayi bayrak) -> sayi {
+    eger (adres % SAYFA != 0 || uzunluk < 0) { don -EINVAL; }
+    eger ((bayrak & MS_ASYNC) != 0 && (bayrak & MS_SYNC) != 0) { don -EINVAL; }
+    eger ((bayrak & (MS_ASYNC + MS_INVALIDATE + MS_SYNC)) != bayrak) { don -EINVAL; }
+    eger (uzunluk == 0) { don 0; }
+    sayi n = sayfa_yukari(uzunluk);
+    eger (adres < 0 || adres + n > YIGIN_UST) { don -ENOMEM; }
+    eger (esl_bosalt(s, adres, adres + n, yanlis) > 0) { don 0; }
+    // paylaşımlı dosya eşlemesi yok: eşlenmemiş aralık hata, gerisi (anonim ya
+    // da MAP_PRIVATE) Linux'taki gibi sessizce başarılı.
+    eger (upp.cekirdek.kullanici_bos_mu(g_surec[s].ka, adres, n)) { don -ENOMEM; }
     don 0;
 }
 

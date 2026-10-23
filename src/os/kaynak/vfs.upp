@@ -269,6 +269,22 @@ fonk fs_oku(sayi no) -> metin {
     don g_fs[no].veri;
 }
 
+// [ofs, ofs + n) bayt penceresi. Sürücü tam dosya okuduğu için diskte yine
+// tüm içerik gelir; eşlemeye ve çağırana yalnızca pencere kopyalanır.
+fonk fs_oku_aralik(sayi no, sayi ofs, sayi n) -> metin {
+    eger (n <= 0 || ofs < 0) { don ""; }
+    sayi toplam = fs_boyut(no);
+    eger (ofs >= toplam) { don ""; }
+    sayi k = toplam - ofs;
+    eger (k > n) { k = n; }
+    metin icerik = fs_oku(no);
+    sayi t = upp.tampon.yeni(bayt_say(icerik));
+    upp.tampon.metin_yaz(t, 0, icerik);
+    metin m = upp.tampon.metin(t, ofs, k);
+    upp.tampon.birak(t);
+    don m;
+}
+
 fonk fs_yaz(sayi no, metin veri, mantik ekle) -> mantik {
     g_fs_hata = "";
     sayi t = g_fs[no].tur;
@@ -292,6 +308,34 @@ fonk fs_yaz(sayi no, metin veri, mantik ekle) -> mantik {
     eger (ekle) { g_fs[no].veri += veri; } yoksa { g_fs[no].veri = veri; }
     g_fs[no].zaman = simdi();
     don dogru;
+}
+
+// Dosyanın [ofs, ofs + uzunluk) aralığını yerinde günceller; dosya gerekirse
+// sıfırlarla büyür. Sürücü arayüzü yalnızca tam dosya yazabildiği için disk
+// dosya sistemlerinde oku-değiştir-yaz yapılır.
+fonk fs_yaz_aralik(sayi no, sayi ofs, metin veri) -> mantik {
+    g_fs_hata = "";
+    sayi n = bayt_say(veri);
+    eger (n == 0) { don dogru; }
+    eger (ofs < 0) {
+        g_fs_hata = "geçersiz dosya konumu";
+        don yanlis;
+    }
+    // aygıtlar konumsuzdur: akışa eklenir
+    eger (g_fs[no].tur == D_AYGIT) { don fs_yaz(no, veri, dogru); }
+    sayi mevcut = fs_boyut(no);
+    eger (ofs == mevcut) { don fs_yaz(no, veri, dogru); }
+    metin eski = fs_oku(no);
+    sayi eski_n = bayt_say(eski);
+    sayi yeni_n = ofs + n;
+    eger (eski_n > yeni_n) { yeni_n = eski_n; }
+    sayi t = upp.tampon.yeni(yeni_n);
+    upp.tampon.doldur(t, 0, yeni_n, 0);
+    upp.tampon.metin_yaz(t, 0, eski);
+    upp.tampon.metin_yaz(t, ofs, veri);
+    mantik ok = fs_yaz(no, upp.tampon.metin(t, 0, yeni_n), yanlis);
+    upp.tampon.birak(t);
+    don ok;
 }
 
 fonk fs_boyut(sayi no) -> sayi {

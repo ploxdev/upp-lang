@@ -577,8 +577,11 @@ fonk sirali_secim(sayi stmt, sayi sw_t) -> sayi {
                 sirali_eksik_hatasi(stmt, sr, kapsandi);
                 don 2;
             }
-            // tümü kapsandı: son kol 'varsayilan' olur (dönüş çözümlemesi için)
-            eger (n > 0) { dugum_yaz_a(liste_al(L, n - 1), 0); }
+            // Tümü kapsandı. Son kolu 'varsayilan' yapmak, geçersiz bir değerin
+            // (örn. (Renk)42) sessizce o kola düşmesine yol açıyordu. Bunun
+            // yerine secim 'tam' işaretlenir: dönüş çözümlemesi kapsamayı kabul
+            // eder, codegen panikleyen bir 'default' yazar.
+            dugum_yaz_bayrak(stmt, dugum_bayrak(stmt) | 4);
         }
         don 2;
     }
@@ -587,18 +590,17 @@ fonk sirali_secim(sayi stmt, sayi sw_t) -> sayi {
     sayi sutun = dugum_sutun(stmt);
     sayi konu = dugum_a(stmt);
     sayi blok_L = liste_yeni();
+    // Konu her zaman geçiciye alınır: bağlanan ad eşleştirilen değişkenle aynı
+    // olduğunda (durum Tamam(d) ile secim (d)) bağlama kendi bildirdiği adı
+    // gölgeleyip konuyu okuyamaz hale gelirdi.
     metin konu_ad = "";
-    eger (dugum_tur(konu) == DugumTur.D_KIMLIK && (kapsam_bul(dugum_ad(konu)) != 0 || tablo_bul(3, dugum_ad(konu)) != 0)) {
-        konu_ad = dugum_ad(konu);
-    } yoksa {
-        g_sr_tmp += 1;
-        konu_ad = intern(kat("_upp_sk", sayi_metin(g_sr_tmp)));
-        sayi vd = dugum_yeni(DugumTur.D_DEGISKEN, satir, sutun);
-        dugum_yaz_ad(vd, konu_ad);
-        dugum_yaz_a(vd, tur_kopya(sw_t));
-        dugum_yaz_c(vd, konu);
-        liste_ekle(blok_L, vd);
-    }
+    g_sr_tmp += 1;
+    konu_ad = intern(kat("_upp_sk", sayi_metin(g_sr_tmp)));
+    sayi vd = dugum_yeni(DugumTur.D_DEGISKEN, satir, sutun);
+    dugum_yaz_ad(vd, konu_ad);
+    dugum_yaz_a(vd, tur_kopya(sw_t));
+    dugum_yaz_c(vd, konu);
+    liste_ekle(blok_L, vd);
     sayi yeni_L = liste_yeni();
     her (sayi i in 0..n) {
         sayi c = liste_al(L, i);

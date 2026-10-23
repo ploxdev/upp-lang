@@ -1,0 +1,102 @@
+// Pozitif: gölgeleyen değişkenin ilk değeri dıştaki değişkeni okur (sayi, metin,
+// sınıf, liste; ASan ile sızıntı denetimi), sirali kalıbında konuyla aynı adlı
+// bağlama, metin secim'inde başta/ortada/tek başına 'varsayilan'.
+// @bayrak: --guvenlik-denetimi
+// @stdout
+// sayi: 43 42
+// metin: 42 / dış 3-iç / dış 3
+// döngü: 10 11
+// sınıf: 4 3
+// liste: 2 1
+// bağlama: merhaba 5
+// secim: varsayılan-baş b varsayılan-orta tek
+
+sirali Sonuc { Tamam(metin mesaj), Cift(sayi x, sayi y) }
+
+sinif Kutu { sayi v; }
+
+fonk acik(Sonuc d) -> metin {
+    secim (d) {
+        durum Tamam(d): don d;
+        durum Cift(d, y): don "{d + y}";
+    }
+}
+
+fonk secim_metni(metin k) -> metin {
+    metin r = "";
+    secim (k) {
+        varsayilan: r = "varsayılan-baş";
+        durum "a": r = "a";
+        durum "b": r = "b";
+    }
+    don r;
+}
+
+fonk orta(metin k) -> metin {
+    metin r = "";
+    secim (k) {
+        durum "a": r = "a";
+        varsayilan: r = "varsayılan-orta";
+        durum "b": r = "b";
+    }
+    don r;
+}
+
+fonk tek(metin k) -> metin {
+    metin r = "";
+    secim (k) {
+        varsayilan: r = "tek";
+    }
+    don r;
+}
+
+fonk ana() -> sayi {
+    sayi x = 42;
+    {
+        sayi x = x + 1;
+        upp.yaz("sayi: {x} ");
+    }
+    upp.satir_yaz("{x}");
+
+    {
+        metin x = "{x}";
+        upp.yaz("metin: {x} / ");
+    }
+    sayi z = 3;
+    metin s = "dış {z}";
+    {
+        metin s = s + "-iç";
+        upp.yaz(s + " / ");
+    }
+    upp.satir_yaz(s);
+
+    sayi i = 10;
+    metin d = "döngü:";
+    her (sayi j in 0..2) {
+        sayi i = i + j;
+        d += " {i}";
+    }
+    upp.satir_yaz(d);
+
+    Kutu k;
+    k.v = 3;
+    {
+        Kutu k = k;
+        k.v = k.v + 1;
+        upp.yaz("sınıf: {k.v} ");
+    }
+    upp.satir_yaz("{k.v}");
+
+    liste[sayi] L;
+    L.ekle(1);
+    {
+        liste[sayi] L = L;
+        L.ekle(2);
+        upp.yaz("liste: {L.uzunluk()} ");
+    }
+    upp.satir_yaz("{L.uzunluk()}");
+
+    upp.satir_yaz("bağlama: " + acik(Sonuc.Tamam("merhaba")) + " " + acik(Sonuc.Cift(2, 3)));
+    upp.satir_yaz("secim: " + secim_metni("z") + " " + secim_metni("b") + " " + orta("z") + " " + tek("q"));
+    don 0;
+}

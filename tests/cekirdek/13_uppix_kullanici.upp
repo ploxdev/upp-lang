@@ -2,7 +2,8 @@
 // /usr/bin'deki programlar libc'siz statik Linux ELF'leridir (src/os/kullanici/*.c).
 // Sınananlar: argv/exit kodu, temel sistem çağrıları (sctest), dosya sistemi,
 // tanımlayıcı, zaman, TLS ve sinyal çağrıları (sctest2), glibc ile statik derlenmiş
-// bir program (gmerhaba), terminal ioctl'u, boru, SIGSEGV'de yalnızca sürecin
+// bir program (gmerhaba), MAP_SHARED eşlemesinin süreç sonunda dosyaya yazılması
+// (mmson), terminal ioctl'u, boru, SIGSEGV'de yalnızca sürecin
 // sonlanması, zaman dilimiyle kesilen sonsuz döngü ve kill.
 // Denetim: aynı sctest/sctest2/gmerhaba ikilileri gerçek Linux'ta çalıştırılır;
 // çıktıları Uppix'teki çıktıyla satır satır aynı olmalıdır.
@@ -13,6 +14,7 @@
 // @girdi: sctest
 // @girdi: sctest2
 // @girdi: gmerhaba; echo glibc kod=$?
+// @girdi: mmson yaz; mmson oku
 // @girdi: ekran
 // @girdi: echo boru verisi | ucat
 // @girdi: cokme; echo kod=$?
@@ -27,6 +29,7 @@
 // @icerir: === sctest bitti ===
 // @icerir: === sctest2 bitti ===
 // @icerir: glibc kod=7
+// @icerir: mmson: "abcdefgZ" 8
 // @icerir: terminal: 160 sütun x 50 satır
 // @icerir: boru verisi
 // @icerir: Bölümleme hatası (SIGSEGV): komut
@@ -37,6 +40,7 @@
 // @denetle: K=$(pwd) && D=$(mktemp -d) && cd "$D" && "$K/tests/_cikti/kullanici_img/kullanici/sctest" > linux.txt && cd "$K" && sed -n '/=== sctest başla/,/=== sctest bitti/p' tests/_cikti/ck_13_uppix_kullanici.konsol | tr -d '\r' > "$D/uppix.txt" && diff "$D/linux.txt" "$D/uppix.txt" && rm -rf "$D"
 // @denetle: K=$(pwd) && D=$(mktemp -d) && cd "$D" && "$K/tests/_cikti/kullanici_img/kullanici/sctest2" > linux.txt && cd "$K" && sed -n '/=== sctest2 başla/,/=== sctest2 bitti/p' tests/_cikti/ck_13_uppix_kullanici.konsol | tr -d '\r' > "$D/uppix.txt" && diff "$D/linux.txt" "$D/uppix.txt" && rm -rf "$D"
 // @denetle: K=$(pwd) && D=$(mktemp -d) && "$K/tests/_cikti/kullanici_img/kullanici/gmerhaba" > "$D/linux.txt"; sed -n '/^glibc merhaba/,/^printf:/p' tests/_cikti/ck_13_uppix_kullanici.konsol | tr -d '\r' > "$D/uppix.txt" && diff "$D/linux.txt" "$D/uppix.txt" && rm -rf "$D"
+// @denetle: K=$(pwd) && D=$(mktemp -d) && cd "$D" && "$K/tests/_cikti/kullanici_img/kullanici/mmson" yaz && "$K/tests/_cikti/kullanici_img/kullanici/mmson" oku > linux.txt && cd "$K" && grep -a '^mmson: ' tests/_cikti/ck_13_uppix_kullanici.konsol | tr -d '\r' > "$D/uppix.txt" && diff "$D/linux.txt" "$D/uppix.txt" && rm -rf "$D"
 // @denetle: dd if=tests/_cikti/kullanici_img/uppix.img of=/tmp/upp_kul_p2.img bs=1M skip=65 status=none && e2fsck -fn /tmp/upp_kul_p2.img && rm -f /tmp/upp_kul_p2.img
 
 kullan "../../src/os/kaynak/uppix.upp";

@@ -1,0 +1,14 @@
+// Negatif: arkaplan sahipli sınıfı (metin alanlı) yakalayamaz; sığ kopya
+// dıştaki nesne bırakılınca serbest belleğe erişirdi.
+// @icerir: [u++ HATA]
+// @icerir: 'arkaplan' sahipli sınıf 'k' yakalayamaz.
+
+sinif Kisi { metin ad; }
+
+fonk ana() -> sayi {
+    Kisi k;
+    k.ad = "x";
+    ArkaplanIs is = arkaplan { upp.satir_yaz(k.ad); };
+    is.bekle();
+    don 0;
+}
