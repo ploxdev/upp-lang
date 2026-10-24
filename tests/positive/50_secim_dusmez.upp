@@ -1,0 +1,79 @@
+// Pozitif: secim kolları hiçbir türde (sayı, secenek, metin, sirali) bir sonrakine düşmez;
+// boş kol bir sonraki dolu kolla birleşir.
+// @stdout
+// sayı: bir | iki-üç | iki-üç | diğer
+// secenek: sıcak | sıcak | soğuk
+// metin: selam | selam | çık | ?
+// sirali: kırmızı-yeşil | kırmızı-yeşil | mavi
+// dur: 1
+
+secenek Hava { Gunes, Sicak, Kar }
+
+sirali Renk { Kirmizi, Yesil, Mavi }
+
+fonk sayi_ad(sayi x) -> metin {
+    metin s = "";
+    secim (x) {
+        durum 1:
+            s = "bir";
+        durum 2:
+        durum 3:
+            s = "iki-üç";
+        varsayilan:
+            s = "diğer";
+    }
+    don s;
+}
+
+fonk hava_ad(Hava h) -> metin {
+    metin s = "";
+    secim (h) {
+        durum Hava.Gunes:
+        durum Hava.Sicak:
+            s = "sıcak";
+        durum Hava.Kar:
+            s = "soğuk";
+    }
+    don s;
+}
+
+fonk komut_ad(metin k) -> metin {
+    metin s = "?";
+    secim (k) {
+        durum "merhaba":
+        durum "selam":
+            s = "selam";
+        durum "çık":
+            s = "çık";
+    }
+    don s;
+}
+
+fonk renk_ad(Renk r) -> metin {
+    metin s = "";
+    secim (r) {
+        durum Kirmizi:
+        durum Yesil:
+            s = "kırmızı-yeşil";
+        durum Mavi:
+            s = "mavi";
+    }
+    don s;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("sayı: {sayi_ad(1)} | {sayi_ad(2)} | {sayi_ad(3)} | {sayi_ad(9)}");
+    upp.satir_yaz("secenek: {hava_ad(Hava.Gunes)} | {hava_ad(Hava.Sicak)} | {hava_ad(Hava.Kar)}");
+    upp.satir_yaz("metin: {komut_ad(\"merhaba\")} | {komut_ad(\"selam\")} | {komut_ad(\"çık\")} | {komut_ad(\"x\")}");
+    upp.satir_yaz("sirali: {renk_ad(Renk.Kirmizi)} | {renk_ad(Renk.Yesil)} | {renk_ad(Renk.Mavi)}");
+    sayi n = 0;
+    secim (n) {
+        durum 0:
+            n = 1;
+            dur;
+        durum 1:
+            n = 99;
+    }
+    upp.satir_yaz("dur: {n}");
+    don 0;
+}

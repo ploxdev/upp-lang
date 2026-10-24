@@ -153,6 +153,11 @@ fonk ac(metin ad) -> beklenen[Dosya] {
 }
 ```
 
+### `secim` Rules
+- **No fallthrough:** No `secim` arm falls through to the next one; the rule is the same for integers, `secenek`, `sirali`, and `metin`. `dur` still leaves the `secim` early, `devam` continues the enclosing loop.
+- **Empty arms merge:** An arm with an empty body (`durum 1:` followed by `durum 2: ...`) runs the next non-empty arm. In a data-carrying `sirali` every arm binds its own fields, so an empty arm cannot merge and is a compile error.
+- **Return type of arrow functions:** An arrow-bodied function written without `-> T`, such as `fonk kare(sayi x) => x * x;`, gets its return type from the expression; recursive ones must spell the type.
+
 ### Checked Integer Division
 `/` and `%` explicitly panic on division by zero and on `MIN / -1` (`LLONG_MIN / -1`) signed overflow across all targets (including the kernel) instead of invoking C undefined behavior. Division by a compile-time constant `0` is a compile error.
 

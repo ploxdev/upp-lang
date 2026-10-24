@@ -1,0 +1,8 @@
+// Negatif: özyinelemeli ok fonksiyonunun dönüş türü çıkarılamaz
+// @icerir: dönüş türü çıkarılamadı
+
+fonk fakt(sayi n) => n <= 1 ? 1 : n * fakt(n - 1);
+
+fonk ana() -> sayi {
+    don fakt(5);
+}

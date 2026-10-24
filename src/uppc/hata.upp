@@ -21,6 +21,10 @@ liste[sayi] a_gv;
 liste[metin] a_mesaj;
 sayi a_n = 0;
 
+// Sessiz kip (dönüş türü çıkarımı denemeleri): hata bildirilmez, yalnızca işaretlenir.
+sayi g_hata_sessiz = 0;
+sayi g_sessiz_hata = 0;
+
 fonk hata_var() -> mantik {
     don g_hata_bayrak != 0;
 }
@@ -35,6 +39,10 @@ fonk hata_sifirla() -> bos {
 }
 
 fonk hata_ver(sayi satir, sayi sutun, metin mesaj) -> bos {
+    eger (g_hata_sessiz > 0) {
+        g_sessiz_hata = 1;
+        don;
+    }
     eger (mesaj == yok) { mesaj = ""; }
     eger (g_analiz_topla != 0) {
         eger (a_n < 50) {
@@ -64,6 +72,10 @@ fonk hata_ver(sayi satir, sayi sutun, metin mesaj) -> bos {
 }
 
 fonk hata_guvenlik(sayi satir, sayi sutun, metin mesaj) -> bos {
+    eger (g_hata_sessiz > 0) {
+        g_sessiz_hata = 1;
+        don;
+    }
     eger (mesaj == yok) { mesaj = ""; }
     eger (g_analiz_topla != 0) {
         eger (a_n < 50) {

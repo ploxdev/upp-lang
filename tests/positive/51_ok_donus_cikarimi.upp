@@ -1,0 +1,38 @@
+// Pozitif: ok gövdeli fonksiyonda dönüş türü ifadeden çıkarılır (ileri çağrılar dahil)
+// @stdout
+// kare: 49
+// alan: 12.5
+// selam: Merhaba Ali!
+// zincir: 50
+// mantık: dogru
+// metot: 6
+// boş
+
+fonk kare_al(sayi x) => x * x;
+fonk yarim(ondalik x) => x / 2.0;
+fonk selamla(metin ad) => "Merhaba " + ad + "!";
+fonk zincir(sayi x) => sonraki(x) + 1;          // sonraki() aşağıda tanımlı
+fonk sonraki(sayi x) => kare_al(x) + 0;
+fonk cift_mi(sayi x) => x % 2 == 0;
+fonk yaz_bos() => upp.satir_yaz("boş");
+
+sinif Kutu {
+    sayi en;
+    sayi boy;
+
+    fonk alan() => kendi.en * kendi.boy;
+}
+
+fonk ana() -> sayi {
+    upp.satir_yaz("kare: {kare_al(7)}");
+    upp.satir_yaz("alan: {yarim(25.0)}");
+    upp.satir_yaz("selam: {selamla(\"Ali\")}");
+    upp.satir_yaz("zincir: {zincir(7)}");
+    upp.satir_yaz("mantık: {cift_mi(4)}");
+    Kutu k;
+    k.en = 2;
+    k.boy = 3;
+    upp.satir_yaz("metot: {k.alan()}");
+    yaz_bos();
+    don 0;
+}

@@ -364,13 +364,11 @@ fonk ana() -> sayi {
     secim (komut) {
         durum "baslat":
             upp.satir_yaz("Sistem baslatiliyor...");
-            dur; // Seçim bloğundan çık
         durum "durdur":
             upp.satir_yaz("Sistem durduruldu.");
-            dur;
+        durum "yeniden":
         durum "yenile":
             upp.satir_yaz("Sistem yeniden baslatiliyor.");
-            dur;
         varsayilan:
             upp.satir_yaz("Bilinmeyen komut!");
     }
@@ -379,7 +377,7 @@ fonk ana() -> sayi {
 }
 ```
 
-> **Dikkat:** `dur;` yazmazsanız bilgisayar bir sonraki `durum` kodunu da çalıştırmaya devam eder. Bu yüzden her durumun işi bittiğinde `dur;` ile bloğu kapatırız.
+> **Not:** C'den farklı olarak bir `durum` bittiğinde program bir sonraki `durum`a **düşmez**; her durum kendi işini yapıp `secim`'den çıkar. Bu kural sayı, `secenek`, `sirali` ve metin `secim`'lerinin hepsinde aynıdır. Birden çok değerin aynı işi yapmasını istiyorsanız durumları boş gövdeyle alt alta yazın (`durum "yeniden":` ve `durum "yenile":` gibi); boş durum altındaki dolu duruma katılır. `dur;` yine istediğiniz yerde `secim`'den erken çıkmak için kullanılabilir.
 
 ---
 
@@ -563,9 +561,11 @@ fonk karsila(metin isim) -> bos {
 Tek satırlık basit fonksiyonlar için süslü parantez ve `don` yazmak yerine ok işaretini `=>` kullanabilirsiniz:
 
 ```text
-fonk kare_al(sayi x) => x * x;
+fonk kare_al(sayi x) => x * x;           // dönüş türü (sayi) ifadeden çıkarılır
 fonk selam_ver() -> bos => upp.satir_yaz("Selam!");
 ```
+
+Ok gövdeli fonksiyonlarda `-> tür` yazmazsanız derleyici dönüş türünü ifadeden çıkarır. Kendini çağıran (özyinelemeli) bir ok fonksiyonunda tür çıkarılamaz; orada `-> sayi` gibi türü yazın.
 
 ### Varsayılan Parametreler
 Bir parametreye başlangıç değeri atayarak, çağrılırken verilmesini isteğe bağlı hale getirebilirsiniz:
@@ -954,7 +954,7 @@ fonk ana() -> sayi {
 }
 ```
 
-> **Not:** Bu kural yalnızca metinler için geçerlidir. `liste`, `harita` ve `upp.json` ağaçları hâlâ `.bosalt()` / `upp.json.bosalt()` ile kapatılır.
+> **Not:** Aynı kural `liste`, `harita`, sahipli sınıflar ve `beklenen` değerleri için de geçerlidir: kapsam bitince kendiliğinden bırakılırlar, `.bosalt()` yalnızca belleği erken geri vermek içindir. Elle kapatılması gereken tek şey `upp.json` ağaçlarıdır (`upp.json.bosalt(kok)`).
 
 ### Kopyasız Bakış: `&metin` ve `&dilim[T]`
 Büyük bir metni ya da diziyi sadece okumak istiyorsanız kopyalamak yerine ona bir **görünüm** (ödünç bakış) açabilirsiniz:

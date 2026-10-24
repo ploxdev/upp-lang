@@ -152,6 +152,11 @@ fonk ac(metin ad) -> beklenen[Dosya] {
 }
 ```
 
+### `secim` Kuralları
+- **Düşme yok:** Hiçbir `secim` kolu bir sonrakine düşmez; sayı, `secenek`, `sirali` ve `metin` için kural aynıdır. `dur` yine `secim`'den erken çıkar, `devam` çevreleyen döngüyü sürdürür.
+- **Boş kol birleşir:** Gövdesi boş bir kol (`durum 1:` ardından `durum 2: ...`) bir sonraki dolu kolla aynı işi yapar. Veri taşıyan `sirali`'de her kol kendi alanlarını bağladığından boş kol birleşemez; derleme hatasıdır.
+- **Ok fonksiyonlarında dönüş türü:** `fonk kare(sayi x) => x * x;` gibi `-> T` yazılmayan ok gövdeli fonksiyonların dönüş türü ifadeden çıkarılır; özyinelemeli olanlarda tür yazılmalıdır.
+
 ### Güvenli Tamsayı Bölme
 `/` ve `%` işlemleri sıfıra bölmede ve `EN_KUCUK / -1` (`LLONG_MIN / -1`) taşmasında tanımsız davranışa (UB) girmek yerine açık panik verir (çekirdek hedefi dahil). Bölen derleme anında sabit `0` ise derleme hatası üretilir.
 

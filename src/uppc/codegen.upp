@@ -126,6 +126,17 @@ fonk emit_drop_min(sayi cer_min) -> bos {
 }
 
 // ertele gövdesi: her çıkış noktasında kendi C bloğu içinde yeniden üretilir.
+// Kol yalnızca boş cümlelerden oluşuyorsa (ör. 'durum 1: durum 2: ...') boştur.
+fonk secim_kolu_bos_mu(sayi c) -> mantik {
+    sayi sl = dugum_liste(c);
+    sayi j = 0;
+    iken (j < liste_uzunluk(sl)) {
+        eger (dugum_tur(liste_al(sl, j)) != DugumTur.D_BOS_CUMLE) { don yanlis; }
+        j = j + 1;
+    }
+    don dogru;
+}
+
 fonk uret_ertele_govde(sayi stmt) -> bos {
     sayi eski_h = g_hata_donus;
     g_hata_donus = 0;
@@ -2290,19 +2301,28 @@ fonk uret_cumle(sayi stmt) -> bos {
             // olarak yazılır; başta ya da ortada yazılırsa C'de 'else' without
             // a previous 'if' olurdu.
             sayi vars_kol = 0;
+            // Boş kollar bir sonraki dolu kolla birleşir: koşulları '||' ile toplanır.
+            metin bekleyen = "";
             iken (i < liste_uzunluk(L)) {
                 sayi c = liste_al(L, i);
                 eger (dugum_a(c) == 0) {
                     vars_kol = c;
+                    bekleyen = "";
                 } yoksa {
                     oto cond = kat4("upp_metin_esit(", swv, ", ", kat(uret_ifade(dugum_a(c)), ")"));
-                    eger (first) {
-                        emit(kat3("if (", cond, ")"));
+                    eger (!metin_esit(bekleyen, "")) { cond = kat3(bekleyen, " || ", cond); }
+                    eger (secim_kolu_bos_mu(c)) {
+                        bekleyen = cond;
                     } yoksa {
-                        emit(kat3("else if (", cond, ")"));
+                        bekleyen = "";
+                        eger (first) {
+                            emit(kat3("if (", cond, ")"));
+                        } yoksa {
+                            emit(kat3("else if (", cond, ")"));
+                        }
+                        first = yanlis;
+                        uret_metin_secim_kolu(c);
                     }
-                    first = yanlis;
-                    uret_metin_secim_kolu(c);
                 }
                 i = i + 1;
             }
@@ -2340,6 +2360,9 @@ fonk uret_cumle(sayi stmt) -> bos {
             }
             emit_drop_cerceve();
             drop_cerceve_pop();
+            // Dolu kol bir sonrakine düşmez (metin ve 'sirali' secim'iyle aynı kural);
+            // boş kol bir sonrakiyle birleşir.
+            eger (!secim_kolu_bos_mu(c)) { emit("break;"); }
             indent_ekle(-1);
             emit("}");
             i = i + 1;

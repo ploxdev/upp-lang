@@ -515,6 +515,14 @@ fonk sirali_kol_kapali(sayi L) -> mantik {
     don t == DugumTur.D_DON || t == DugumTur.D_DUR || t == DugumTur.D_DEVAM;
 }
 
+// Yalnızca boş cümlelerden oluşan kol: 'durum A: durum B: ...' biçiminde sonrakiyle birleşir.
+fonk sirali_kol_bos(sayi L) -> mantik {
+    her (sayi j in 0..liste_uzunluk(L)) {
+        eger (dugum_tur(liste_al(L, j)) != DugumTur.D_BOS_CUMLE) { don yanlis; }
+    }
+    don dogru;
+}
+
 fonk sirali_eksik_hatasi(sayi stmt, sayi sr, liste[mantik] kapsandi) -> bos {
     metin eksik = "";
     sayi bas = g_sr_v_bas[sr];
@@ -570,7 +578,7 @@ fonk sirali_secim(sayi stmt, sayi sw_t) -> sayi {
                 dugum_yaz_a(c, sirali_uye_ifadesi(tur_ad, g_sv_ad[v], dugum_satir(p), dugum_sutun(p)));
             }
             sayi sl = dugum_liste(c);
-            eger (!sirali_kol_kapali(sl)) { liste_ekle(sl, dugum_yeni(DugumTur.D_DUR, dugum_satir(c), dugum_sutun(c))); }
+            eger (!sirali_kol_kapali(sl) && !sirali_kol_bos(sl)) { liste_ekle(sl, dugum_yeni(DugumTur.D_DUR, dugum_satir(c), dugum_sutun(c))); }
         }
         eger (!varsayilan_var) {
             eger (!sirali_hepsi(kapsandi)) {
@@ -605,6 +613,10 @@ fonk sirali_secim(sayi stmt, sayi sw_t) -> sayi {
     her (sayi i in 0..n) {
         sayi c = liste_al(L, i);
         sayi p = dugum_a(c);
+        eger (p != 0 && sirali_kol_bos(dugum_liste(c))) {
+            hata_ver(dugum_satir(c), dugum_sutun(c), "Veri taşıyan 'sirali' secim'inde boş kol bir sonrakiyle birleşemez (her kol kendi alanlarını bağlar). Hiçbir şey yapmayacaksa 'dur;' yazın.");
+            don 1;
+        }
         sayi govde = dugum_yeni(DugumTur.D_BLOK, dugum_satir(c), dugum_sutun(c));
         sayi gL = liste_yeni();
         dugum_yaz_liste(govde, gL);

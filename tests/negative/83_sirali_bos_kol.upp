@@ -1,0 +1,14 @@
+// Negatif: veri taşıyan sirali secim'inde boş kol birleşemez
+// @icerir: boş kol bir sonrakiyle birleşemez
+
+sirali Sonuc { Tamam(sayi d), Hata(metin m) }
+
+fonk ana() -> sayi {
+    Sonuc s = Sonuc.Tamam(1);
+    secim (s) {
+        durum Tamam:
+        durum Hata(m):
+            upp.satir_yaz(m);
+    }
+    don 0;
+}
