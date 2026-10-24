@@ -5,7 +5,7 @@ Bu belge; **u++** dilinin bellek modelini, tür sistemini, hata yönetimi mekani
 > [!NOTE]
 > Yerleşik fonksiyonların derleyici içindeki tek doğru kaynağı [`src/uppc/yerlesik.upp`](../src/uppc/yerlesik.upp) tablosudur. Tür denetleyici; argüman sayısını, parametre ve dönüş türlerini, `guvensiz` bloğu zorunluluğunu ve hedef uyumluluğunu (`barındırılan` / `serbest` / `windows` / `linux`) doğrudan bu tablodan okur. Bu referans belgesi söz konusu tabloyla birebir eşleşir.
 
-📚 **İlgili Belgeler:** [Öğrenme Rehberi (OGREN.md)](../OGREN.md) · [Derleyici Mimarisi (derleyici.md)](../derleyici.md) · [Uppix İşletim Sistemi](../src/os/README.md) · [English Reference (API_en.md)](API_en.md)
+📚 **İlgili Belgeler:** [Öğrenme Rehberi (OGREN.md)](../OGREN.md) · [Derleyici Mimarisi (derleyici.md)](../derleyici.md) · [Uppix İşletim Sistemi](https://github.com/ploxdev/uppix) · [English Reference (API_en.md)](API_en.md)
 
 ---
 
@@ -250,7 +250,7 @@ Bilinmeyen nitelik, aynı niteliğin iki kez yazılması ve uygun olmayan bildir
 | `cmetin` | `const char*` | Başlıksız ham C dizgisi; yalnızca `guvensiz` blokta ve `c_harici` imzalarında (bkz. [`c_harici` ve `cmetin`](#c_harici-ve-cmetin-c-fonksiyonlarını-tür-güvenli-çağırma)) |
 | `mantik` | `bool` | Mantıksal değer (`dogru` / `yanlis`) |
 | `bos` | `void` | Değer döndürmeyen fonksiyon dönüş türü |
-| `dizi[T, N]` | C dizisi (`T[N]`) | Yığında (stack) yaşayan, çalışma anı sınır denetimli sabit dizi (`sayi a[] = [1, 2];`) |
+| `T ad[N]`, `T ad[] = [...]` | C dizisi (`T[N]`) | Yığında (stack) yaşayan, çalışma anı sınır denetimli sabit dizi: `sayi b[4];`, `sayi a[] = [1, 2];` (hata iletilerinde `dizi` diye geçer; `dizi[T, N]` diye bir tür yazımı yoktur) |
 | `liste[T]`, `harita[K, V]` | `UppKolListe`, `UppKolHarita` | Değer semantikli (refcount + COW) dinamik koleksiyonlar |
 | `fonk(P...) -> R` | Fonksiyon işaretçisi | Birinci sınıf fonksiyon değeri (`yok` olabilir) |
 | `beklenen[T, H]`, `beklenen[T]` | Etiketli `struct` + `union` | Değer veya hata taşıyan sonuç türü (`?` ile yayılır) |
@@ -616,7 +616,7 @@ Aşağıdaki çekirdek servisleri ise **güvenli koddan** doğrudan çağrılabi
 
 #### Kullanıcı kipi (ring 3) *(Yalnızca `--onyukleyici limine`)*
 
-Mekanizma çekirdekte (C), politika işletim sisteminde (u++) durur: süreç tablosu, ELF yükleme ve sistem çağrılarının anlamı u++'ta yazılır. Uppix bunları Linux x86_64 ABI'siyle kullanır (bkz. [`src/os/README.md`](../src/os/README.md)). `ka`, bir adres alanının tutamacıdır (PML4'ün fiziksel adresi). `koruma` Linux `PROT_*` bitleridir: 1 okuma, 2 yazma, 4 yürütme.
+Mekanizma çekirdekte (C), politika işletim sisteminde (u++) durur: süreç tablosu, ELF yükleme ve sistem çağrılarının anlamı u++'ta yazılır. Uppix bunları Linux x86_64 ABI'siyle kullanır (bkz. [Uppix README](https://github.com/ploxdev/uppix)). `ka`, bir adres alanının tutamacıdır (PML4'ün fiziksel adresi). `koruma` Linux `PROT_*` bitleridir: 1 okuma, 2 yazma, 4 yürütme.
 
 | Fonksiyon | İmza | Açıklama |
 | :--- | :--- | :--- |
@@ -671,8 +671,8 @@ Disk sektörleri, dosya sistemi yapıları (`ext4`, `FAT32`, `exFAT`) ve ikili p
 
 | Hedef Bayrağı | Üretilen Çıktı | Açıklama |
 | :--- | :--- | :--- |
-| *(varsayılan)* / `--hedef yerel` | `.exe` / `.out` | Derleyicinin çalıştığı işletim sistemi için bağımsız uygulama |
-| `--hedef windows` / `--hedef linux` | `.exe` / `.out` | Hedef işletim sistemi ABI'si ve platform API'leri |
+| *(varsayılan; `upp.proje` içinde `hedef = yerel`)* | `.exe` / `.out` | Derleyicinin çalıştığı işletim sistemi için bağımsız uygulama |
+| `--hedef windows` / `--hedef linux` (kısa: `--windows` / `--linux`) | `.exe` / `.out` | Hedef işletim sistemi ABI'si ve platform API'leri |
 | `--hedef serbest` | ELF `.o` | `libc` bağımlılığı olmayan nesne dosyası (giriş noktası: `upp_cekirdek_giris()`) |
 | `--hedef cekirdek` | `<ad>.elf` + `<ad>32.elf` | Multiboot 1 ile önyüklenen x86_64 işletim sistemi çekirdeği (QEMU kuruluysa otomatik çalıştırır) |
 | `--hedef cekirdek --onyukleyici limine` | `<ad>.elf` | Limine ile diskten 64-bit açılan higher-half ELF64 çekirdek (BIOS ve UEFI) |
@@ -686,7 +686,7 @@ Disk sektörleri, dosya sistemi yapıları (`ext4`, `FAT32`, `exFAT`) ve ikili p
 
 ```bash
 # Tekil dosya derleme ve çalıştırma
-uppc <dosya.upp> [-o ad] [--sadece-derle | -c] [--hedef h] [--analiz] [--json-hata]
+uppc <dosya.upp> [-o ad] [--sadece-derle] [-c | --sadece-c] [--hedef h] [--analiz] [--json-hata]
                  [--bicim | --bicim-kontrol] [--ast] [--runtime yol] [--disk imaj]...
                  [--onyukleyici multiboot|limine] [--disk-hazirla betik.sh]
                  [--guvenlik-denetimi[=is]]
@@ -696,7 +696,8 @@ uppc yeni <ad> [--hedef cekirdek]     # Yeni proje iskeleti (upp.proje + kaynak/
 uppc derle [dizin]                    # Projeyi upp.proje ayarlarına göre derler
 uppc calistir [dizin]                 # Projeyi derler ve çalıştırır (çekirdek hedefinde QEMU başlatır)
 uppc asistan [dizin]                  # Etkileşimli terminal derleme asistanını açar
-uppc kendini-derle [--hizli]          # Derleyiciyi kendisiyle yeniden derler ve bootstrap/uppc.c'yi günceller
+uppc kendini-derle [--hizli] [--kok <dizin>]  # Derleyiciyi kendisiyle yeniden derler ve bootstrap/uppc.c'yi günceller
+uppc -v [--json]                      # Derleyici sürümünü yazar
 ```
 
 ### `upp.proje` Yapılandırma Biçimi
@@ -712,7 +713,8 @@ disk_hazirla = disk_yap.sh    # Disk imajlarından biri eksikse proje dizininde 
 onyukleyici = limine         # Çekirdek ilk diskten Limine ile açılır; disk_hazirla her derlemeden sonra çalışır
 ```
 
+- `--sadece-derle` ikiliyi üretir ama çalıştırmaz; `-c` / `--sadece-c` yalnızca üretilen C dosyasını yazar, GCC'yi çağırmaz. `--hedef` şu değerleri alır: `windows`, `linux`, `serbest`, `cekirdek`; verilmezse derleyicinin çalıştığı sistem hedeflenir.
 - `--disk <imaj>` bayrağı (en çok 4 adet), `--hedef cekirdek` ile çalışırken QEMU'ya `-drive if=ide,format=raw` olarak disk imajı bağlar.
 - `--guvenlik-denetimi` programı sanitizer'larla derler. Linux'ta ASan + UBSan açılır: sınır dışı ve serbest bırakıldıktan sonra erişim, sızıntı ve tanımsız davranış ilk hatada kaynak satırıyla durur. `--guvenlik-denetimi=is` bunun yerine TSan ile `arkaplan` iş parçacıklarındaki yarışları arar. Windows/MinGW'de ASan çalışma zamanı olmadığı için yalnızca UBSan tuzak kipi açılır ve tanımsız davranış açıklayıcı bir mesajla durdurulur. Bayrak serbest ve çekirdek hedeflerinde kullanılamaz. Eski `UPP_SANITIZE` ortam değişkeni (ham gcc bayrakları) hâlâ geçerlidir.
 - `--onyukleyici limine` çekirdeği Limine protokolüyle üretir. QEMU `-kernel` olmadan, ilk diskten açılır; bu yüzden ilk `--disk` önyüklenebilir bir imaj olmalıdır.
-- `--disk-hazirla <betik>` çekirdek derlendikten sonra `sh <betik> <ilk diskin dizini> <çekirdek.elf>` komutunu çalıştırır (Windows'ta WSL içinde). Betik önyüklenebilir imajı üretir ya da içindeki çekirdeği günceller; örnek için [`src/os/disk_yap.sh`](../src/os/disk_yap.sh). `UPP_FS_ARACLAR` ortam değişkeni betiğe `FS_ARACLAR` olarak geçer.
+- `--disk-hazirla <betik>` çekirdek derlendikten sonra `sh <betik> <ilk diskin dizini> <çekirdek.elf>` komutunu çalıştırır (Windows'ta WSL içinde). Betik önyüklenebilir imajı üretir ya da içindeki çekirdeği günceller; örnek için [Uppix `disk_yap.sh`](https://github.com/ploxdev/uppix/blob/main/disk_yap.sh). `UPP_FS_ARACLAR` ortam değişkeni betiğe `FS_ARACLAR` olarak geçer.

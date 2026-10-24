@@ -22,7 +22,7 @@
   <a href="docs/API_tr.md">📖 API Referansı (TR)</a> ·
   <a href="docs/API_en.md">🌐 API Reference (EN)</a> ·
   <a href="derleyici.md">⚙️ Derleyici Mimarisi</a> ·
-  <a href="src/os/README.md">🐧 Uppix İşletim Sistemi</a>
+  <a href="https://github.com/ploxdev/uppix">🐧 Uppix İşletim Sistemi</a>
 </p>
 
 ---
@@ -46,14 +46,14 @@ Yüksek seviyeli dillerin okunabilirliğini C'nin çıplak metal (bare-metal) pe
 - **♻️ Otomatik Bellek Yönetimi ve Görünümler:** Metinler (`metin`), listeler (`liste[T]`), haritalar (`harita[K, V]`) ve sahipli sınıflar atomik referans sayımı + yazma anında kopyalama (**Copy-on-Write / COW**) modeliyle çalışır. Derleyici kapsam çıkışlarında, `dur`/`devam` ve `don` noktalarında bırakma kodunu kendisi üretir; kullanıcı elle bellek boşaltmaz. Kopyasız ve sıfır ayırmalı okuma için `&metin` ve `&dilim[T]` (`dizi[1..4]`) görünümleri bulunur.
 - **🚦 Sıfır Maliyetli Hata Yönetimi (`beklenen`, `?`, `ertele`):** İstisna (exception) fırlatma yerine değer tabanlı `beklenen[T, H]` (kısaca `beklenen[T]`) kullanılır. `don hata(e)` ile hata döndürülür, `ifade?` ile hatalar temizlik yapılarak yukarı iletilir; kontrol edilmeyen `beklenen` sonuçları derleme hatası verir. `ertele` kapsamdan her çıkışta, `hata_ertele` ise yalnızca hata dönüşlerinde kaynak temizliği yapar.
 - **🧱 Zengin Tür Sistemi ve Fonksiyon Değerleri:**
-  - Tam genişlikli tamsayı ailesi (`sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8`, `ubayt`/`u8`), `ondalik`, `metin`, `mantik`, `dizi[T, N]`, `sinif` ve `secenek`.
+  - Tam genişlikli tamsayı ailesi (`sayi`/`s64`, `u64`/`usayi`, `s32`/`u32`, `s16`/`u16`, `bayt`/`s8`, `ubayt`/`u8`), `ondalik`, `metin`, `mantik`, sabit diziler (`sayi a[4]`), `sinif` ve `secenek`.
   - Birinci sınıf fonksiyon türleri (`fonk(sayi) -> sayi`): fonksiyonlar değişkende, sınıf alanında ve koleksiyonda saklanabilir; yakalamasız anonim fonksiyonlar (`fonk(sayi x) -> sayi => x * 2`) tanımlanabilir.
   - C tarzı `(T)x` açık tür dönüşümü ve derleme zamanı `boyut(T)` (`sizeof`) desteği.
   - Veri taşıyan numaralandırmalar (`sirali`, etiketli birleşim): `sirali Durum { Bekliyor, Hata(metin mesaj) }`; değer `secim` ile açılır, eksik varyant derleme hatasıdır ve alanlara doğrudan erişilemez.
   - Karakter sabitleri (`'a'`, `'ş'`, `'\n'`, `'\u015f'`), aralık döngüsü (`her (sayi i in 0..n)`) ve yerel ayardan bağımsız `upp.metin.ingkucuk` / `ingbuyuk`.
 - **🔌 Düşük Seviye ve C ile Birlikte Çalışma:** `c_harici fonk strlen(cmetin s) -> u64;` ile C fonksiyonları tür güvenli bildirilir (ham C dizgisi için `cmetin`); `@paketli`, `@hizali(N)`, `@bolum("ad")` nitelikleri bellek düzenini denetler. `uppc --guvenlik-denetimi` programı ASan + UBSan ile derler.
 - **🖥️ Çıplak Metal Çekirdek Hedefi (`--hedef cekirdek`):** Tek komutla `u++` programını x86_64 işletim sistemi çekirdeğine derler: Multiboot ile QEMU `-kernel`, ya da `--onyukleyici limine` ile diskten 64-bit higher-half ELF64 (BIOS ve UEFI). `libc` kullanılmaz; derleyiciye gömülü önyükleyici (Long Mode, sayfalama, SSE), 48 vektörlük IDT, 1000 Hz PIT zamanlayıcı, Türkçe Q PS/2 klavye, COM1 seri port, VGA metin ya da çerçeve tamponu konsolu, ATA PIO disk sürücüsü ve işbirlikçi görev zamanlayıcı ile gelir.
-- **🐧 Uppix İşletim Sistemi:** Tamamen `u++` ile yazılmış Unix benzeri işletim sistemi ([`src/os/`](src/os/README.md)). Depoya gömülü **Limine** ile diskten 64-bit açılır. Kullanıcı programları **ring 3'te**, kendi adres alanlarında çalışır ve sistem çağrıları **Linux x86_64 ile birebir uyumludur**: Linux için statik derlenmiş bir ELF (libc'siz ya da glibc ile `gcc -static`) değiştirilmeden çalışır. Kalıcı **ext4** kök dosya sistemi, **FAT32** ve **exFAT** okuma/yazma sürücüleri, MBR/GPT bölüm desteği, sanal dosya sistemi (VFS), borulu ve yönlendirmeli `uppsh` kabuğu, `/proc` ve `/dev` ağaçları ve **79 komut** (`nano` ve `vi` düzenleyicileri, `hexdump` ve yılan oyunu `snake` dahil) içerir.
+- **🐧 Uppix İşletim Sistemi:** Tamamen `u++` ile yazılmış Unix benzeri işletim sistemi ([`ploxdev/uppix`](https://github.com/ploxdev/uppix)). Depoya gömülü **Limine** ile diskten 64-bit açılır. Kullanıcı programları **ring 3'te**, kendi adres alanlarında çalışır ve sistem çağrıları **Linux x86_64 ile birebir uyumludur**: Linux için statik derlenmiş bir ELF (libc'siz ya da glibc ile `gcc -static`) değiştirilmeden çalışır. Kalıcı **ext4** kök dosya sistemi, **FAT32** ve **exFAT** okuma/yazma sürücüleri, MBR/GPT bölüm desteği, sanal dosya sistemi (VFS), borulu ve yönlendirmeli `uppsh` kabuğu, `/proc` ve `/dev` ağaçları ve **79 komut** (`nano` ve `vi` düzenleyicileri, `hexdump` ve yılan oyunu `snake` dahil) içerir.
 - **🔄 Python'sız Self-Hosting Derleyici:** Derleyicinin tamamı (`src/uppc/*.upp`) güvenli `u++` ile yazılmıştır. `uppc kendini-derle` komutu yaklaşık 30 saniyede 3 aşamalı derleme yaparak sabit noktayı (`aşama2 == aşama3`) doğrular ve Windows ile Linux'ta bayt bayt aynı [`bootstrap/uppc.c`](bootstrap/uppc.c) dosyasını üretir.
 - **🧰 Proje Yöneticisi, Asistan ve IDE Eklentisi:** `uppc yeni`, `uppc derle`, `uppc calistir`, etkileşimli `uppc asistan` menüsü ve VS Code / Cursor için canlı tanı (`--analiz`) ile otomatik tamamlama sunan resmi eklenti.
 
@@ -329,9 +329,9 @@ Dilin tamamı çekirdek hedefinde de eksiksiz çalışır: sınıflar, `liste`/`
 
 ### 🐧 Uppix: u++ ile Yazılmış Unix Benzeri İşletim Sistemi
 
-[`src/os/`](src/os/README.md), `--hedef cekirdek` altyapısı üzerinde tamamen `u++` ile geliştirilmiş kapsamlı bir işletim sistemidir:
+[Uppix](https://github.com/ploxdev/uppix) (ayrı depo: [`ploxdev/uppix`](https://github.com/ploxdev/uppix)), `--hedef cekirdek` altyapısı üzerinde tamamen `u++` ile geliştirilmiş kapsamlı bir işletim sistemidir:
 
-- **Diskten 64-bit Açılış:** Depoya gömülü [Limine](src/os/onyukleyici/limine) v11.4.1, `uppix.img`'in MBR'sinden (BIOS) ya da `EFI/BOOT/BOOTX64.EFI`'den (UEFI) çekirdeği yükler. İmajın 1. bölümü FAT32 `/boot`, 2. bölümü ext4 köktür. Ekran, Türkçe karakterli çerçeve tamponu konsoludur.
+- **Diskten 64-bit Açılış:** Uppix deposuna gömülü [Limine](https://github.com/ploxdev/uppix/tree/main/onyukleyici/limine) v11.4.1, `uppix.img`'in MBR'sinden (BIOS) ya da `EFI/BOOT/BOOTX64.EFI`'den (UEFI) çekirdeği yükler. İmajın 1. bölümü FAT32 `/boot`, 2. bölümü ext4 köktür. Ekran, Türkçe karakterli çerçeve tamponu konsoludur.
 
 - **Kalıcı Disk Dosya Sistemleri:**
   - **ext4 Kök (`/`):** Extent ağaçları ve `metadata_csum` (CRC32C) sağlamalarıyla tam okuma/yazma. Yazılan disk imajları Linux `e2fsck -fn` denetiminden hatasız geçer.
@@ -353,10 +353,12 @@ root@uppix:~# seq 15 | grep 1 | wc -l
 7
 ```
 
-Uppix'i disk imajlarıyla birlikte derleyip QEMU üzerinde hemen başlatmak için:
+Uppix'i disk imajlarıyla birlikte derleyip QEMU üzerinde hemen başlatmak için (depoda U++ derleyicisinin sabitlenmiş bir kopyası vardır):
 
 ```bash
-uppc calistir src/os
+git clone https://github.com/ploxdev/uppix && cd uppix
+sh derleyici/kur.sh
+derleyici/uppc calistir .
 ```
 
 ---
@@ -426,7 +428,7 @@ upp-lang/
 │       ├── cekirdek.upp          # --hedef cekirdek: gömülü önyükleyici ve araç zinciri
 │       ├── asistan.upp           # upp.proje yönetimi ve etkileşimli derleme asistanı
 │       └── kendini.upp           # Python'sız 3 aşamalı self-host sistemi
-├── src/os/                  # Uppix: u++ ile yazılmış Unix benzeri işletim sistemi (Limine, ext4/FAT32/exFAT)
+├── src/os/                  # Uppix'in anlık kopyası (geliştirme: github.com/ploxdev/uppix)
 ├── eklenti/                # VS Code & Cursor IDE eklentisi
 ├── ornekler/               # Örnek u++ programları ve çekirdek örnekleri
 └── tests/                  # Pozitif, negatif, güvenlik, runtime ve QEMU çekirdek testleri
@@ -458,7 +460,7 @@ Bu proje **[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)** k
 - **Literals, Ranges & Text:** character literals (`'a'`, `'ş'`, `'\n'`, `'\u015f'`), range loops (`her (sayi i in 0..n)`), and locale-independent `upp.metin.ingkucuk` / `ingbuyuk`.
 - **Low-Level & C Interop:** type-safe C declarations with `c_harici fonk strlen(cmetin s) -> u64;` (`cmetin` for raw C strings), `@paketli` / `@hizali(N)` / `@bolum("name")` layout attributes, and `uppc --guvenlik-denetimi` for ASan + UBSan builds.
 - **Freestanding & Kernel Target (`--hedef cekirdek`):** Compiles `u++` programs directly into bootable x86_64 kernels (Multiboot for QEMU `-kernel`, or higher-half ELF64 booted from disk by Limine with `--onyukleyici limine`) with an embedded bootloader, IDT/exceptions, 1000 Hz PIT, PS/2 Turkish-Q keyboard, VGA text or framebuffer console plus COM1, ATA PIO driver, and cooperative multitasking.
-- **Uppix Operating System ([`src/os/`](src/os/README.md)):** A Unix-like OS written in pure `u++` that boots from disk in 64-bit mode via the vendored **Limine** bootloader (BIOS and UEFI) and runs user programs in **ring 3** with **Linux x86_64-compatible system calls** (a static Linux ELF, `-nostdlib` or glibc `gcc -static`, runs unmodified), featuring read/write **ext4** (with `metadata_csum` CRC32C, verified by `e2fsck`), **FAT32** (VFAT UTF-16 LFN), and **exFAT** filesystems, MBR/GPT partitioning, VFS, the `uppsh` shell with pipes/redirection/jobs, and 79 commands (including the `nano` and `vi` editors, `hexdump` and a `snake` game).
+- **Uppix Operating System ([`ploxdev/uppix`](https://github.com/ploxdev/uppix)):** A Unix-like OS written in pure `u++` that boots from disk in 64-bit mode via the vendored **Limine** bootloader (BIOS and UEFI) and runs user programs in **ring 3** with **Linux x86_64-compatible system calls** (a static Linux ELF, `-nostdlib` or glibc `gcc -static`, runs unmodified), featuring read/write **ext4** (with `metadata_csum` CRC32C, verified by `e2fsck`), **FAT32** (VFAT UTF-16 LFN), and **exFAT** filesystems, MBR/GPT partitioning, VFS, the `uppsh` shell with pipes/redirection/jobs, and 79 commands (including the `nano` and `vi` editors, `hexdump` and a `snake` game).
 - **Python-Free Self-Hosting:** `uppc kendini-derle` rebuilds the compiler in ~30 seconds, verifies the 3-stage fixed point (`stage2 == stage3`), and emits a deterministic `bootstrap/uppc.c` across Windows and Linux.
 
 ### Quick Start
@@ -474,8 +476,8 @@ gcc -std=gnu11 -O2 bootstrap/uppc.c -o derleyici/uppc.exe -luser32 -lwinmm -lgdi
 # Compile and run an example
 ./derleyici/uppc.exe ornekler/ornek1.upp
 
-# Boot the Uppix operating system in QEMU
-./derleyici/uppc.exe calistir src/os
+# Boot the Uppix operating system in QEMU (separate repository)
+git clone https://github.com/ploxdev/uppix && cd uppix && sh derleyici/kur.sh && derleyici/uppc calistir .
 
 # Run the test suite
 python tests/run_tests.py

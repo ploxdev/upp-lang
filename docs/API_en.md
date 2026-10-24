@@ -5,7 +5,7 @@ This document defines the memory model, type system, error-handling mechanisms, 
 > [!NOTE]
 > The single source of truth for all builtin functions inside the compiler is [`src/uppc/yerlesik.upp`](../src/uppc/yerlesik.upp). The type checker reads parameter counts, parameter and return types, `guvensiz` block requirements, and target availability (`hosted`, `freestanding`, `windows`, `linux`) directly from that table. This reference mirrors that table one-to-one.
 
-📚 **Related Documentation:** [Language Tutorial (OGREN.md)](../OGREN.md) · [Compiler Internals (derleyici.md)](../derleyici.md) · [Uppix Operating System](../src/os/README.md) · [Türkçe Referans (API_tr.md)](API_tr.md)
+📚 **Related Documentation:** [Language Tutorial (OGREN.md)](../OGREN.md) · [Compiler Internals (derleyici.md)](../derleyici.md) · [Uppix Operating System](https://github.com/ploxdev/uppix) · [Türkçe Referans (API_tr.md)](API_tr.md)
 
 ---
 
@@ -251,7 +251,7 @@ An unknown attribute, a repeated attribute, or an attribute applied to an unsupp
 | `cmetin` | `const char*` | Header-less raw C string; only inside `guvensiz` and in `c_harici` signatures (see [`c_harici` and `cmetin`](#c_harici-and-cmetin-type-safe-calls-into-c)) |
 | `mantik` | `bool` | Boolean value (`dogru` / `yanlis`) |
 | `bos` | `void` | Return type for functions that return no value |
-| `dizi[T, N]` | C array (`T[N]`) | Stack-allocated, runtime bounds-checked fixed array (`sayi a[] = [1, 2];`) |
+| `T name[N]`, `T name[] = [...]` | C array (`T[N]`) | Stack-allocated, runtime bounds-checked fixed array: `sayi b[4];`, `sayi a[] = [1, 2];` (written `dizi` in error messages; there is no `dizi[T, N]` type syntax) |
 | `liste[T]`, `harita[K, V]` | `UppKolListe`, `UppKolHarita` | Value-type (refcount + COW) dynamic collections |
 | `fonk(P...) -> R` | Function pointer | First-class function value (nullable via `yok`) |
 | `beklenen[T, H]`, `beklenen[T]` | Tagged `struct` + `union` | Result type holding a value or error (propagated with `?`) |
@@ -616,7 +616,7 @@ The remaining kernel services can be called directly from **safe code**:
 
 #### User mode (ring 3) *(`--onyukleyici limine` only)*
 
-The mechanism lives in the kernel (C) and the policy in the operating system (u++): the process table, ELF loading, and the meaning of each system call are written in u++. Uppix uses these with the Linux x86_64 ABI (see [`src/os/README.md`](../src/os/README.md)). `ka` is an address-space handle (the physical address of its PML4). `koruma` uses Linux `PROT_*` bits: 1 read, 2 write, 4 execute.
+The mechanism lives in the kernel (C) and the policy in the operating system (u++): the process table, ELF loading, and the meaning of each system call are written in u++. Uppix uses these with the Linux x86_64 ABI (see [Uppix README](https://github.com/ploxdev/uppix)). `ka` is an address-space handle (the physical address of its PML4). `koruma` uses Linux `PROT_*` bits: 1 read, 2 write, 4 execute.
 
 | Function | Signature | Description |
 | :--- | :--- | :--- |
@@ -671,8 +671,8 @@ Designed for parsing and constructing binary structures (disk sectors, `ext4` / 
 
 | Target Flag | Output | Description |
 | :--- | :--- | :--- |
-| *(default)* / `--hedef yerel` | `.exe` / `.out` | Standalone native executable for the host OS |
-| `--hedef windows` / `--hedef linux` | `.exe` / `.out` | Target-specific OS ABI and platform namespace selection |
+| *(default; `hedef = yerel` in `upp.proje`)* | `.exe` / `.out` | Standalone native executable for the host OS |
+| `--hedef windows` / `--hedef linux` (short: `--windows` / `--linux`) | `.exe` / `.out` | Target-specific OS ABI and platform namespace selection |
 | `--hedef serbest` | ELF `.o` | Freestanding object file without `libc` (entry point: `upp_cekirdek_giris()`) |
 | `--hedef cekirdek` | `<name>.elf` + `<name>32.elf` | Bootable Multiboot 1 x86_64 kernel image (automatically launches QEMU unless `--sadece-derle` is passed) |
 | `--hedef cekirdek --onyukleyici limine` | `<name>.elf` | Higher-half ELF64 kernel booted from disk in 64-bit mode by Limine (BIOS and UEFI) |
@@ -686,7 +686,7 @@ Designed for parsing and constructing binary structures (disk sectors, `ext4` / 
 
 ```bash
 # Single-file compilation and execution
-uppc <file.upp> [-o name] [--sadece-derle | -c] [--hedef target] [--analiz] [--json-hata]
+uppc <file.upp> [-o name] [--sadece-derle] [-c | --sadece-c] [--hedef target] [--analiz] [--json-hata]
                 [--bicim | --bicim-kontrol] [--ast] [--runtime path] [--disk image]...
                 [--onyukleyici multiboot|limine] [--disk-hazirla script.sh]
                 [--guvenlik-denetimi[=is]]
@@ -696,7 +696,8 @@ uppc yeni <name> [--hedef cekirdek]   # Scaffold a new project (upp.proje + kayn
 uppc derle [dir]                      # Build the project according to upp.proje
 uppc calistir [dir]                   # Build and run the project (launches QEMU on kernel target)
 uppc asistan [dir]                    # Launch the interactive terminal build assistant
-uppc kendini-derle [--hizli]          # Rebuild the compiler with itself and update bootstrap/uppc.c
+uppc kendini-derle [--hizli] [--kok <dir>]  # Rebuild the compiler with itself and update bootstrap/uppc.c
+uppc -v [--json]                      # Print the compiler version
 ```
 
 ### `upp.proje` Configuration Format
@@ -712,7 +713,8 @@ disk_hazirla = disk_yap.sh    # Script executed via sh in the project directory 
 onyukleyici = limine         # Boot the kernel from the first disk with Limine; disk_hazirla then runs after every build
 ```
 
+- `--sadece-derle` builds the binary without running it; `-c` / `--sadece-c` only writes the generated C file and does not call GCC. `--hedef` accepts `windows`, `linux`, `serbest`, `cekirdek`; leaving it out builds for the host.
 - Passing `--disk <image>` (up to 4 times) on the `--hedef cekirdek` target attaches raw disk images to QEMU as `-drive if=ide,format=raw`.
 - `--guvenlik-denetimi` builds the program with sanitizers. On Linux this enables ASan + UBSan: out-of-bounds and use-after-free accesses, leaks, and undefined behavior stop at the first error with the source line. `--guvenlik-denetimi=is` instead uses TSan to look for races between `arkaplan` threads. Windows/MinGW has no ASan runtime, so only UBSan trap mode is enabled and undefined behavior stops with an explanatory message. The flag is not available for the serbest and cekirdek targets. The older `UPP_SANITIZE` environment variable (raw gcc flags) still works.
 - `--onyukleyici limine` builds the kernel for the Limine protocol. QEMU boots it from the first disk without `-kernel`, so the first `--disk` must be a bootable image.
-- `--disk-hazirla <script>` runs `sh <script> <directory of first disk> <kernel.elf>` after the kernel is built (inside WSL on Windows). The script creates the bootable image or updates the kernel inside it; see [`src/os/disk_yap.sh`](../src/os/disk_yap.sh). The `UPP_FS_ARACLAR` environment variable is passed to the script as `FS_ARACLAR`.
+- `--disk-hazirla <script>` runs `sh <script> <directory of first disk> <kernel.elf>` after the kernel is built (inside WSL on Windows). The script creates the bootable image or updates the kernel inside it; see [Uppix `disk_yap.sh`](https://github.com/ploxdev/uppix/blob/main/disk_yap.sh). The `UPP_FS_ARACLAR` environment variable is passed to the script as `FS_ARACLAR`.

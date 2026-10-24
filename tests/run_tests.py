@@ -565,6 +565,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     cikti_dir = os.path.join(TESTS, "_cikti")
+    os.makedirs(cikti_dir, exist_ok=True)
     if args.dosya:
         yol = args.dosya
         if not os.path.isabs(yol):
