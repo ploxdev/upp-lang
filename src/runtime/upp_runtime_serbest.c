@@ -3392,6 +3392,7 @@ static volatile unsigned _upp_tus_bas = 0;
 static volatile unsigned _upp_tus_son = 0;
 static int _upp_tus_shift = 0;
 static int _upp_tus_ctrl = 0;
+static int _upp_tus_altgr = 0;
 static int _upp_tus_e0 = 0;
 
 static void _upp_tus_koy(uint32_t c) {
@@ -3433,6 +3434,8 @@ static void _upp_klavye(void) {
         _upp_tus_e0 = 0;
         if (sc == 0x1D) { _upp_tus_ctrl = 1; return; }
         if (sc == 0x9D) { _upp_tus_ctrl = 0; return; }
+        if (sc == 0x38) { _upp_tus_altgr = 1; return; }
+        if (sc == 0xB8) { _upp_tus_altgr = 0; return; }
         switch (sc) {
         case 0x48: _upp_tus_dizi('A'); break;
         case 0x50: _upp_tus_dizi('B'); break;
@@ -3463,6 +3466,13 @@ static void _upp_klavye(void) {
     }
     if (sc == 0xAA || sc == 0xB6) {
         _upp_tus_shift = 0;
+        return;
+    }
+    /* ISO 102. tuş (küme 1: 0x56): Türkçe Q'da < > |, sol Shift'in sağı.
+       Tablo 0x3A ile bittiği için bu tarama kodu yok sayılıyordu. */
+    if (sc == 0x56) {
+        uint32_t iso = _upp_tus_altgr ? (uint32_t)'|' : (_upp_tus_shift ? (uint32_t)'>' : (uint32_t)'<');
+        _upp_tus_koy(iso);
         return;
     }
     if ((sc & 0x80) || sc >= 0x3A) {
