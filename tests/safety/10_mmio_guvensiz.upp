@@ -1,0 +1,8 @@
+// Güvenlik: MMIO penceresi açmak ve PCI yapılandırmasına yazmak guvensiz ister
+// @bayrak: --hedef serbest
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    sayi h = upp.cekirdek.mmio_ac(0xFEB00000, 4096);
+    don h;
+}

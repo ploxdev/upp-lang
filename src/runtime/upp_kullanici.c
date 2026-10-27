@@ -132,8 +132,67 @@ __asm__(
     "    pop %rcx\n"
     "    pop %r11\n"
     "    pop %rsp\n"
-    "    sysretq\n");
+    "    sysretq\n"
+    /* long long _upp_kul_gir_tam(uint64_t* kayit, const uint64_t* y, const void* fx):
+     * _upp_kul_gir gibi, ama ring 3'e kaydedilmiş bir yazmaç kümesiyle girer
+     * (fork ile doğan süreç). y: _UPP_CER_* sırasıyla 16 yazmaç; fx: 16 bayta
+     * hizalı 512 baytlık FXSAVE alanı. rcx/r11 SYSCALL dönüşündeki gibi
+     * rip/rflags olur. */
+    ".global _upp_kul_gir_tam\n"
+    "_upp_kul_gir_tam:\n"
+    "    push %rbp\n    push %rbx\n    push %r12\n    push %r13\n    push %r14\n    push %r15\n"
+    "    cli\n"
+    "    mov %rsp, (%rdi)\n"
+    "    mov %rsp, _upp_tss+4(%rip)\n"
+    "    mov %rsp, _upp_sc_cek_rsp(%rip)\n"
+    "    fxrstor (%rdx)\n"
+    "    pushq $0x23\n"
+    "    pushq 120(%rsi)\n"
+    "    pushq 112(%rsi)\n"
+    "    pushq $0x2B\n"
+    "    pushq 104(%rsi)\n"
+    "    mov 0(%rsi), %rax\n"
+    "    mov 8(%rsi), %rdi\n"
+    "    mov 24(%rsi), %rdx\n"
+    "    mov 32(%rsi), %r10\n"
+    "    mov 40(%rsi), %r8\n"
+    "    mov 48(%rsi), %r9\n"
+    "    mov 56(%rsi), %r15\n"
+    "    mov 64(%rsi), %r14\n"
+    "    mov 72(%rsi), %r13\n"
+    "    mov 80(%rsi), %r12\n"
+    "    mov 88(%rsi), %rbx\n"
+    "    mov 96(%rsi), %rbp\n"
+    "    mov 104(%rsi), %rcx\n"
+    "    mov 112(%rsi), %r11\n"
+    "    mov 16(%rsi), %rsi\n"
+    "    iretq\n"
+    /* void _upp_kul_atla(uint64_t kayit, uint64_t giris, uint64_t yigin):
+     * sürecin çekirdek yığınını kayıt noktasına geri sarar ve yeni görüntünün
+     * girişine temiz yazmaçlarla geçer (execve). */
+    ".global _upp_kul_atla\n"
+    "_upp_kul_atla:\n"
+    "    cli\n"
+    "    mov %rdi, %rsp\n"
+    "    pushq $0x23\n"
+    "    push %rdx\n"
+    "    pushq $0x202\n"
+    "    pushq $0x2B\n"
+    "    push %rsi\n"
+    "    xor %eax, %eax\n    xor %ebx, %ebx\n    xor %ecx, %ecx\n    xor %edx, %edx\n"
+    "    xor %esi, %esi\n    xor %edi, %edi\n    xor %ebp, %ebp\n"
+    "    xor %r8d, %r8d\n    xor %r9d, %r9d\n    xor %r10d, %r10d\n    xor %r11d, %r11d\n"
+    "    xor %r12d, %r12d\n    xor %r13d, %r13d\n    xor %r14d, %r14d\n    xor %r15d, %r15d\n"
+    "    fninit\n"
+    "    sub $16, %rsp\n    movl $0x1F80, (%rsp)\n    ldmxcsr (%rsp)\n    add $16, %rsp\n"
+    "    pxor %xmm0, %xmm0\n    pxor %xmm1, %xmm1\n    pxor %xmm2, %xmm2\n    pxor %xmm3, %xmm3\n"
+    "    pxor %xmm4, %xmm4\n    pxor %xmm5, %xmm5\n    pxor %xmm6, %xmm6\n    pxor %xmm7, %xmm7\n"
+    "    pxor %xmm8, %xmm8\n    pxor %xmm9, %xmm9\n    pxor %xmm10, %xmm10\n    pxor %xmm11, %xmm11\n"
+    "    pxor %xmm12, %xmm12\n    pxor %xmm13, %xmm13\n    pxor %xmm14, %xmm14\n    pxor %xmm15, %xmm15\n"
+    "    iretq\n");
 extern long long _upp_kul_gir(uint64_t* kayit, uint64_t giris, uint64_t yigin);
+extern long long _upp_kul_gir_tam(uint64_t* kayit, const uint64_t* y, const void* fx);
+extern void _upp_kul_atla(uint64_t kayit, uint64_t giris, uint64_t yigin) __attribute__((noreturn));
 extern void _upp_kul_don(uint64_t kayit, long long kod) __attribute__((noreturn));
 extern void _upp_sc_giris(void);
 
@@ -465,14 +524,35 @@ __attribute__((used)) long long _upp_sc_isle(UppSistemCagrisi* f) {
         _upp_kopyala_ad(g->kul_hata, sizeof(g->kul_hata), "Bölümleme hatası (SIGSEGV): geçersiz dönüş adresi");
         _upp_kul_sonlandir(g, 11, "SIGSEGV");
     }
+    g->kul_sc = f;
     if (_upp_sc_isleyici) {
         r = _upp_sc_isleyici((long long)f->no, (long long)f->a1, (long long)f->a2, (long long)f->a3,
                              (long long)f->a4, (long long)f->a5, (long long)f->a6);
     }
+    g = &_upp_gorev[_upp_gorev_cur];
+    g->kul_sc = NULL;
     if (g->kul_cikis) {
         g->kul_cikis = 0;
+        g->kul_yurut = 0;
         __asm__ volatile("cli");
         _upp_kul_don(g->kul_kayit, g->kul_kod);
+    }
+    if (g->kul_yurut) {
+        /* execve: eski adres alanı bırakılır, süreç aynı görevde ve aynı
+         * çekirdek yığınında yeni görüntünün girişinden sürer. */
+        uint64_t eski = g->ka;
+        g->kul_yurut = 0;
+        __asm__ volatile("cli");
+        g->ka = g->kul_y_ka;
+        g->kul_fs = 0;
+        g->kul_gs = 0;
+        g->kul_dilim = _upp_tik;
+        _upp_cr3_yaz(g->ka);
+        _upp_kul_tls_yukle(g);
+        if (eski && eski != g->ka) {
+            _upp_kul_alan_sil(eski);
+        }
+        _upp_kul_atla(g->kul_kayit, g->kul_y_giris, g->kul_y_yigin);
     }
     return r;
 }
@@ -698,6 +778,155 @@ static long long upp_cekirdek_kullanici_calistir(long long ka, long long giris, 
     _upp_cr3_yaz(_upp_cekirdek_cr3);
     __asm__ volatile("sti");
     return kod;
+}
+
+/* ---- fork ve execve mekanizması ----
+ * Politika (süreç tablosu, tanımlayıcıların kopyası, PID'ler, wait4) Uppix'te.
+ * Buradaki yerleşikler yalnızca adres alanını kopyalar, sistem çağrısı anındaki
+ * yazmaçları bir tampona yazar ve bir süreci o yazmaçlarla ya da yeni bir
+ * görüntünün girişinden ring 3'e sokar. */
+
+/* Tampondaki yazmaç çerçevesi (8'er bayt): rax, rdi, rsi, rdx, r10, r8, r9,
+ * r15, r14, r13, r12, rbx, rbp, rip, rflags, rsp, fs tabanı, gs tabanı; 160.
+ * bayttan sonra 512 baytlık FXSAVE alanı. */
+#define _UPP_CER_YAZMAC 18
+#define _UPP_CER_FX 160
+#define _UPP_CER_BOYUT (_UPP_CER_FX + 512)
+
+/* Alt yarının kopyası: sahipli her sayfa yeni bir çerçeveye kopyalanır, sahipsiz
+ * eşlemeler (çerçeve tamponu) paylaşılır. Bellek yetmezse 0. */
+static long long upp_cekirdek_kullanici_alan_kopyala(long long ka) {
+    uint64_t yeni, *l4;
+    unsigned a, b, c, d;
+    if (!ka || !_upp_kul_hazir) {
+        return 0;
+    }
+    yeni = (uint64_t)upp_cekirdek_kullanici_alan_yeni();
+    if (!yeni) {
+        return 0;
+    }
+    l4 = _upp_fv((uint64_t)ka);
+    for (a = 0; a < 256u; a++) {
+        uint64_t* l3;
+        if (!(l4[a] & _UPP_SY_P)) continue;
+        l3 = _upp_fv(l4[a] & _UPP_SY_ADRES);
+        for (b = 0; b < 512u; b++) {
+            uint64_t* l2;
+            if (!(l3[b] & _UPP_SY_P)) continue;
+            l2 = _upp_fv(l3[b] & _UPP_SY_ADRES);
+            for (c = 0; c < 512u; c++) {
+                uint64_t* l1;
+                if (!(l2[c] & _UPP_SY_P)) continue;
+                l1 = _upp_fv(l2[c] & _UPP_SY_ADRES);
+                for (d = 0; d < 512u; d++) {
+                    uint64_t e = l1[d], va, *pte;
+                    if (!(e & _UPP_SY_P)) continue;
+                    va = ((uint64_t)a << 39) | ((uint64_t)b << 30) | ((uint64_t)c << 21) | ((uint64_t)d << 12);
+                    pte = _upp_kul_pte(yeni, va, 1);
+                    if (!pte) {
+                        _upp_kul_alan_sil(yeni);
+                        return 0;
+                    }
+                    if (e & _UPP_SY_SAHIP) {
+                        uint64_t f = _upp_cer_ayir();
+                        if (!f) {
+                            _upp_kul_alan_sil(yeni);
+                            return 0;
+                        }
+                        memcpy(_upp_fv(f), _upp_fv(e & _UPP_SY_ADRES), 4096u);
+                        *pte = f | (e & ~_UPP_SY_ADRES);
+                    } else {
+                        *pte = e;
+                    }
+                }
+            }
+        }
+    }
+    return (long long)yeni;
+}
+
+/* İşlenmekte olan sistem çağrısının yazmaçlarını t'ye yazar (fork). Sistem
+ * çağrısı dışında ya da tampon küçükse yanlis. */
+static bool upp_cekirdek_kullanici_cerceve_kaydet(long long t) {
+    UppGorev* g = &_upp_gorev[_upp_gorev_cur];
+    const UppSistemCagrisi* f = (const UppSistemCagrisi*)g->kul_sc;
+    _UppTampon* b;
+    uint64_t y[_UPP_CER_YAZMAC];
+    if (!f || !g->ka) {
+        return false;
+    }
+    b = _upp_tampon_al(t, 0, _UPP_CER_BOYUT);
+    y[0] = f->no; y[1] = f->a1; y[2] = f->a2; y[3] = f->a3; y[4] = f->a4; y[5] = f->a5; y[6] = f->a6;
+    y[7] = f->r15; y[8] = f->r14; y[9] = f->r13; y[10] = f->r12; y[11] = f->rbx; y[12] = f->rbp;
+    y[13] = f->rip; y[14] = f->rflags; y[15] = f->rsp; y[16] = g->kul_fs; y[17] = g->kul_gs;
+    memcpy(b->veri, y, sizeof(y));
+    /* _upp_sc_giris FXSAVE alanını çerçevenin hemen altına koyar. */
+    memcpy(b->veri + _UPP_CER_FX, (const unsigned char*)f - 512, 512u);
+    return true;
+}
+
+/* Süreci bu görevde t'deki yazmaçlarla çalıştırır (fork'un çocuğu); dönüşü
+ * upp.cekirdek.kullanici_calistir ile aynıdır. Yazmaçlar kullanıcıya aittir:
+ * rip/rsp/TLS tabanı kullanıcı alanında olmalı, RFLAGS yalnızca kullanıcının
+ * değiştirebileceği bitleri taşır, MXCSR'ın ayrılmış bitleri temizlenir. */
+static long long upp_cekirdek_kullanici_cerceve_calistir(long long ka, long long t) {
+    UppGorev* g;
+    _UppTampon* b;
+    uint64_t y[_UPP_CER_YAZMAC];
+    unsigned char fx[512] __attribute__((aligned(16)));
+    uint32_t mxcsr;
+    long long kod;
+    _upp_kul_kur();
+    if (!_upp_kul_hazir || !ka) {
+        return -1;
+    }
+    b = _upp_tampon_al(t, 0, _UPP_CER_BOYUT);
+    memcpy(y, b->veri, sizeof(y));
+    memcpy(fx, b->veri + _UPP_CER_FX, sizeof(fx));
+    if (y[13] >= _UPP_KUL_UST || y[15] >= _UPP_KUL_UST || y[16] >= _UPP_KUL_UST || y[17] >= _UPP_KUL_UST) {
+        return -1;
+    }
+    y[14] = (y[14] & 0xCD5ull) | 0x202ull; /* CF PF AF ZF SF DF OF + IF; IOPL 0 */
+    memcpy(&mxcsr, fx + 24, 4);
+    mxcsr &= 0xFFBFu;
+    memcpy(fx + 24, &mxcsr, 4);
+    _upp_gorev_ilk();
+    g = &_upp_gorev[_upp_gorev_cur];
+    if (g->ka) {
+        return -1;
+    }
+    g->ka = (uint64_t)ka;
+    g->kul_cikis = 0;
+    g->kul_yurut = 0;
+    g->kul_hata[0] = 0;
+    g->kul_dilim = _upp_tik;
+    g->kul_fs = y[16];
+    g->kul_gs = y[17];
+    _upp_kul_tls_yukle(g);
+    _upp_cr3_yaz((uint64_t)ka);
+    kod = _upp_kul_gir_tam(&g->kul_kayit, y, fx);
+    g = &_upp_gorev[_upp_gorev_cur];
+    g->ka = 0;
+    g->kul_kayit = 0;
+    g->kul_on_plan = 0;
+    _upp_cr3_yaz(_upp_cekirdek_cr3);
+    __asm__ volatile("sti");
+    return kod;
+}
+
+/* execve mekanizması: sistem çağrısı dönerken süreç ka'ya geçer ve giris'ten
+ * yigin ile başlar; eski adres alanı bırakılır. Sistem çağrısı dışında yanlis. */
+static bool upp_cekirdek_kullanici_yurut(long long ka, long long giris, long long yigin) {
+    UppGorev* g = &_upp_gorev[_upp_gorev_cur];
+    if (!g->kul_sc || !g->ka || !ka || (uint64_t)ka == g->ka || giris < 0 || yigin < 0 ||
+        (uint64_t)giris >= _UPP_KUL_UST || (uint64_t)yigin >= _UPP_KUL_UST) {
+        return false;
+    }
+    g->kul_yurut = 1;
+    g->kul_y_ka = (uint64_t)ka;
+    g->kul_y_giris = (uint64_t)giris;
+    g->kul_y_yigin = (uint64_t)yigin;
+    return true;
 }
 
 /* arch_prctl mekanizması: segment 0 = FS, 1 = GS. Taban kullanıcı alanında

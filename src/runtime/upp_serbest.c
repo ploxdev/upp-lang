@@ -50,6 +50,80 @@ static long long upp_cekirdek_bellek_oku16(long long a) { return *(volatile uint
 static long long upp_cekirdek_bellek_oku32(long long a) { return *(volatile uint32_t*)_upp_fiz_sanal(a); }
 static long long upp_cekirdek_bellek_oku64(long long a) { return (long long)*(volatile uint64_t*)_upp_fiz_sanal(a); }
 
+/* ---- PCI yapılandırma alanı (yapılandırma mekanizması #1: 0xCF8/0xCFC) ----
+ * Okuma güvenlidir; olmayan aygıt 0xFFFFFFFF okur. Yazma (BAR, komut yazmacı)
+ * belleği yeniden düzenleyebildiğinden 'guvensiz' ister. */
+static uint32_t _upp_pci_adres(long long bus, long long aygit, long long islev, long long ofs) {
+    return 0x80000000u | ((uint32_t)bus << 16) | ((uint32_t)aygit << 11) | ((uint32_t)islev << 8) | ((uint32_t)ofs & 0xFCu);
+}
+
+static int _upp_pci_gecerli(long long bus, long long aygit, long long islev, long long ofs) {
+    return bus >= 0 && bus <= 255 && aygit >= 0 && aygit <= 31 && islev >= 0 && islev <= 7 && ofs >= 0 && ofs <= 255;
+}
+
+static long long upp_cekirdek_pci_oku(long long bus, long long aygit, long long islev, long long ofs) {
+    if (!_upp_pci_gecerli(bus, aygit, islev, ofs)) {
+        return 0xFFFFFFFFLL;
+    }
+    _upp_outl(0xCF8, _upp_pci_adres(bus, aygit, islev, ofs));
+    return (long long)_upp_inl(0xCFC);
+}
+
+static void upp_cekirdek_pci_yaz(long long bus, long long aygit, long long islev, long long ofs, long long deger) {
+    if (!_upp_pci_gecerli(bus, aygit, islev, ofs)) {
+        return;
+    }
+    _upp_outl(0xCF8, _upp_pci_adres(bus, aygit, islev, ofs));
+    _upp_outl(0xCFC, (uint32_t)deger);
+}
+
+/* ---- MMIO pencereleri (FreeBSD bus_space benzeri) ----
+ * mmio_ac bir fiziksel aralığı ('guvensiz') tutamaçla açar; okuma/yazma güvenli
+ * yoldan, sınır ve hizalama denetimiyle yapılır. Erişim HHDM (Limine) ya da
+ * ilk 1 GiB'ın birebir eşlemesi (Multiboot) üzerindendir; kapsanmayan aralık 0
+ * döndürür. Gerçek donanımda MMIO deliği MTRR ile önbelleksizdir. */
+#define _UPP_MMIO_N 64
+static uint64_t _upp_mmio_fiz[_UPP_MMIO_N], _upp_mmio_boy[_UPP_MMIO_N];
+static int _upp_mmio_n = 0;
+
+static long long upp_cekirdek_mmio_ac(long long fiz, long long boyut) {
+    uint64_t f = (uint64_t)fiz, b = (uint64_t)boyut;
+    uint64_t ust = _upp_hhdm ? _upp_hhdm_son : 0x40000000ull;
+    int i;
+    if (fiz <= 0 || boyut <= 0 || b > 0x40000000ull || f + b < f || f + b > ust) {
+        return 0;
+    }
+    for (i = 0; i < _upp_mmio_n; i++) {
+        if (_upp_mmio_fiz[i] == f && _upp_mmio_boy[i] == b) {
+            return i + 1;
+        }
+    }
+    if (_upp_mmio_n >= _UPP_MMIO_N) {
+        return 0;
+    }
+    _upp_mmio_fiz[_upp_mmio_n] = f;
+    _upp_mmio_boy[_upp_mmio_n] = b;
+    _upp_mmio_n++;
+    return _upp_mmio_n;
+}
+
+static volatile unsigned char* _upp_mmio_p(long long h, long long ofs, unsigned n) {
+    if (h < 1 || h > _upp_mmio_n) {
+        upp_panik("geçersiz MMIO tutamacı");
+    }
+    if (ofs < 0 || (uint64_t)ofs + n > _upp_mmio_boy[h - 1] || ((uint64_t)ofs & (n - 1u))) {
+        upp_panik("MMIO sınırı ya da hizalaması aşıldı");
+    }
+    return (volatile unsigned char*)(uintptr_t)(_upp_mmio_fiz[h - 1] + (uint64_t)ofs + _upp_hhdm);
+}
+
+static long long upp_cekirdek_mmio_oku8(long long h, long long ofs) { return *(volatile uint8_t*)_upp_mmio_p(h, ofs, 1); }
+static long long upp_cekirdek_mmio_oku16(long long h, long long ofs) { return *(volatile uint16_t*)_upp_mmio_p(h, ofs, 2); }
+static long long upp_cekirdek_mmio_oku32(long long h, long long ofs) { return *(volatile uint32_t*)_upp_mmio_p(h, ofs, 4); }
+static void upp_cekirdek_mmio_yaz8(long long h, long long ofs, long long v) { *(volatile uint8_t*)_upp_mmio_p(h, ofs, 1) = (uint8_t)v; }
+static void upp_cekirdek_mmio_yaz16(long long h, long long ofs, long long v) { *(volatile uint16_t*)_upp_mmio_p(h, ofs, 2) = (uint16_t)v; }
+static void upp_cekirdek_mmio_yaz32(long long h, long long ofs, long long v) { *(volatile uint32_t*)_upp_mmio_p(h, ofs, 4) = (uint32_t)v; }
+
 static void upp_cekirdek_dur(void) { __asm__ volatile("hlt"); }
 static void upp_cekirdek_kesme_kapat(void) { __asm__ volatile("cli"); }
 static void upp_cekirdek_kesme_ac(void) { __asm__ volatile("sti"); }
@@ -1442,6 +1516,25 @@ static uint64_t _upp_st_fizik(const void* p) {
     return (uint64_t)(uintptr_t)p - _upp_st_sanal + _upp_st_fiz;
 }
 
+/* DMA için bir tampon baytının fiziksel adresi. Çekirdek yığını fiziksel
+ * olarak bitişik tek bir bölgededir (HHDM'de ya da Multiboot'un birebir
+ * eşlemesinde), çekirdek görüntüsü de doğrusal eşlenir; bu yüzden bir tamponun
+ * tamamı bitişiktir ve adres + n ile ilerlenebilir. Bilinmeyen bölge -1. */
+static long long upp_cekirdek_tampon_fiziksel(long long t, long long ofs) {
+    _UppTampon* b = _upp_tampon_al(t, ofs, 0);
+    uint64_t v = (uint64_t)(uintptr_t)(b->veri + ofs);
+    if (_upp_st_sanal && v >= _upp_st_sanal) {
+        return (long long)(v - _upp_st_sanal + _upp_st_fiz);
+    }
+    if (_upp_hhdm) {
+        if (v >= _upp_hhdm && v - _upp_hhdm < _upp_hhdm_son) {
+            return (long long)(v - _upp_hhdm);
+        }
+        return -1;
+    }
+    return v < 0x40000000ull ? (long long)v : -1;
+}
+
 static uint64_t* _upp_st_yeni(void) {
     uint64_t* t;
     if (_upp_st_n >= _UPP_ST_HAVUZ) {
@@ -1828,6 +1921,9 @@ typedef struct {
     int kul_cikis;        /* sistem çağrısı dönerken süreci bitir */
     long long kul_kod;
     char kul_hata[128];   /* son sonlandırma nedeni ("" = normal çıkış) */
+    void* kul_sc;         /* işlenmekte olan sistem çağrısının yazmaç çerçevesi (fork) */
+    int kul_yurut;        /* sistem çağrısı dönerken yeni görüntüye geç (execve) */
+    uint64_t kul_y_ka, kul_y_giris, kul_y_yigin;
 } UppGorev;
 
 static UppGorev _upp_gorev[_UPP_GOREV_N];
@@ -1975,6 +2071,8 @@ static long long upp_cekirdek_gorev_baslat(void (*f)(long long), long long arg, 
     g->kul_fs = 0;
     g->kul_gs = 0;
     g->kul_hata[0] = 0;
+    g->kul_sc = NULL;
+    g->kul_yurut = 0;
     g->durum = _UPP_G_HAZIR;
     return g->kimlik;
 }

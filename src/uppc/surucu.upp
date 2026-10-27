@@ -532,6 +532,7 @@ fonk ana() -> sayi {
             upp.satir_yaz("  --linux            Linux hedefi için derle");
             upp.satir_yaz("  --hedef <h>        windows | linux | serbest (libc'siz .o) | cekirdek (x86_64 ELF + QEMU)");
             upp.satir_yaz("  --disk <imaj>      cekirdek: ham disk imajını QEMU'ya IDE disk olarak ekle (en çok 4)");
+            upp.satir_yaz("  --disk-arayuz <a>  cekirdek: ide (varsayılan) | ahci (diskler SATA kapılarına, en çok 6)");
             upp.satir_yaz("  --onyukleyici <o>  cekirdek: multiboot (varsayılan, QEMU -kernel) | limine (64-bit higher-half, diskten açılır)");
             upp.satir_yaz("  --disk-hazirla <b> cekirdek: derlemeden sonra 'sh b <ilk disk dizini> <çekirdek.elf>' çalıştır");
             upp.satir_yaz("  --guvenlik-denetimi[=is]  ASan + UBSan ile derle (bellek hatası, sızıntı, tanımsız davranış);");
@@ -571,6 +572,17 @@ fonk ana() -> sayi {
         yoksa eger (metin_esit(a, "--disk-hazirla")) {
             i = i + 1;
             eger (i < argn) { g_ck_hazirla = upp.arguman(i); }
+        }
+        yoksa eger (metin_esit(a, "--disk-arayuz")) {
+            i = i + 1;
+            eger (i < argn) {
+                oto da = upp.arguman(i);
+                eger (!metin_esit(da, "ide") && !metin_esit(da, "ahci")) {
+                    upp.satir_yaz("[u++ HATA] bilinmeyen disk arayüzü: " + da + " (ide | ahci)");
+                    don 1;
+                }
+                g_ck_arayuz = da;
+            }
         }
         yoksa eger (metin_esit(a, "--onyukleyici")) {
             i = i + 1;

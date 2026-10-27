@@ -226,11 +226,27 @@ fonk yerlesik_kur() -> bos {
     yk("cekirdek.kullanici_son_hata", "", "metin", "upp_cekirdek_kullanici_son_hata", 64);
     yk("cekirdek.sistem_cagrisi_kur", "fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi", "bos", "upp_cekirdek_sistem_cagrisi_kur", 64);
     yk("cekirdek.cerceve_bilgi", "sayi", "sayi", "upp_cekirdek_cerceve_bilgi", 64);
+    // fork / execve mekanizması (politika Uppix'te)
+    yk("cekirdek.kullanici_alan_kopyala", "sayi", "sayi", "upp_cekirdek_kullanici_alan_kopyala", 64);
+    yk("cekirdek.kullanici_cerceve_kaydet", "sayi", "mantik", "upp_cekirdek_kullanici_cerceve_kaydet", 64);
+    yk("cekirdek.kullanici_cerceve_calistir", "sayi,sayi", "sayi", "upp_cekirdek_kullanici_cerceve_calistir", 64);
+    yk("cekirdek.kullanici_yurut", "sayi,sayi,sayi", "mantik", "upp_cekirdek_kullanici_yurut", 64);
     yk("cekirdek.disk_var", "sayi", "mantik", "upp_cekirdek_disk_var", 64);
     yk("cekirdek.disk_sektor", "sayi", "sayi", "upp_cekirdek_disk_sektor", 64);
     yk("cekirdek.disk_model", "sayi", "metin", "upp_cekirdek_disk_model", 64);
     yk("cekirdek.disk_oku", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_disk_oku", 64);
     yk("cekirdek.disk_yaz", "sayi,sayi,sayi,sayi,sayi", "mantik", "upp_cekirdek_disk_yaz", 64);
+    // PCI yapılandırma alanı, MMIO pencereleri (bus_space benzeri), DMA için fiziksel adres
+    yk("cekirdek.pci_oku", "sayi,sayi,sayi,sayi", "sayi", "upp_cekirdek_pci_oku", 64);
+    yk("cekirdek.pci_yaz", "sayi,sayi,sayi,sayi,sayi", "bos", "upp_cekirdek_pci_yaz", 1 + 64);
+    yk("cekirdek.mmio_ac", "sayi,sayi", "sayi", "upp_cekirdek_mmio_ac", 1 + 64);
+    yk("cekirdek.mmio_oku8", "sayi,sayi", "sayi", "upp_cekirdek_mmio_oku8", 64);
+    yk("cekirdek.mmio_oku16", "sayi,sayi", "sayi", "upp_cekirdek_mmio_oku16", 64);
+    yk("cekirdek.mmio_oku32", "sayi,sayi", "sayi", "upp_cekirdek_mmio_oku32", 64);
+    yk("cekirdek.mmio_yaz8", "sayi,sayi,sayi", "bos", "upp_cekirdek_mmio_yaz8", 64);
+    yk("cekirdek.mmio_yaz16", "sayi,sayi,sayi", "bos", "upp_cekirdek_mmio_yaz16", 64);
+    yk("cekirdek.mmio_yaz32", "sayi,sayi,sayi", "bos", "upp_cekirdek_mmio_yaz32", 64);
+    yk("cekirdek.tampon_fiziksel", "sayi,sayi", "sayi", "upp_cekirdek_tampon_fiziksel", 64);
     // ---- upp.windows ----
     yk("windows.mesaj", "metin,metin", "bos", "upp_mesaj", 2 + 4);
     yk("windows.hata", "metin,metin", "bos", "upp_hata", 2 + 4);

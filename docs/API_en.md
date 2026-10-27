@@ -618,6 +618,12 @@ The remaining kernel services can be called directly from **safe code**:
 | `disk_sektor(d)` / `disk_model(d)` | `(sayi) -> sayi` / `metin` | Returns the total 512-byte sector count and model string of drive `d` |
 | `disk_oku(d, lba, count, buf, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Reads `count` sectors starting at `lba` into `upp.tampon` handle `buf` at byte offset `ofs` |
 | `disk_yaz(d, lba, count, buf, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Writes `count` sectors from `buf` (`ofs`) to disk `d` and flushes the drive cache (LBA28/LBA48 PIO) |
+| `pci_oku(bus, dev, fn, ofs)` | `(sayi, sayi, sayi, sayi) -> sayi` | Reads the 32-bit PCI configuration dword at `ofs` (rounded down to 4) through ports `0xCF8`/`0xCFC`; an absent device or invalid argument reads `0xFFFFFFFF` |
+| `pci_yaz(bus, dev, fn, ofs, val)` | `(sayi, sayi, sayi, sayi, sayi) -> bos` | Writes a PCI configuration dword (command register, BARs). *Requires `guvensiz`* |
+| `mmio_ac(phys, size)` | `(sayi, sayi) -> sayi` | Opens an MMIO window on a physical range and returns its handle (`0` if the range is not covered by the HHDM / the first 1 GiB under Multiboot). Opening the same range again returns the same handle. *Requires `guvensiz`* |
+| `mmio_oku8 / 16 / 32(h, ofs)` | `(sayi, sayi) -> sayi` | `volatile` read inside window `h`; out-of-range or misaligned offsets panic (like FreeBSD `bus_space_read_*`) |
+| `mmio_yaz8 / 16 / 32(h, ofs, val)` | `(sayi, sayi, sayi) -> bos` | `volatile` write inside window `h`, bounds- and alignment-checked |
+| `tampon_fiziksel(buf, ofs)` | `(sayi, sayi) -> sayi` | Physical address of byte `ofs` of an `upp.tampon` buffer, for DMA descriptors. The kernel heap is one physically contiguous region, so a whole buffer is contiguous; `-1` if unknown |
 
 #### User mode (ring 3) *(`--onyukleyici limine` only)*
 
@@ -641,6 +647,10 @@ The mechanism lives in the kernel (C) and the policy in the operating system (u+
 | `kullanici_on_plan(v)` | `(mantik) -> bos` | Whether the process is in the foreground (Ctrl-C kills it with SIGINT) |
 | `kullanici_son_hata()` | `() -> metin` | Why the last process ended (`"Bölümleme hatası (SIGSEGV): ..."`, `"^C"`; `""` on a normal exit) |
 | `sistem_cagrisi_kur(f)` | `(fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi) -> bos` | `SYSCALL` handler: `f(no, a1, ..., a6)`; the result goes to rax (errors: `-errno`) |
+| `kullanici_alan_kopyala(ka)` | `(sayi) -> sayi` | Copy of an address space (fork): every owned page is copied into a fresh frame, unowned mappings (framebuffer) are shared; `0` if out of memory |
+| `kullanici_cerceve_kaydet(buf)` | `(sayi) -> mantik` | Inside a system call: writes the caller's user registers to `buf` (at least 672 bytes): 18 little-endian 64-bit slots `rax, rdi, rsi, rdx, r10, r8, r9, r15, r14, r13, r12, rbx, rbp, rip, rflags, rsp, fs base, gs base`, then the 512-byte FXSAVE area at offset 160. `yanlis` outside a system call |
+| `kullanici_cerceve_calistir(ka, buf)` | `(sayi, sayi) -> sayi` | Runs a process on this task starting from the registers in `buf` (the fork child: the policy writes `0` into the `rax` slot first); returns like `kullanici_calistir`. `rip`/`rsp`/TLS bases must be user addresses (`-1` otherwise); only user-modifiable RFLAGS bits are kept |
+| `kullanici_yurut(ka, entry, stack)` | `(sayi, sayi, sayi) -> mantik` | execve mechanism, only inside a system call: when the handler returns, the process continues in address space `ka` from `entry` with clean registers; the old address space is freed |
 | `ekran_bilgi(field)` | `(sayi) -> sayi` | 0 framebuffer physical address, 1 size, 2-3 width/height in pixels, 4 pitch, 5 bpp, 6-11 color fields, 12-13 columns/rows |
 | `cerceve_bilgi(field)` | `(sayi) -> sayi` | User frame pool: 0 total, 1 used, 2 free (bytes) |
 
@@ -693,7 +703,7 @@ Designed for parsing and constructing binary structures (disk sectors, `ext4` / 
 # Single-file compilation and execution
 uppc <file.upp> [-o name] [--sadece-derle] [-c | --sadece-c] [--hedef target] [--analiz] [--json-hata]
                 [--bicim | --bicim-kontrol] [--ast] [--runtime path] [--disk image]...
-                [--onyukleyici multiboot|limine] [--disk-hazirla script.sh]
+                [--disk-arayuz ide|ahci] [--onyukleyici multiboot|limine] [--disk-hazirla script.sh]
                 [--guvenlik-denetimi[=is]]
 
 # Project management and self-hosting
@@ -714,12 +724,14 @@ hedef = yerel                 # yerel | windows | linux | serbest | cekirdek
 cikti = derleme/merhaba
 bayraklar =                   # Optional extra flags passed to uppc
 diskler = a.img, b.img        # Kernel target: raw IDE disk images attached to QEMU (sda, sdb...)
+disk_arayuz = ahci            # Optional: attach the disks to an AHCI (SATA) controller instead of IDE
 disk_hazirla = disk_yap.sh    # Script executed via sh in the project directory if any disk image is missing
 onyukleyici = limine         # Boot the kernel from the first disk with Limine; disk_hazirla then runs after every build
 ```
 
 - `--sadece-derle` builds the binary without running it; `-c` / `--sadece-c` only writes the generated C file and does not call GCC. `--hedef` accepts `windows`, `linux`, `serbest`, `cekirdek`; leaving it out builds for the host.
 - Passing `--disk <image>` (up to 4 times) on the `--hedef cekirdek` target attaches raw disk images to QEMU as `-drive if=ide,format=raw`.
+- `--disk-arayuz ahci` (`disk_arayuz = ahci` in `upp.proje`) attaches the disks to the SATA ports of an AHCI controller instead (`-device ahci`, up to 6 disks, the first one is the boot disk); the default is `ide`.
 - `--guvenlik-denetimi` builds the program with sanitizers. On Linux this enables ASan + UBSan: out-of-bounds and use-after-free accesses, leaks, and undefined behavior stop at the first error with the source line. `--guvenlik-denetimi=is` instead uses TSan to look for races between `arkaplan` threads. Windows/MinGW has no ASan runtime, so only UBSan trap mode is enabled and undefined behavior stops with an explanatory message. The flag is not available for the serbest and cekirdek targets. The older `UPP_SANITIZE` environment variable (raw gcc flags) still works.
 - `--onyukleyici limine` builds the kernel for the Limine protocol. QEMU boots it from the first disk without `-kernel`, so the first `--disk` must be a bootable image.
 - `--disk-hazirla <script>` runs `sh <script> <directory of first disk> <kernel.elf>` after the kernel is built (inside WSL on Windows). The script creates the bootable image or updates the kernel inside it; see [Uppix `disk_yap.sh`](https://github.com/ploxdev/uppix/blob/main/disk_yap.sh). The `UPP_FS_ARACLAR` environment variable is passed to the script as `FS_ARACLAR`.

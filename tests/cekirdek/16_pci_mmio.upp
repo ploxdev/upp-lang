@@ -1,0 +1,39 @@
+// Çekirdek: PCI yapılandırma alanı, MMIO pencereleri ve tamponların fiziksel adresi
+// (QEMU i440fx: 0:0.0 Intel 440FX ana köprüsü, 8086:1237).
+// @stdout
+// ana köprü 8086:1237
+// mmio 1 aynı 1
+// vga 1857 65
+// fiziksel bitişik: 100 4095
+// sistem çağrısı dışında: yanlis yanlis 0 -1
+
+fonk onaltilik(sayi v, sayi basamak) -> metin {
+    metin r = "";
+    metin rakam = "0123456789abcdef";
+    dongu (sayi i = 0; i < basamak; i += 1) {
+        r = upp.metin.kes(rakam, v % 16, 1) + r;
+        v = v / 16;
+    }
+    don r;
+}
+
+fonk ana() -> sayi {
+    sayi v = upp.cekirdek.pci_oku(0, 0, 0, 0);
+    upp.satir_yaz("ana köprü " + onaltilik(v % 65536, 4) + ":" + onaltilik(v / 65536, 4));
+    sayi h = 0;
+    sayi h2 = 0;
+    guvensiz {
+        h = upp.cekirdek.mmio_ac(0xB8000, 4096);
+        h2 = upp.cekirdek.mmio_ac(0xB8000, 4096);
+    }
+    upp.satir_yaz("mmio {h} aynı {h2}");
+    upp.cekirdek.mmio_yaz16(h, 0, 0x0741);
+    upp.satir_yaz("vga {upp.cekirdek.mmio_oku16(h, 0)} {upp.cekirdek.mmio_oku8(h, 0)}");
+    sayi t = upp.tampon.yeni(8192);
+    sayi f0 = upp.cekirdek.tampon_fiziksel(t, 0);
+    upp.satir_yaz("fiziksel bitişik: {upp.cekirdek.tampon_fiziksel(t, 100) - f0} {upp.cekirdek.tampon_fiziksel(t, 4095) - f0}");
+    upp.satir_yaz("sistem çağrısı dışında: {upp.cekirdek.kullanici_cerceve_kaydet(t)} {upp.cekirdek.kullanici_yurut(0, 0, 0)} {upp.cekirdek.kullanici_alan_kopyala(0)} {upp.cekirdek.kullanici_cerceve_calistir(0, t)}");
+    upp.tampon.birak(t);
+    upp.cekirdek.kapat();
+    don 0;
+}

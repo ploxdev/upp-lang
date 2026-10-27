@@ -618,6 +618,12 @@ Aşağıdaki çekirdek servisleri ise **güvenli koddan** doğrudan çağrılabi
 | `disk_sektor(d)` / `disk_model(d)` | `(sayi) -> sayi` / `metin` | Diskin toplam sektör sayısını (512 baytlık) ve model adını döndürür |
 | `disk_oku(d, lba, adet, tampon, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Diskten `lba` sektöründen başlayarak `adet` sektörü `upp.tampon` içindeki `ofs` ofsetine okur |
 | `disk_yaz(d, lba, adet, tampon, ofs)` | `(sayi, sayi, sayi, sayi, sayi) -> mantik` | Tampondaki veriyi diske yazar ve donanım önbelleğini boşaltır (LBA28/LBA48 PIO) |
+| `pci_oku(bus, aygit, islev, ofs)` | `(sayi, sayi, sayi, sayi) -> sayi` | PCI yapılandırma alanından `ofs`'teki (4'e yuvarlanır) 32 bitlik sözcüğü `0xCF8`/`0xCFC` portlarıyla okur; olmayan aygıt ya da geçersiz argüman `0xFFFFFFFF` okur |
+| `pci_yaz(bus, aygit, islev, ofs, deger)` | `(sayi, sayi, sayi, sayi, sayi) -> bos` | PCI yapılandırma sözcüğü yazar (komut yazmacı, BAR'lar). *`guvensiz` gerekir* |
+| `mmio_ac(fiz, boyut)` | `(sayi, sayi) -> sayi` | Fiziksel bir aralığa MMIO penceresi açar ve tutamacını döndürür (aralık HHDM'de / Multiboot'ta ilk 1 GiB'da değilse `0`). Aynı aralık yeniden açılınca aynı tutamaç döner. *`guvensiz` gerekir* |
+| `mmio_oku8 / 16 / 32(h, ofs)` | `(sayi, sayi) -> sayi` | `h` penceresinde `volatile` okuma; sınır dışı ya da hizasız ofset panik verir (FreeBSD `bus_space_read_*` gibi) |
+| `mmio_yaz8 / 16 / 32(h, ofs, deger)` | `(sayi, sayi, sayi) -> bos` | `h` penceresinde sınır ve hizalama denetimli `volatile` yazma |
+| `tampon_fiziksel(tampon, ofs)` | `(sayi, sayi) -> sayi` | Bir `upp.tampon` tamponunun `ofs`'teki baytının fiziksel adresi (DMA tanımlayıcıları için). Çekirdek yığını fiziksel olarak bitişik tek bölgedir, yani tamponun tamamı bitişiktir; bilinmiyorsa `-1` |
 
 #### Kullanıcı kipi (ring 3) *(Yalnızca `--onyukleyici limine`)*
 
@@ -641,6 +647,10 @@ Mekanizma çekirdekte (C), politika işletim sisteminde (u++) durur: süreç tab
 | `kullanici_on_plan(v)` | `(mantik) -> bos` | Süreç ön planda mı (Ctrl-C SIGINT ile sonlandırır) |
 | `kullanici_son_hata()` | `() -> metin` | Son sonlanmanın nedeni (`"Bölümleme hatası (SIGSEGV): ..."`, `"^C"`; normal çıkışta `""`) |
 | `sistem_cagrisi_kur(f)` | `(fonk(sayi,sayi,sayi,sayi,sayi,sayi,sayi)->sayi) -> bos` | `SYSCALL` işleyicisi: `f(no, a1, ..., a6)`; dönüş rax'a yazılır (hata: `-errno`) |
+| `kullanici_alan_kopyala(ka)` | `(sayi) -> sayi` | Adres alanının kopyası (fork): sahipli her sayfa yeni bir çerçeveye kopyalanır, sahipsiz eşlemeler (çerçeve tamponu) paylaşılır; bellek yetmezse `0` |
+| `kullanici_cerceve_kaydet(tampon)` | `(sayi) -> mantik` | Sistem çağrısı içinde, çağıranın kullanıcı yazmaçlarını tampona (en az 672 bayt) yazar: küçük sonlu 18 adet 64 bitlik yuva `rax, rdi, rsi, rdx, r10, r8, r9, r15, r14, r13, r12, rbx, rbp, rip, rflags, rsp, fs tabanı, gs tabanı`, ardından 160. bayttan itibaren 512 baytlık FXSAVE alanı. Sistem çağrısı dışında `yanlis` |
+| `kullanici_cerceve_calistir(ka, tampon)` | `(sayi, sayi) -> sayi` | Süreci bu görevde tampondaki yazmaçlardan başlatır (fork'un çocuğu; politika önce `rax` yuvasına `0` yazar); dönüşü `kullanici_calistir` ile aynıdır. `rip`/`rsp`/TLS tabanları kullanıcı adresi olmalı (değilse `-1`); RFLAGS'ın yalnızca kullanıcının değiştirebileceği bitleri korunur |
+| `kullanici_yurut(ka, giris, yigin)` | `(sayi, sayi, sayi) -> mantik` | execve mekanizması, yalnızca sistem çağrısı içinde: işleyici dönünce süreç `ka` adres alanında, temiz yazmaçlarla `giris`'ten sürer; eski adres alanı bırakılır |
 | `ekran_bilgi(alan)` | `(sayi) -> sayi` | 0 çerçeve tamponu fiziksel adresi, 1 boyu, 2-3 piksel genişlik/yükseklik, 4 satır adımı, 5 bpp, 6-11 renk alanları, 12-13 sütun/satır |
 | `cerceve_bilgi(alan)` | `(sayi) -> sayi` | Kullanıcı çerçeve havuzu: 0 toplam, 1 kullanılan, 2 boş (bayt) |
 
@@ -693,7 +703,7 @@ Disk sektörleri, dosya sistemi yapıları (`ext4`, `FAT32`, `exFAT`) ve ikili p
 # Tekil dosya derleme ve çalıştırma
 uppc <dosya.upp> [-o ad] [--sadece-derle] [-c | --sadece-c] [--hedef h] [--analiz] [--json-hata]
                  [--bicim | --bicim-kontrol] [--ast] [--runtime yol] [--disk imaj]...
-                 [--onyukleyici multiboot|limine] [--disk-hazirla betik.sh]
+                 [--disk-arayuz ide|ahci] [--onyukleyici multiboot|limine] [--disk-hazirla betik.sh]
                  [--guvenlik-denetimi[=is]]
 
 # Proje yönetimi ve araçlar
@@ -714,12 +724,14 @@ hedef = yerel                 # yerel | windows | linux | serbest | cekirdek
 cikti = derleme/merhaba
 bayraklar =                   # İsteğe bağlı ek uppc bayrakları
 diskler = a.img, b.img        # Çekirdek hedefinde QEMU'ya bağlanacak ham IDE disk imajları (sda, sdb...)
+disk_arayuz = ahci            # İsteğe bağlı: diskleri IDE yerine AHCI (SATA) denetleyicisine bağla
 disk_hazirla = disk_yap.sh    # Disk imajlarından biri eksikse proje dizininde sh ile çalıştırılacak betik
 onyukleyici = limine         # Çekirdek ilk diskten Limine ile açılır; disk_hazirla her derlemeden sonra çalışır
 ```
 
 - `--sadece-derle` ikiliyi üretir ama çalıştırmaz; `-c` / `--sadece-c` yalnızca üretilen C dosyasını yazar, GCC'yi çağırmaz. `--hedef` şu değerleri alır: `windows`, `linux`, `serbest`, `cekirdek`; verilmezse derleyicinin çalıştığı sistem hedeflenir.
 - `--disk <imaj>` bayrağı (en çok 4 adet), `--hedef cekirdek` ile çalışırken QEMU'ya `-drive if=ide,format=raw` olarak disk imajı bağlar.
+- `--disk-arayuz ahci` (`upp.proje` içinde `disk_arayuz = ahci`) diskleri bunun yerine bir AHCI denetleyicisinin SATA kapılarına bağlar (`-device ahci`, en çok 6 disk, ilki önyükleme diskidir); varsayılan `ide`'dir.
 - `--guvenlik-denetimi` programı sanitizer'larla derler. Linux'ta ASan + UBSan açılır: sınır dışı ve serbest bırakıldıktan sonra erişim, sızıntı ve tanımsız davranış ilk hatada kaynak satırıyla durur. `--guvenlik-denetimi=is` bunun yerine TSan ile `arkaplan` iş parçacıklarındaki yarışları arar. Windows/MinGW'de ASan çalışma zamanı olmadığı için yalnızca UBSan tuzak kipi açılır ve tanımsız davranış açıklayıcı bir mesajla durdurulur. Bayrak serbest ve çekirdek hedeflerinde kullanılamaz. Eski `UPP_SANITIZE` ortam değişkeni (ham gcc bayrakları) hâlâ geçerlidir.
 - `--onyukleyici limine` çekirdeği Limine protokolüyle üretir. QEMU `-kernel` olmadan, ilk diskten açılır; bu yüzden ilk `--disk` önyüklenebilir bir imaj olmalıdır.
 - `--disk-hazirla <betik>` çekirdek derlendikten sonra `sh <betik> <ilk diskin dizini> <çekirdek.elf>` komutunu çalıştırır (Windows'ta WSL içinde). Betik önyüklenebilir imajı üretir ya da içindeki çekirdeği günceller; örnek için [Uppix `disk_yap.sh`](https://github.com/ploxdev/uppix/blob/main/disk_yap.sh). `UPP_FS_ARACLAR` ortam değişkeni betiğe `FS_ARACLAR` olarak geçer.

@@ -114,6 +114,9 @@ fonk pj_derle(metin dizin, mantik calistir) -> sayi {
     // onyukleyici = limine   (çekirdek ilk diskten Limine ile açılır; betik her
     //                         derlemeden sonra 'sh betik <disk dizini> <çekirdek.elf>' ile çalışır)
     oto diskler = pj_al("diskler", "");
+    // disk_arayuz = ahci (diskler QEMU'da bir AHCI denetleyicisinin SATA kapılarına bağlanır)
+    oto arayuz = pj_al("disk_arayuz", "");
+    eger (!metin_esit(arayuz, "")) { cmd += " --disk-arayuz " + arayuz; }
     mantik limine = metin_esit(pj_al("onyukleyici", ""), "limine");
     eger (limine) {
         cmd += " --onyukleyici limine";

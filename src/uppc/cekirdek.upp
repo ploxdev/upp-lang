@@ -114,6 +114,7 @@ fonk ck_wsl_yol(metin p) -> metin {
 
 liste[metin] g_ck_diskler;
 mantik g_ck_limine = yanlis;
+metin g_ck_arayuz = "ide";       // QEMU disk arayüzü: ide (PIIX) ya da ahci (SATA)
 metin g_ck_hazirla = "";
 metin g_ck_onek = "";
 metin g_ck_gcc = "";
@@ -239,18 +240,31 @@ fonk cekirdek_derle(metin c_yol, metin kok, mantik calistir) -> sayi {
     }
     metin hedef = os_cmd_parca(elf32);
     eger (metin_esit(upp.metin.kes(q, 0, 3), "wsl")) { hedef = os_tirnak(ck_wsl_yol(elf32)); }
-    // Ham disk imajları IDE kanallarına sırayla bağlanır (sda, sdb, sdc, sdd).
+    // Ham disk imajları sırayla IDE kanallarına (en çok 4) ya da bir AHCI
+    // denetleyicisinin SATA kapılarına (en çok 6) bağlanır.
+    mantik ahci = metin_esit(g_ck_arayuz, "ahci");
+    sayi azami = 4;
+    eger (ahci) { azami = 6; }
     metin diskler = "";
+    eger (ahci) { diskler = " -device ahci,id=ahci0"; }
     sayi di = 0;
     her (oto d in g_ck_diskler) {
-        eger (di >= 4) { dur; }
+        eger (di >= azami) { dur; }
         eger (!os_dosya_var(d)) {
             upp.satir_yaz("[u++ HATA] disk imajı bulunamadı: " + d);
             don 1;
         }
         metin dy = d;
         eger (metin_esit(upp.metin.kes(q, 0, 3), "wsl")) { dy = ck_wsl_yol(d); }
-        diskler += " -drive " + os_tirnak("file=" + dy + ",format=raw,if=ide,index=" + sayi_metin(di));
+        eger (ahci) {
+            metin id = "sata" + sayi_metin(di);
+            diskler += " -drive " + os_tirnak("file=" + dy + ",format=raw,if=none,id=" + id);
+            metin aygit = "ide-hd,drive=" + id + ",bus=ahci0." + sayi_metin(di);
+            eger (di == 0) { aygit += ",bootindex=0"; }
+            diskler += " -device " + aygit;
+        } yoksa {
+            diskler += " -drive " + os_tirnak("file=" + dy + ",format=raw,if=ide,index=" + sayi_metin(di));
+        }
         di = di + 1;
     }
     // Limine: çekirdek ilk diskteki önyükleyiciden açılır (-kernel yok).

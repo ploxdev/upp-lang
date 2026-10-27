@@ -1,0 +1,8 @@
+// Güvenlik: PCI yapılandırma yazması guvensiz ister
+// @bayrak: --hedef serbest
+// @icerir: BELLEK GÜVENLİĞİ
+
+fonk ana() -> sayi {
+    upp.cekirdek.pci_yaz(0, 3, 0, 4, 6);
+    don 0;
+}
